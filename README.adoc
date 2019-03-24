@@ -24,7 +24,7 @@ a|image::mangos.jpg[float="right"]
 
 NOTE: This is version 2 of _mangos_, and contains breaking changes and
 rather different API in some circumstances relative to version 1.  To use the
-original version of _mangos_ please see https://github.com/nanomsg/mangos
+original version of _mangos_ please see https://github.com/nanomsg/mangos-v1
 
 The modern C implemenation of the SP protocols is available as
 https://github.com/nanomsg/nng[__NNG&trade;__].
@@ -67,9 +67,11 @@ You can use `go get -u -a` to update all installed packages.
 
 == Documentation
 
-For docs, see http://godoc.org/nanomsg.org/go-mangos or run:
+For docs, see https://godoc.org/nanomsg.org/go/mangos/v2 or run:
 
-    $ godoc nanomsg.org/go/mangos/v2
+    $ godoc -http=:6060
+
+then see http://localhost:6060/pkg/nanomsg.org/go/mangos/v2/
 
 == Testing
 
