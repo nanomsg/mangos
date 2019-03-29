@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"time"
 )
 
 func usage() {
@@ -146,6 +147,7 @@ func doInprocLat(args []string) {
 		log.Fatalf("Bad roundtrip-count: %v", err)
 	}
 	go LatencyServer("inproc://inproc_lat", size, count)
+	time.Sleep(10 * time.Millisecond)
 	LatencyClient("inproc://inproc_lat", size, count)
 	os.Exit(0)
 }

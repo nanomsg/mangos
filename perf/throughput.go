@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -44,12 +44,6 @@ func ThroughputServer(addr string, msgSize int, count int) {
 
 	// Disable TCP no delay, please! - only valid for TCP
 	l.SetOption(mangos.OptionNoDelay, false)
-
-	// Make sure we linger a bit on close...
-	err = s.SetOption(mangos.OptionLinger, time.Second)
-	if err != nil {
-		log.Fatalf("Failed set Linger: %v", err)
-	}
 
 	err = l.Listen()
 	if err != nil {
@@ -106,12 +100,6 @@ func ThroughputClient(addr string, msgSize int, count int) {
 
 	// Disable TCP no delay, please!
 	d.SetOption(mangos.OptionNoDelay, false)
-
-	// Make sure we linger a bit on close...
-	err = s.SetOption(mangos.OptionLinger, time.Second)
-	if err != nil {
-		log.Fatalf("Failed set Linger: %v", err)
-	}
 
 	err = d.Dial()
 	if err != nil {
