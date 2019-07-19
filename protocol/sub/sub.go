@@ -265,6 +265,15 @@ func (c *context) SetOption(name string, value interface{}) error {
 		}
 		return protocol.ErrBadValue
 
+	case protocol.OptionRecvDeadline:
+		if v, ok := value.(time.Duration); ok {
+			c.s.Lock()
+			c.recvExpire = v
+			c.s.Unlock()
+			return nil
+		}
+		return protocol.ErrBadValue
+
 	case protocol.OptionSubscribe:
 	case protocol.OptionUnsubscribe:
 	default:
