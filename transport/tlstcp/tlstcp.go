@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -105,9 +105,10 @@ func newOptions(t tlsTran) options {
 }
 
 type dialer struct {
-	addr  string
-	proto transport.ProtocolInfo
-	opts  options
+	addr       string
+	proto      transport.ProtocolInfo
+	opts       options
+	handshaker transport.Handshaker
 }
 
 func (d *dialer) Dial() (transport.Pipe, error) {
@@ -142,7 +143,16 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 		opts[n] = v
 	}
 	opts[mangos.OptionTLSConnState] = conn.ConnectionState()
-	return transport.NewConnPipe(conn, d.proto, opts)
+	p, err := transport.NewConnPipe(conn, d.proto, opts)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if err = d.handshaker.Start(p); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return d.handshaker.Wait()
 }
 
 func (d *dialer) SetOption(n string, v interface{}) error {
@@ -154,12 +164,14 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 }
 
 type listener struct {
-	addr     *net.TCPAddr
-	bound    net.Addr
-	listener *net.TCPListener
-	proto    transport.ProtocolInfo
-	opts     options
-	config   *tls.Config
+	addr       *net.TCPAddr
+	bound      net.Addr
+	listener   *net.TCPListener
+	proto      transport.ProtocolInfo
+	opts       options
+	config     *tls.Config
+	handshaker transport.Handshaker
+	closeq     chan struct{}
 }
 
 func (l *listener) Listen() error {
@@ -176,11 +188,52 @@ func (l *listener) Listen() error {
 		return mangos.ErrTLSNoCert
 	}
 
+	closeq := make(chan struct{})
 	if l.listener, err = net.ListenTCP("tcp", l.addr); err != nil {
 		return err
 	}
-
+	l.closeq = closeq
 	l.bound = l.listener.Addr()
+
+	go func() {
+		for {
+			tconn, err := l.listener.AcceptTCP()
+			if err != nil {
+				select {
+				case <-closeq:
+					return
+				default:
+					continue
+				}
+			}
+
+			if err = l.opts.configTCP(tconn); err != nil {
+				tconn.Close()
+				continue
+			}
+
+			conn := tls.Server(tconn, l.config)
+			if err = conn.Handshake(); err != nil {
+				conn.Close()
+				continue
+			}
+			opts := make(map[string]interface{})
+			for n, v := range l.opts {
+				opts[n] = v
+			}
+			opts[mangos.OptionTLSConnState] = conn.ConnectionState()
+			p, err := transport.NewConnPipe(conn, l.proto, opts)
+			if err != nil {
+				conn.Close()
+				continue
+			}
+
+			if err = l.handshaker.Start(p); err != nil {
+				conn.Close()
+				continue
+			}
+		}
+	}()
 
 	return nil
 }
@@ -193,32 +246,14 @@ func (l *listener) Address() string {
 }
 
 func (l *listener) Accept() (transport.Pipe, error) {
-
-	tconn, err := l.listener.AcceptTCP()
-	if err != nil {
-		return nil, err
-	}
-
-	if err = l.opts.configTCP(tconn); err != nil {
-		tconn.Close()
-		return nil, err
-	}
-
-	conn := tls.Server(tconn, l.config)
-	if err = conn.Handshake(); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	opts := make(map[string]interface{})
-	for n, v := range l.opts {
-		opts[n] = v
-	}
-	opts[mangos.OptionTLSConnState] = conn.ConnectionState()
-	return transport.NewConnPipe(conn, l.proto, opts)
+	return l.handshaker.Wait()
 }
 
 func (l *listener) Close() error {
-	l.listener.Close()
+	if l.listener != nil {
+		l.listener.Close()
+	}
+	l.handshaker.Close()
 	return nil
 }
 
@@ -249,11 +284,11 @@ func (t tlsTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, e
 	}
 
 	d := &dialer{
-		proto: sock.Info(),
-		opts:  newOptions(t),
-		addr:  addr,
+		proto:      sock.Info(),
+		opts:       newOptions(t),
+		addr:       addr,
+		handshaker: transport.NewConnHandshaker(),
 	}
-
 	return d, nil
 }
 
@@ -271,6 +306,7 @@ func (t tlsTran) NewListener(addr string, sock mangos.Socket) (transport.Listene
 	if l.addr, err = transport.ResolveTCPAddr(addr); err != nil {
 		return nil, err
 	}
+	l.handshaker = transport.NewConnHandshaker()
 
 	return l, nil
 }

@@ -1,6 +1,6 @@
 // +build !windows,!nacl,!plan9
 
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -64,9 +64,10 @@ func (o options) set(name string, val interface{}) error {
 }
 
 type dialer struct {
-	addr  *net.UnixAddr
-	proto transport.ProtocolInfo
-	opts  options
+	addr       *net.UnixAddr
+	proto      transport.ProtocolInfo
+	opts       options
+	handshaker transport.Handshaker
 }
 
 // Dial implements the Dialer Dial method
@@ -76,7 +77,16 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err != nil {
 		return nil, err
 	}
-	return transport.NewConnPipeIPC(conn, d.proto, d.opts)
+	p, err := transport.NewConnPipeIPC(conn, d.proto, d.opts)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if err = d.handshaker.Start(p); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return d.handshaker.Wait()
 }
 
 // SetOption implements Dialer SetOption method.
@@ -90,10 +100,12 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 }
 
 type listener struct {
-	addr     *net.UnixAddr
-	proto    transport.ProtocolInfo
-	listener *net.UnixListener
-	opts     options
+	addr       *net.UnixAddr
+	proto      transport.ProtocolInfo
+	listener   *net.UnixListener
+	opts       options
+	handshaker transport.Handshaker
+	closeq     chan struct{}
 }
 
 // Listen implements the PipeListener Listen method.
@@ -102,7 +114,31 @@ func (l *listener) Listen() error {
 	if err != nil {
 		return err
 	}
+	closeq := make(chan struct{})
+	l.closeq = closeq
 	l.listener = listener
+	go func() {
+		for {
+			conn, err := l.listener.AcceptUnix()
+			if err != nil {
+				select {
+				case <-closeq:
+					return
+				default:
+					continue
+				}
+			}
+			p, err := transport.NewConnPipeIPC(conn, l.proto, l.opts)
+			if err != nil {
+				conn.Close()
+				continue
+			}
+			if err = l.handshaker.Start(p); err != nil {
+				conn.Close()
+				continue
+			}
+		}
+	}()
 	return nil
 }
 
@@ -113,16 +149,15 @@ func (l *listener) Address() string {
 // Accept implements the the PipeListener Accept method.
 func (l *listener) Accept() (transport.Pipe, error) {
 
-	conn, err := l.listener.AcceptUnix()
-	if err != nil {
-		return nil, err
-	}
-	return transport.NewConnPipeIPC(conn, l.proto, l.opts)
+	return l.handshaker.Wait()
 }
 
 // Close implements the PipeListener Close method.
 func (l *listener) Close() error {
-	l.listener.Close()
+	if l.listener != nil {
+		l.listener.Close()
+	}
+	l.handshaker.Close()
 	return nil
 }
 
@@ -152,8 +187,9 @@ func (t ipcTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, e
 	}
 
 	d := &dialer{
-		proto: sock.Info(),
-		opts:  make(map[string]interface{}),
+		proto:      sock.Info(),
+		opts:       make(map[string]interface{}),
+		handshaker: transport.NewConnHandshaker(),
 	}
 	d.opts[mangos.OptionMaxRecvSize] = 0
 	if d.addr, err = net.ResolveUnixAddr("unix", addr); err != nil {
@@ -178,6 +214,8 @@ func (t ipcTran) NewListener(addr string, sock mangos.Socket) (transport.Listene
 	if l.addr, err = net.ResolveUnixAddr("unix", addr); err != nil {
 		return nil, err
 	}
+
+	l.handshaker = transport.NewConnHandshaker()
 
 	return l, nil
 }

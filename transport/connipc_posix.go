@@ -1,6 +1,6 @@
 // +build !windows
 
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -38,10 +38,6 @@ func NewConnPipeIPC(c net.Conn, proto ProtocolInfo, options map[string]interface
 		p.options[n] = v
 	}
 	p.maxrx = p.options[mangos.OptionMaxRecvSize].(int)
-
-	if err := p.handshake(); err != nil {
-		return nil, err
-	}
 
 	return p, nil
 }

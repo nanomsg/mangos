@@ -124,7 +124,7 @@ func surveyCases() []TestCase {
 	surv.MsgSize = 8
 	surv.WantTx = 1
 	surv.WantRx = int32(nresp)
-	surv.txdelay = time.Second / 7
+	surv.txdelay = time.Second / 5
 	surv.Synch = true
 	surv.NReply = int(nresp)
 	cases[0] = surv

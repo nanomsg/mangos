@@ -1,6 +1,6 @@
 // +build windows
 
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -55,9 +55,10 @@ const (
 )
 
 type dialer struct {
-	path  string
-	proto transport.ProtocolInfo
-	opts  map[string]interface{}
+	path       string
+	proto      transport.ProtocolInfo
+	opts       map[string]interface{}
+	handshaker transport.Handshaker
 }
 
 // Dial implements the PipeDialer Dial method.
@@ -67,7 +68,16 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err != nil {
 		return nil, err
 	}
-	return transport.NewConnPipeIPC(conn, d.proto, d.opts)
+	p, err := transport.NewConnPipeIPC(conn, d.proto, d.opts)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if err = d.handshaker.Start(p); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return d.handshaker.Wait()
 }
 
 // SetOption implements a stub PipeDialer SetOption method.
@@ -81,10 +91,12 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 }
 
 type listener struct {
-	path     string
-	proto    transport.ProtocolInfo
-	listener net.Listener
-	opts     map[string]interface{}
+	path       string
+	proto      transport.ProtocolInfo
+	listener   net.Listener
+	opts       map[string]interface{}
+	handshaker transport.Handshaker
+	closeq     chan struct{}
 }
 
 // Listen implements the PipeListener Listen method.
@@ -97,11 +109,35 @@ func (l *listener) Listen() error {
 		MessageMode:        false,
 	}
 
+	closeq := make(chan struct{})
 	listener, err := winio.ListenPipe("\\\\.\\pipe\\"+l.path, config)
 	if err != nil {
 		return err
 	}
 	l.listener = listener
+	l.closeq = closeq
+	go func() {
+		for {
+			conn, err := l.listener.Accept()
+			if err != nil {
+				select {
+				case <-closeq:
+					return
+				default:
+					continue
+				}
+			}
+			p, err := transport.NewConnPipeIPC(conn, l.proto, l.opts)
+			if err != nil {
+				conn.Close()
+				continue
+			}
+			if err = l.handshaker.Start(p); err != nil {
+				conn.Close()
+				continue
+			}
+		}
+	}()
 	return nil
 }
 
@@ -112,11 +148,7 @@ func (l *listener) Address() string {
 // Accept implements the the PipeListener Accept method.
 func (l *listener) Accept() (mangos.TranPipe, error) {
 
-	conn, err := l.listener.Accept()
-	if err != nil {
-		return nil, err
-	}
-	return transport.NewConnPipeIPC(conn, l.proto, l.opts)
+	return l.handshaker.Wait()
 }
 
 // Close implements the PipeListener Close method.
@@ -124,6 +156,7 @@ func (l *listener) Close() error {
 	if l.listener != nil {
 		l.listener.Close()
 	}
+	l.handshaker.Close()
 	return nil
 }
 
@@ -181,9 +214,10 @@ func (t ipcTran) NewDialer(address string, sock mangos.Socket) (mangos.TranDiale
 	}
 
 	d := &dialer{
-		proto: sock.Info(),
-		path:  address,
-		opts:  make(map[string]interface{}),
+		proto:      sock.Info(),
+		path:       address,
+		opts:       make(map[string]interface{}),
+		handshaker: transport.NewConnHandshaker(),
 	}
 
 	d.opts[mangos.OptionMaxRecvSize] = 0
@@ -200,9 +234,10 @@ func (t ipcTran) NewListener(address string, sock mangos.Socket) (transport.List
 	}
 
 	l := &listener{
-		proto: sock.Info(),
-		path:  address,
-		opts:  make(map[string]interface{}),
+		proto:      sock.Info(),
+		path:       address,
+		opts:       make(map[string]interface{}),
+		handshaker: transport.NewConnHandshaker(),
 	}
 
 	l.opts[OptionInputBufferSize] = int32(4096)

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -118,8 +118,8 @@ func (p *conn) GetOption(n string) (interface{}, error) {
 }
 
 // NewConnPipe allocates a new Pipe using the supplied net.Conn, and
-// initializes it.  It performs the handshake required at the SP layer,
-// only returning the Pipe once the SP layer negotiation is complete.
+// initializes it.  It performs no negotiation -- use a Handshaker to
+// arrange for that.
 //
 // Stream oriented transports can utilize this to implement a Transport.
 // The implementation will also need to implement PipeDialer, PipeAccepter,
@@ -140,10 +140,6 @@ func NewConnPipe(c net.Conn, proto ProtocolInfo, options map[string]interface{})
 		p.options[n] = v
 	}
 	p.maxrx = p.options[mangos.OptionMaxRecvSize].(int)
-
-	if err := p.handshake(); err != nil {
-		return nil, err
-	}
 
 	return p, nil
 }
@@ -190,4 +186,99 @@ func (p *conn) handshake() error {
 	}
 	p.open = true
 	return nil
+}
+
+type connHandshakerPipe interface {
+	handshake() error
+
+	Pipe
+}
+
+type connHandshakerItem struct {
+	c connHandshakerPipe
+	e error
+}
+type connHandshaker struct {
+	workq  map[connHandshakerPipe]bool
+	doneq  []*connHandshakerItem
+	closed bool
+	cv     *sync.Cond
+	sync.Mutex
+}
+
+// NewConnHandshaker returns a Handshaker that works with
+// Pipes created via NewConnPipe or NewConnPipeIPC.
+func NewConnHandshaker() Handshaker {
+	h := &connHandshaker{
+		workq:  make(map[connHandshakerPipe]bool),
+		closed: false,
+	}
+	h.cv = sync.NewCond(h)
+	return h
+}
+
+func (h *connHandshaker) Wait() (Pipe, error) {
+	h.Lock()
+	defer h.Unlock()
+	for len(h.doneq) == 0 && !h.closed {
+		h.cv.Wait()
+	}
+	if h.closed {
+		return nil, mangos.ErrClosed
+	}
+	item := h.doneq[0]
+	h.doneq = h.doneq[1:]
+	return item.c, item.e
+}
+
+func (h *connHandshaker) Start(p Pipe) error {
+	conn, ok := p.(connHandshakerPipe)
+	if !ok {
+		p.Close()
+		return mangos.ErrBadTran
+	}
+	h.Lock()
+	defer h.Unlock()
+	if h.closed {
+		p.Close()
+		return mangos.ErrClosed
+	}
+	h.workq[conn] = true
+	go h.worker(conn)
+	return nil
+}
+
+func (h *connHandshaker) Close() error {
+	h.Lock()
+	h.closed = true
+	h.cv.Broadcast()
+	for conn := range h.workq {
+		conn.Close()
+	}
+	for len(h.doneq) != 0 {
+		item := h.doneq[0]
+		h.doneq = h.doneq[1:]
+		item.c.Close()
+	}
+	return nil
+}
+
+func (h *connHandshaker) worker(conn connHandshakerPipe) {
+	item := &connHandshakerItem{c: conn}
+	item.e = conn.handshake()
+	h.Lock()
+	defer h.Unlock()
+
+	delete(h.workq, conn)
+
+	if item.e != nil {
+		item.c.Close()
+		item.c = nil
+	} else if h.closed {
+		item.e = mangos.ErrClosed
+		item.c.Close()
+		item.c = nil
+	}
+	h.doneq = append(h.doneq, item)
+	h.cv.Broadcast()
 }
