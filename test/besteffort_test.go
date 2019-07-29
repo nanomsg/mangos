@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -21,54 +21,56 @@ import (
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/pair"
 	_ "nanomsg.org/go/mangos/v2/transport/tcp"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
-func testBestEffort(addr string) {
+func testBestEffortDrop(t *testing.T, addr string) {
 	timeout := time.Millisecond * 10
 	msg := []byte{'A', 'B', 'C'}
 
-	Convey("Given a new listening (unconnected) socket", func() {
-		rp, err := pair.NewSocket()
-		So(err, ShouldBeNil)
-		So(rp, ShouldNotBeNil)
+	rp, err := pair.NewSocket()
+	MustSucceed(t, err)
+	MustBeTrue(t, rp != nil)
 
-		defer rp.Close()
+	defer rp.Close()
 
-		err = rp.SetOption(mangos.OptionWriteQLen, 0)
-		So(err, ShouldBeNil)
+	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, 0))
+	MustSucceed(t, rp.SetOption(mangos.OptionSendDeadline, timeout))
+	MustSucceed(t, rp.Listen(addr))
+	MustSucceed(t, rp.SetOption(mangos.OptionBestEffort, true))
+	for i := 0; i < 2; i++ {
+		MustSucceed(t, rp.Send(msg))
+	}
+}
 
-		err = rp.SetOption(mangos.OptionSendDeadline, timeout)
-		So(err, ShouldBeNil)
+func testBestEffortTimeout(t *testing.T, addr string) {
+	timeout := time.Millisecond * 10
+	msg := []byte{'A', 'B', 'C'}
 
-		err = rp.Listen(addr)
-		So(err, ShouldBeNil)
+	rp, err := pair.NewSocket()
+	MustSucceed(t, err)
+	MustBeTrue(t, rp != nil)
 
-		Convey("Messages are discarded in besteffort mode", func() {
-			err = rp.SetOption(mangos.OptionBestEffort, true)
-			So(err, ShouldBeNil)
+	defer rp.Close()
 
-			for i := 0; i < 2; i++ {
-				err = rp.Send(msg)
-				So(err, ShouldBeNil)
-			}
-		})
+	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, 0))
+	MustSucceed(t, rp.SetOption(mangos.OptionSendDeadline, timeout))
+	MustSucceed(t, err)
+	MustSucceed(t, rp.Listen(addr))
+	MustSucceed(t, rp.SetOption(mangos.OptionBestEffort, false))
 
-		Convey("Messages timeout when not in besteffort mode", func() {
-			err = rp.SetOption(mangos.OptionBestEffort, false)
-			So(err, ShouldBeNil)
+	for i := 0; i < 2; i++ {
+		err = rp.Send(msg)
+		MustFail(t, err)
+		MustBeTrue(t, err.Error() == mangos.ErrSendTimeout.Error())
+	}
 
-			for i := 0; i < 2; i++ {
-				err = rp.Send(msg)
-				So(err, ShouldEqual, mangos.ErrSendTimeout)
-			}
-		})
-	})
+}
+
+func testBestEffort(t *testing.T, addr string) {
+	testBestEffortDrop(t, addr)
+	testBestEffortTimeout(t, addr)
 }
 
 func TestBestEffortTCP(t *testing.T) {
-	Convey("Testing TCP Best Effort", t, func() {
-		testBestEffort(AddrTestTCP())
-	})
+	testBestEffort(t, AddrTestTCP())
 }
