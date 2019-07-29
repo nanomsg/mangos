@@ -1,18 +1,16 @@
 version: 2
 jobs:
-  build-1.11:
+  build-1.12:
     docker:
-      - image: circleci/golang:1.11
-    working_directory: /go/src/nanomsg.org/go/mangos/v2
+      - image: circleci/golang:1.12
     steps:
       - checkout
       - run: go get -v -t -d ./...
       - run: go test -v ./...
 
-  build-1.10:
+  build-1.11:
     docker:
-      - image: circleci/golang:1.10
-    working_directory: /go/src/nanomsg.org/go/mangos/v2
+      - image: circleci/golang:1.11
     steps:
       - checkout
       - run: go get -v -t -d ./...
@@ -21,7 +19,6 @@ jobs:
   build-coverage:
     docker:
       - image: circleci/golang:1.11
-    working_directory: /go/src/nanomsg.org/go/mangos/v2
     steps:
       - checkout
       - run: echo "$GOPATH"
@@ -33,6 +30,6 @@ workflows:
   version: 2
   build_and_test:
     jobs:
+      - build-1.12
       - build-1.11
-      - build-1.10
       - build-coverage
