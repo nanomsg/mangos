@@ -1,4 +1,4 @@
-// Copyright 2016 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -16,43 +16,22 @@ package test
 
 import (
 	"testing"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestNewKeys(t *testing.T) {
-	Convey("With a new keys", t, func() {
-		keys, err := newKeys()
-		So(err, ShouldBeNil)
-		So(keys, ShouldNotBeNil)
+	keys, err := newKeys()
+	MustSucceed(t, err)
+	MustNotBeNil(t, keys)
 
-		Convey("Root signature should check", func() {
-			err = keys.root.cert.CheckSignatureFrom(keys.root.cert)
-			So(err, ShouldBeNil)
-		})
-
-		Convey("Server signature should check", func() {
-			err = keys.server.cert.CheckSignatureFrom(keys.root.cert)
-			So(err, ShouldBeNil)
-		})
-
-		Convey("Client signature should check", func() {
-			err = keys.client.cert.CheckSignatureFrom(keys.root.cert)
-			So(err, ShouldBeNil)
-		})
-
-		Convey("Client cert does not check root", func() {
-			err = keys.root.cert.CheckSignatureFrom(keys.client.cert)
-			So(err, ShouldNotBeNil)
-		})
-	})
+	MustSucceed(t, keys.root.cert.CheckSignatureFrom(keys.root.cert))
+	MustSucceed(t, keys.server.cert.CheckSignatureFrom(keys.root.cert))
+	MustSucceed(t, keys.client.cert.CheckSignatureFrom(keys.root.cert))
+	MustFail(t, keys.root.cert.CheckSignatureFrom(keys.client.cert))
 }
 
 func TestNewTLSConfig(t *testing.T) {
 
-	Convey("We can generate a new TLS config", t, func() {
-		cfg, err := NewTLSConfig(true)
-		So(err, ShouldBeNil)
-		So(cfg, ShouldNotBeNil)
-	})
+	cfg, err := NewTLSConfig(true)
+	MustSucceed(t, err)
+	MustNotBeNil(t, cfg)
 }

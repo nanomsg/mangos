@@ -21,41 +21,28 @@ import (
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/surveyor"
 	_ "nanomsg.org/go/mangos/v2/transport/tcp"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
-func testSurvNonBlock(addr string) {
+func testSurvNonBlock(t *testing.T, addr string) {
 	maxqlen := 2
 
-	Convey("Given a suitable Surveyor socket", func() {
-		rp, err := surveyor.NewSocket()
-		So(err, ShouldBeNil)
-		So(rp, ShouldNotBeNil)
-		defer rp.Close()
+	rp, err := surveyor.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, rp)
+	defer rp.Close()
 
-		err = rp.SetOption(mangos.OptionWriteQLen, maxqlen)
-		So(err, ShouldBeNil)
-		err = rp.Listen(addr)
-		So(err, ShouldBeNil)
+	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, maxqlen))
+	MustSucceed(t, rp.Listen(addr))
 
-		msg := []byte{'A', 'B', 'C'}
-
-		Convey("We don't block, even sending many messages", func() {
-			start := time.Now()
-			for i := 0; i < maxqlen*10; i++ {
-
-				err := rp.Send(msg)
-				So(err, ShouldBeNil)
-			}
-			end := time.Now()
-			So(end, ShouldHappenWithin, time.Second/10, start)
-		})
-	})
+	msg := []byte{'A', 'B', 'C'}
+	start := time.Now()
+	for i := 0; i < maxqlen*10; i++ {
+		MustSucceed(t, rp.Send(msg))
+	}
+	end := time.Now()
+	MustBeTrue(t, end.Sub(start) < time.Second/10)
 }
 
 func TestSurveyorNonBlockTCP(t *testing.T) {
-	Convey("Testing Survey Send (TCP) is Non-Blocking", t, func() {
-		testSurvNonBlock(AddrTestTCP())
-	})
+	testSurvNonBlock(t, AddrTestTCP())
 }

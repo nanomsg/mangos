@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -15,7 +15,6 @@
 package test
 
 import (
-	"fmt"
 	"math/rand"
 	"sync"
 	"testing"
@@ -23,8 +22,6 @@ import (
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/pair"
 	_ "nanomsg.org/go/mangos/v2/transport/tcp"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 // This test case just tests that the simple Send/Recv (suboptimal) interfaces
@@ -33,42 +30,30 @@ import (
 
 func TestSimpleCorrect(t *testing.T) {
 
-	Convey("We can use the simple Send/Recv API", t, func() {
-		tx, e := pair.NewSocket()
-		So(e, ShouldBeNil)
-		So(tx, ShouldNotBeNil)
+	tx, e := pair.NewSocket()
+	MustSucceed(t, e)
+	MustNotBeNil(t, tx)
+	defer tx.Close()
 
-		rx, e := pair.NewSocket()
-		So(e, ShouldBeNil)
-		So(rx, ShouldNotBeNil)
+	rx, e := pair.NewSocket()
+	MustSucceed(t, e)
+	MustNotBeNil(t, rx)
+	defer rx.Close()
 
-		Convey("When a simple TCP pair is created", func() {
+	a := AddrTestTCP()
+	MustSucceed(t, rx.Listen(a))
+	MustSucceed(t, tx.Dial(a))
 
-			a := AddrTestTCP()
-			e = rx.Listen(a)
-			So(e, ShouldBeNil)
-
-			e = tx.Dial(a)
-			So(e, ShouldBeNil)
-
-			iter := 100000
-			Convey(fmt.Sprintf("We can send/recv %d msgs async", iter), func() {
-				wg := &sync.WaitGroup{}
-				wg.Add(2)
-				goodtx := true
-				goodrx := true
-				go simpleSend(tx, wg, iter, &goodtx)
-				go simpleRecv(rx, wg, iter, &goodrx)
-				wg.Wait()
-				So(goodtx, ShouldBeTrue)
-				So(goodrx, ShouldBeTrue)
-				e = tx.Close()
-				So(e, ShouldBeNil)
-				e = rx.Close()
-				So(e, ShouldBeNil)
-			})
-		})
-	})
+	iter := 100000
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	goodtx := true
+	goodrx := true
+	go simpleSend(tx, wg, iter, &goodtx)
+	go simpleRecv(rx, wg, iter, &goodrx)
+	wg.Wait()
+	MustBeTrue(t, goodtx)
+	MustBeTrue(t, goodrx)
 }
 
 func simpleSend(tx mangos.Socket, wg *sync.WaitGroup, iter int, pass *bool) {

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -21,43 +21,31 @@ import (
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/pub"
 	_ "nanomsg.org/go/mangos/v2/transport/tcp"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
-func testPubNonBlock(addr string) {
+func testPubNonBlock(t *testing.T, addr string) {
 	maxqlen := 2
 
-	Convey("Given a suitable Pub socket", func() {
-		rp, err := pub.NewSocket()
-		So(err, ShouldBeNil)
-		So(rp, ShouldNotBeNil)
+	rp, err := pub.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, rp)
 
-		defer rp.Close()
+	defer rp.Close()
 
-		err = rp.SetOption(mangos.OptionWriteQLen, maxqlen)
-		So(err, ShouldBeNil)
+	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, maxqlen))
+	MustSucceed(t, rp.Listen(addr))
 
-		err = rp.Listen(addr)
-		So(err, ShouldBeNil)
+	msg := []byte{'A', 'B', 'C'}
 
-		msg := []byte{'A', 'B', 'C'}
+	start := time.Now()
+	for i := 0; i < maxqlen*10; i++ {
 
-		Convey("We don't block, even sending messages", func() {
-			start := time.Now()
-			for i := 0; i < maxqlen*10; i++ {
-
-				err := rp.Send(msg)
-				So(err, ShouldBeNil)
-			}
-			end := time.Now()
-			So(end, ShouldHappenWithin, time.Second/10, start)
-		})
-	})
+		MustSucceed(t, rp.Send(msg))
+	}
+	end := time.Now()
+	MustBeTrue(t, end.Sub(start) < time.Second/10)
 }
 
 func TestPubNonBlockTCP(t *testing.T) {
-	Convey("Testing Pub Send (TCP) is Non-Blocking", t, func() {
-		testPubNonBlock(AddrTestTCP())
-	})
+	testPubNonBlock(t, AddrTestTCP())
 }

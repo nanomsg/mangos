@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -23,8 +23,6 @@ import (
 	"nanomsg.org/go/mangos/v2/protocol/rep"
 	"nanomsg.org/go/mangos/v2/protocol/req"
 	_ "nanomsg.org/go/mangos/v2/transport/tcp"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 type phookinfo struct {
@@ -78,111 +76,95 @@ func (h *phooktest) Hook(action mangos.PipeEvent, p mangos.Pipe) {
 }
 
 func TestPipeHook(t *testing.T) {
-	Convey("Testing Add Hook", t, func() {
 
-		srvtest := &phooktest{allow: true, t: t}
-		clitest := &phooktest{allow: true, t: t}
+	srvtest := &phooktest{allow: true, t: t}
+	clitest := &phooktest{allow: true, t: t}
 
-		addr := AddrTestTCP()
+	addr := AddrTestTCP()
 
-		srvtest.expect = []phookinfo{
-			{
-				action: mangos.PipeEventAttaching,
-				addr:   addr,
-				server: true,
-			}, {
-				action: mangos.PipeEventAttached,
-				addr:   addr,
-				server: true,
-			}, {
-				action: mangos.PipeEventDetached,
-				addr:   addr,
-				server: true,
-			},
-		}
+	srvtest.expect = []phookinfo{
+		{
+			action: mangos.PipeEventAttaching,
+			addr:   addr,
+			server: true,
+		}, {
+			action: mangos.PipeEventAttached,
+			addr:   addr,
+			server: true,
+		}, {
+			action: mangos.PipeEventDetached,
+			addr:   addr,
+			server: true,
+		},
+	}
 
-		clitest.expect = []phookinfo{
-			{
-				action: mangos.PipeEventAttaching,
-				addr:   addr,
-				server: false,
-			}, {
-				action: mangos.PipeEventAttached,
-				addr:   addr,
-				server: false,
-			}, {
-				action: mangos.PipeEventDetached,
-				addr:   addr,
-				server: false,
-			},
-		}
+	clitest.expect = []phookinfo{
+		{
+			action: mangos.PipeEventAttaching,
+			addr:   addr,
+			server: false,
+		}, {
+			action: mangos.PipeEventAttached,
+			addr:   addr,
+			server: false,
+		}, {
+			action: mangos.PipeEventDetached,
+			addr:   addr,
+			server: false,
+		},
+	}
 
-		Convey("Given a REQ & REP sockets", func() {
-			sockreq, err := req.NewSocket()
-			So(err, ShouldBeNil)
-			So(sockreq, ShouldNotBeNil)
+	sockreq, err := req.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, sockreq)
+	defer sockreq.Close()
 
-			defer sockreq.Close()
+	sockrep, err := rep.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, sockrep)
+	defer sockrep.Close()
 
-			sockrep, err := rep.NewSocket()
-			So(err, ShouldBeNil)
-			So(sockrep, ShouldNotBeNil)
+	d, err := sockreq.NewDialer(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, d)
 
-			defer sockrep.Close()
+	l, err := sockrep.NewListener(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, l)
 
-			d, err := sockreq.NewDialer(addr, nil)
-			So(err, ShouldBeNil)
-			So(d, ShouldNotBeNil)
+	hook := sockreq.SetPipeEventHook(clitest.Hook)
+	MustBeNil(t, hook) // no previous hook
 
-			l, err := sockrep.NewListener(addr, nil)
-			So(err, ShouldBeNil)
-			So(l, ShouldNotBeNil)
+	hook = sockrep.SetPipeEventHook(srvtest.Hook)
+	MustBeNil(t, hook) // no previous hook
 
-			Convey("We can set port hooks", func() {
-				hook := sockreq.SetPipeEventHook(clitest.Hook)
-				So(hook, ShouldBeNil)
+	MustSucceed(t, l.Listen())
+	MustSucceed(t, d.Dial())
 
-				hook = sockrep.SetPipeEventHook(srvtest.Hook)
-				So(hook, ShouldBeNil)
+	// time for conn to establish
+	time.Sleep(time.Millisecond * 100)
 
-				Convey("And establish a connection", func() {
-					err = l.Listen()
-					So(err, ShouldBeNil)
+	// Shutdown the sockets
+	d.Close()
+	l.Close()
 
-					err = d.Dial()
-					So(err, ShouldBeNil)
+	sockrep.Close()
+	sockreq.Close()
 
-					// time for conn to establish
-					time.Sleep(time.Millisecond * 100)
+	time.Sleep(100 * time.Millisecond)
 
-					// Shutdown the sockets
-					d.Close()
-					l.Close()
+	clitest.Lock()
+	defer clitest.Unlock()
 
-					sockrep.Close()
-					sockreq.Close()
+	srvtest.Lock()
+	defer srvtest.Unlock()
 
-					Convey("The hooks were called", func() {
-
-						time.Sleep(100 * time.Millisecond)
-
-						clitest.Lock()
-						defer clitest.Unlock()
-
-						srvtest.Lock()
-						defer srvtest.Unlock()
-
-						So(len(srvtest.calls), ShouldEqual, len(srvtest.expect))
-						for i := range srvtest.calls {
-							So(srvtest.calls[i].String(), ShouldEqual, srvtest.expect[i].String())
-						}
-						So(len(clitest.calls), ShouldEqual, len(clitest.expect))
-						for i := range clitest.calls {
-							So(clitest.calls[i].String(), ShouldEqual, clitest.expect[i].String())
-						}
-					})
-				})
-			})
-		})
-	})
+	MustBeTrue(t, len(srvtest.calls) == len(srvtest.expect))
+	for i := range srvtest.calls {
+		MustBeTrue(t, srvtest.calls[i].String() == srvtest.expect[i].String())
+	}
+	MustBeTrue(t, len(clitest.calls) == len(clitest.expect))
+	for i := range clitest.calls {
+		MustBeTrue(t, clitest.calls[i].String() == clitest.expect[i].String())
+	}
 }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -24,71 +24,64 @@ import (
 	"nanomsg.org/go/mangos/v2/protocol/xbus"
 
 	_ "nanomsg.org/go/mangos/v2/transport/inproc"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
+
+func TestBusDeviceXbus(t *testing.T) {
+	s1, err := xbus.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, s1)
+	defer s1.Close()
+	MustSucceed(t, mangos.Device(s1, s1))
+}
+
+func TestBusDeviceCooked(t *testing.T) {
+	s1, err := bus.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, s1)
+	defer s1.Close()
+	MustFail(t, mangos.Device(s1, s1))
+}
 
 func TestBusDevice(t *testing.T) {
 
-	Convey("Testing Bus devices", t, func() {
-		Convey("Device works with xbus", func() {
-			s1, err := xbus.NewSocket()
-			So(err, ShouldBeNil)
-			So(s1, ShouldNotBeNil)
-			defer s1.Close()
-			So(mangos.Device(s1, s1), ShouldBeNil)
-		})
-		Convey("Device does not work with cooked", func() {
-			s1, err := bus.NewSocket()
-			So(err, ShouldBeNil)
-			So(s1, ShouldNotBeNil)
-			defer s1.Close()
-			So(mangos.Device(s1, s1), ShouldBeError)
-		})
+	s1, err := xbus.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, s1)
 
-		Convey("Create bus device topo", func() {
+	defer s1.Close()
+	MustSucceed(t, s1.Listen("inproc://busdevicetest"))
+	MustSucceed(t, mangos.Device(s1, s1))
 
-			s1, err := xbus.NewSocket()
-			So(err, ShouldBeNil)
-			So(s1, ShouldNotBeNil)
-			defer s1.Close()
-			So(s1.Listen("inproc://busdevicetest"), ShouldBeNil)
-			// Create the device
-			So(mangos.Device(s1, s1), ShouldBeNil)
+	c1, err := bus.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, c1)
+	defer c1.Close()
 
-			c1, err := bus.NewSocket()
-			So(err, ShouldBeNil)
-			defer c1.Close()
+	c2, err := bus.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, c2)
+	defer c2.Close()
 
-			c2, err := bus.NewSocket()
-			So(err, ShouldBeNil)
-			defer c2.Close()
+	MustSucceed(t, c1.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100))
+	MustSucceed(t, c2.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100))
 
-			So(c1.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100), ShouldBeNil)
-			So(c2.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100), ShouldBeNil)
+	MustSucceed(t, c1.Dial("inproc://busdevicetest"))
+	MustSucceed(t, c2.Dial("inproc://busdevicetest"))
 
-			So(c1.Dial("inproc://busdevicetest"), ShouldBeNil)
-			So(c2.Dial("inproc://busdevicetest"), ShouldBeNil)
+	m := mangos.NewMessage(0)
+	m.Body = append(m.Body, []byte{1, 2, 3, 4}...)
 
-			Convey("Bus forwards", func() {
-				m := mangos.NewMessage(0)
-				m.Body = append(m.Body, []byte{1, 2, 3, 4}...)
+	// Because dial is not synchronous...
+	time.Sleep(time.Millisecond * 100)
 
-				// Because dial is not synchronous...
-				time.Sleep(time.Millisecond * 100)
+	MustSucceed(t, c1.SendMsg(m))
+	m2, e := c2.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m2)
+	MustBeTrue(t, len(m2.Body) == 4)
 
-				So(c1.SendMsg(m), ShouldBeNil)
-				m2, e := c2.RecvMsg()
-				So(e, ShouldBeNil)
-				So(m2, ShouldNotBeNil)
-				So(len(m2.Body), ShouldEqual, 4)
-
-				Convey("But not to ourself", func() {
-					m3, e := c1.RecvMsg()
-					So(e, ShouldBeError)
-					So(m3, ShouldBeNil)
-				})
-			})
-		})
-	})
+	// But not to ourself!
+	m3, e := c1.RecvMsg()
+	MustFail(t, e)
+	MustBeNil(t, m3)
 }

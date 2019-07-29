@@ -15,6 +15,7 @@
 package test
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -45,5 +46,19 @@ func MustBeTrue(t *testing.T, b bool) {
 func MustBeFalse(t *testing.T, b bool) {
 	if b {
 		t.Fatalf("Condition is true")
+	}
+}
+
+// MustNotBeNil verifies that the provided value is not nil
+func MustNotBeNil(t *testing.T, v interface{}) {
+	if reflect.ValueOf(v).IsNil() {
+		t.Fatalf("Value is nil")
+	}
+}
+
+// MustBeNil verifies that the provided value is nil
+func MustBeNil(t *testing.T, v interface{}) {
+	if !reflect.ValueOf(v).IsNil() {
+		t.Fatalf("Value is not nil: %v", v)
 	}
 }

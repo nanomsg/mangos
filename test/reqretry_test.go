@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -23,117 +23,119 @@ import (
 	"nanomsg.org/go/mangos/v2/protocol/rep"
 	"nanomsg.org/go/mangos/v2/protocol/req"
 	_ "nanomsg.org/go/mangos/v2/transport/inproc"
-
-	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestReqRetry(t *testing.T) {
-	Convey("Testing Req Retry", t, func() {
-		addr := AddrTestInp()
+func TestReqRetryLateConnect(t *testing.T) {
+	addr := AddrTestInp()
 
-		// Let's first try request issued with no connection, and
-		// completing immediately after connect is established.
-		// Req will have multiple connections to separate servers,
-		Convey("Given a REQ & REP sockets", func() {
-			sockreq, err := req.NewSocket()
-			So(err, ShouldBeNil)
-			So(sockreq, ShouldNotBeNil)
+	sockreq, err := req.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, sockreq)
+	defer sockreq.Close()
 
-			defer sockreq.Close()
+	sockrep, err := rep.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, sockrep)
+	defer sockrep.Close()
 
-			sockrep, err := rep.NewSocket()
-			So(err, ShouldBeNil)
-			So(sockrep, ShouldNotBeNil)
-			defer sockrep.Close()
+	d, err := sockreq.NewDialer(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, d)
 
-			d, err := sockreq.NewDialer(addr, nil)
-			So(err, ShouldBeNil)
-			So(d, ShouldNotBeNil)
+	MustSucceed(t, sockreq.SetOption(mangos.OptionReconnectTime,
+		time.Millisecond*100))
+	MustSucceed(t, sockreq.SetOption(mangos.OptionDialAsynch, true))
 
-			err = sockreq.SetOption(mangos.OptionReconnectTime, time.Millisecond*100)
-			So(err, ShouldBeNil)
-			err = sockreq.SetOption(mangos.OptionDialAsynch, true)
-			So(err, ShouldBeNil)
+	l, err := sockrep.NewListener(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, l)
 
-			l, err := sockrep.NewListener(addr, nil)
-			So(err, ShouldBeNil)
-			So(l, ShouldNotBeNil)
+	MustSucceed(t, d.Dial())
 
-			err = d.Dial()
-			So(err, ShouldBeNil)
+	m := mangos.NewMessage(0)
+	m.Body = append(m.Body, []byte("hello")...)
+	MustSucceed(t, sockreq.SetOption(mangos.OptionBestEffort, true))
+	MustSucceed(t, sockreq.SendMsg(m))
 
-			Convey("A request is issued on late server connect", func() {
-				m := mangos.NewMessage(0)
-				m.Body = append(m.Body, []byte("hello")...)
-				sockreq.SetOption(mangos.OptionBestEffort, true)
-				err = sockreq.SendMsg(m)
-				So(err, ShouldBeNil)
+	MustSucceed(t, l.Listen())
 
-				err = l.Listen()
-				So(err, ShouldBeNil)
+	m, err = sockrep.RecvMsg()
+	MustSucceed(t, err)
+	MustNotBeNil(t, m)
 
-				m, err = sockrep.RecvMsg()
-				So(m, ShouldNotBeNil)
-				So(err, ShouldBeNil)
+	m.Body = append(m.Body, []byte(" there")...)
+	MustSucceed(t, sockrep.SendMsg(m))
 
-				m.Body = append(m.Body, []byte(" there")...)
-				err = sockrep.SendMsg(m)
-				So(err, ShouldBeNil)
+	m, err = sockreq.RecvMsg()
+	MustSucceed(t, err)
+	MustNotBeNil(t, m)
 
-				m, err = sockreq.RecvMsg()
-				So(m, ShouldNotBeNil)
-				So(err, ShouldBeNil)
+	m.Free()
+}
 
-				m.Free()
-			})
+func TestReqRetryReconnect(t *testing.T) {
+	addr := AddrTestInp()
 
-			Convey("A request is reissued on server re-connect", func() {
+	sockreq, err := req.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, sockreq)
+	defer sockreq.Close()
 
-				rep2, err := rep.NewSocket()
-				So(err, ShouldBeNil)
-				So(rep2, ShouldNotBeNil)
-				defer rep2.Close()
+	sockrep, err := rep.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, sockrep)
+	defer sockrep.Close()
 
-				l2, err := rep2.NewListener(addr, nil)
-				So(err, ShouldBeNil)
-				So(l2, ShouldNotBeNil)
+	d, err := sockreq.NewDialer(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, d)
 
-				err = l.Listen()
-				So(err, ShouldBeNil)
-				time.Sleep(time.Millisecond * 50)
+	MustSucceed(t, sockreq.SetOption(mangos.OptionReconnectTime,
+		time.Millisecond*100))
+	MustSucceed(t, sockreq.SetOption(mangos.OptionDialAsynch, true))
 
-				m := mangos.NewMessage(0)
-				m.Body = append(m.Body, []byte("hello")...)
-				err = sockreq.SendMsg(m)
-				So(err, ShouldBeNil)
+	l, err := sockrep.NewListener(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, l)
 
-				So(err, ShouldBeNil)
+	MustSucceed(t, d.Dial())
 
-				m, err = sockrep.RecvMsg()
-				So(m, ShouldNotBeNil)
-				So(err, ShouldBeNil)
+	rep2, err := rep.NewSocket()
+	MustSucceed(t, err)
+	MustNotBeNil(t, rep2)
+	defer rep2.Close()
 
-				// Now close the connection -- no reply!
-				l.Close()
-				sockrep.Close()
+	l2, err := rep2.NewListener(addr, nil)
+	MustSucceed(t, err)
+	MustNotBeNil(t, l2)
 
-				// Open the new one on the other socket
-				err = l2.Listen()
-				So(err, ShouldBeNil)
-				m, err = rep2.RecvMsg()
-				So(m, ShouldNotBeNil)
-				So(err, ShouldBeNil)
+	MustSucceed(t, l.Listen())
+	time.Sleep(time.Millisecond * 50)
 
-				m.Body = append(m.Body, []byte(" again")...)
-				err = rep2.SendMsg(m)
-				So(err, ShouldBeNil)
+	m := mangos.NewMessage(0)
+	m.Body = append(m.Body, []byte("hello")...)
+	MustSucceed(t, sockreq.SendMsg(m))
 
-				m, err = sockreq.RecvMsg()
-				So(m, ShouldNotBeNil)
-				So(err, ShouldBeNil)
+	m, err = sockrep.RecvMsg()
+	MustSucceed(t, err)
+	MustNotBeNil(t, m)
 
-				m.Free()
-			})
-		})
-	})
+	// Now close the connection -- no reply!
+	l.Close()
+	sockrep.Close()
+
+	// Open the new one on the other socket
+	MustSucceed(t, l2.Listen())
+	m, err = rep2.RecvMsg()
+	MustSucceed(t, err)
+	MustNotBeNil(t, m)
+
+	m.Body = append(m.Body, []byte(" again")...)
+	MustSucceed(t, rep2.SendMsg(m))
+
+	m, err = sockreq.RecvMsg()
+	MustSucceed(t, err)
+	MustNotBeNil(t, m)
+
+	m.Free()
 }
