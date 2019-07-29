@@ -1,11 +1,10 @@
 version: 1.0.{build}
-clone_folder: c:\gopath\src\nanomsg.org\go\mangos\v2
+clone_folder: c:\mangos
 environment:
-  GOPATH: c:\gopath
 build_script:
 - go version
 - go env
-- SET PATH=%LOCALAPPDATA%\atom\bin;%GOPATH%\bin;%PATH%
+- SET PATH=%LOCALAPPDATA%\atom\bin;%PATH%
 - go get -t ./...
 - go build
 - go install ./...
