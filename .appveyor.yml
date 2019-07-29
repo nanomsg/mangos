@@ -1,10 +1,8 @@
 version: 1.0.{build}
 clone_folder: c:\mangos
-environment:
 build_script:
 - go version
 - go env
-- SET PATH=%LOCALAPPDATA%\atom\bin;%PATH%
 - go get -t ./...
 - go build
 - go install ./...
