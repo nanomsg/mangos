@@ -1,4 +1,3 @@
-#!/bin/sh
 #
 # Copyright 2019 The Mangos Authors
 #
@@ -14,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-url=tcp://127.0.0.1:40899
-go run pipeline.go node0 $url
-sleep 1
+$url = "tcp://127.0.0.1:40899"
+Start-Process -FilePath "go" -NoNewWindow -ArgumentList "run pipeline.go node0 $url" 
+# Sleep a second to allow for the listening socket to establish
+Start-Sleep 1
 go run pipeline.go node1 $url "Hello, World."
 go run pipeline.go node1 $url "Goodbye."
 go run pipeline.go node1 $url "STOP"

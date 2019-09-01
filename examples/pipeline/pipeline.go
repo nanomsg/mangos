@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -29,6 +29,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/pull"
@@ -57,6 +58,11 @@ func node0(url string) {
 		// Could also use sock.RecvMsg to get header
 		msg, err = sock.Recv()
 		fmt.Printf("NODE0: RECEIVED \"%s\"\n", msg)
+
+		if string(msg) == "STOP" {
+			fmt.Println("NODE0: STOPPING")
+			return
+		}
 	}
 }
 
@@ -74,6 +80,7 @@ func node1(url string, msg string) {
 	if err = sock.Send([]byte(msg)); err != nil {
 		die("can't send message on push socket: %s", err.Error())
 	}
+	time.Sleep(time.Second / 10)
 	sock.Close()
 }
 
