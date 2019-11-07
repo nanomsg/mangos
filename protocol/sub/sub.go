@@ -78,13 +78,21 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	}
 	s.Unlock()
 
-	select {
-	case <-timeq:
-		return nil, protocol.ErrRecvTimeout
-	case <-c.closeq:
-		return nil, protocol.ErrClosed
-	case m := <-c.recvq:
-		return m, nil
+Loop:
+	for {
+		select {
+		case <-timeq:
+			return nil, protocol.ErrRecvTimeout
+		case <-c.closeq:
+			return nil, protocol.ErrClosed
+		case m, ok := <-c.recvq:
+			// Assume c.recvq will only be closed after c.recvq is assigned with a new channel unsubscribe()
+			// Otherwise this becomes a busy wait until timeq trigger or context closed
+			if !ok {
+				continue Loop
+			}
+			return m, nil
+		}
 	}
 }
 
@@ -233,6 +241,7 @@ func (c *context) unsubscribe(topic []byte) error {
 		newchan := make(chan *protocol.Message, c.recvQLen)
 		oldchan := c.recvq
 		c.recvq = newchan
+		close(oldchan)
 		for m := range oldchan {
 			if !c.matches(m) {
 				m.Free()
