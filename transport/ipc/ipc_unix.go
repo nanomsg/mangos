@@ -20,6 +20,9 @@ package ipc
 
 import (
 	"net"
+	"os"
+	"syscall"
+	"time"
 
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/transport"
@@ -111,6 +114,11 @@ type listener struct {
 // Listen implements the PipeListener Listen method.
 func (l *listener) Listen() error {
 	listener, err := net.ListenUnix("unix", l.addr)
+
+	if err != nil && (isSyscallError(err, syscall.EADDRINUSE) || isSyscallError(err, syscall.EEXIST)) {
+		l.removeStaleIPC()
+		listener, err = net.ListenUnix("unix", l.addr)
+	}
 	if err != nil {
 		return err
 	}
@@ -171,6 +179,15 @@ func (l *listener) GetOption(n string) (interface{}, error) {
 	return l.opts.get(n)
 }
 
+func (l *listener) removeStaleIPC() {
+	conn, err := net.DialTimeout("unix", l.addr.String(), 100*time.Millisecond)
+	if err != nil && isSyscallError(err, syscall.ECONNREFUSED) {
+		os.Remove(l.addr.String())
+		return
+	}
+	conn.Close()
+}
+
 type ipcTran int
 
 // Scheme implements the Transport Scheme method.
@@ -218,4 +235,23 @@ func (t ipcTran) NewListener(addr string, sock mangos.Socket) (transport.Listene
 	l.handshaker = transport.NewConnHandshaker()
 
 	return l, nil
+}
+
+func isSyscallError(err error, code syscall.Errno) bool {
+	opErr, ok := err.(*net.OpError)
+	if !ok {
+		return false
+	}
+	syscallErr, ok := opErr.Err.(*os.SyscallError)
+	if !ok {
+		return false
+	}
+	errno, ok := syscallErr.Err.(syscall.Errno)
+	if !ok {
+		return false
+	}
+	if errno == code {
+		return true
+	}
+	return false
 }
