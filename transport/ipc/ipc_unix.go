@@ -185,7 +185,9 @@ func (l *listener) removeStaleIPC() {
 		os.Remove(l.addr.String())
 		return
 	}
-	conn.Close()
+	if err == nil {
+		conn.Close()
+	}
 }
 
 type ipcTran int

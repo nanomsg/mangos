@@ -278,7 +278,8 @@ func (h *connHandshaker) worker(conn connHandshakerPipe) {
 		item.e = mangos.ErrClosed
 		item.c.Close()
 		item.c = nil
+	} else {
+		h.doneq = append(h.doneq, item)
 	}
-	h.doneq = append(h.doneq, item)
 	h.cv.Broadcast()
 }
