@@ -143,6 +143,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	s.Unlock()
 
 	if recvq == nil {
+		println("SURVEY HAS ENDED (NIL RECVQ)")
 		return nil, protocol.ErrProtoState
 	}
 
@@ -152,6 +153,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 
 	case m := <-recvq:
 		if m == nil {
+			println("CLOSED RECVQ")
 			return nil, protocol.ErrProtoState
 		}
 		return m, nil
