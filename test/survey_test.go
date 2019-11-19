@@ -146,28 +146,8 @@ func surveyCases() []TestCase {
 	return cases
 }
 
-func TestSurveyTCP(t *testing.T) {
-	RunTestsTCP(t, surveyCases())
-}
-
-func TestSurveyIPC(t *testing.T) {
-	RunTestsIPC(t, surveyCases())
-}
-
 func TestSurveyInp(t *testing.T) {
 	RunTestsInp(t, surveyCases())
-}
-
-func TestSurveyTLS(t *testing.T) {
-	RunTestsTLS(t, surveyCases())
-}
-
-func TestSurveyWS(t *testing.T) {
-	RunTestsWS(t, surveyCases())
-}
-
-func TestSurveyWSS(t *testing.T) {
-	RunTestsWSS(t, surveyCases())
 }
 
 func TestSurveyTTLZero(t *testing.T) {
