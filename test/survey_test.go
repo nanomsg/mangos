@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"nanomsg.org/go/mangos/v2"
+	"nanomsg.org/go/mangos/v2/protocol"
 	"nanomsg.org/go/mangos/v2/protocol/respondent"
 	"nanomsg.org/go/mangos/v2/protocol/surveyor"
 	"nanomsg.org/go/mangos/v2/protocol/xrespondent"
@@ -41,6 +42,10 @@ func (st *surveyTest) Init(t *testing.T, addr string) bool {
 	st.resp = make(map[uint32]bool)
 	if st.Sock, err = surveyor.NewSocket(); err != nil {
 		st.Errorf("NewSocket(): %v", err)
+		return false
+	}
+	if err = st.Sock.SetOption(protocol.OptionSurveyTime, time.Millisecond * 100); err != nil {
+		st.Errorf("SetOption: %v", err)
 		return false
 	}
 	return st.T.Init(t, addr)

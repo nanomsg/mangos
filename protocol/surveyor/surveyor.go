@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -71,22 +71,12 @@ var (
 
 const defaultQLen = 128
 
-func (c *context) cancel() {
-	s := c.s
-	if id := c.survID; id != 0 {
-		delete(s.surveys, id)
-		c.survID = 0
-		oldrecvq := c.recvq
-		c.recvq = nil
-
-		// drain and close the old queue
-		close(oldrecvq)
-		for {
-			if m := <-oldrecvq; m != nil {
-				m.Free()
-			} else {
-				break
-			}
+func (*context) drain(recvq chan *protocol.Message) {
+	for {
+		if m := <-recvq; m != nil {
+			m.Free()
+		} else {
+			return
 		}
 	}
 }
@@ -105,14 +95,25 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	if s.closed || c.closed {
 		return protocol.ErrClosed
 	}
-	c.cancel()
+	if recvq := c.recvq; recvq != nil {
+		c.recvq = nil
+		delete(s.surveys, c.survID)
+		c.survID = 0
+		close(recvq)
+		go c.drain(recvq)
+	}
+	recvq := make(chan *protocol.Message, c.recvQLen)
+	c.recvq = recvq
 	c.survID = id
-	c.recvq = make(chan *protocol.Message, c.recvQLen)
 	s.surveys[id] = c
 	time.AfterFunc(c.survExpire, func() {
 		s.Lock()
 		if c.survID == id {
-			c.cancel()
+			c.survID = 0
+			delete(s.surveys, c.survID)
+			c.recvq = nil
+			close(recvq)
+			go c.drain(recvq)
 		}
 		s.Unlock()
 	})
