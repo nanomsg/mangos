@@ -44,7 +44,7 @@ func (st *surveyTest) Init(t *testing.T, addr string) bool {
 		st.Errorf("NewSocket(): %v", err)
 		return false
 	}
-	if err = st.Sock.SetOption(protocol.OptionSurveyTime, time.Millisecond * 100); err != nil {
+	if err = st.Sock.SetOption(protocol.OptionSurveyTime, time.Second * 2); err != nil {
 		st.Errorf("SetOption: %v", err)
 		return false
 	}
@@ -129,7 +129,7 @@ func surveyCases() []TestCase {
 	surv.MsgSize = 8
 	surv.WantTx = 1
 	surv.WantRx = int32(nresp)
-	surv.txdelay = time.Second / 5
+	surv.txdelay = time.Second / 2
 	surv.Synch = true
 	surv.NReply = int(nresp)
 	cases[0] = surv
