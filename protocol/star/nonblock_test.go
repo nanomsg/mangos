@@ -12,27 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package star
 
 import (
 	"testing"
 	"time"
 
 	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/star"
-	_ "nanomsg.org/go/mangos/v2/transport/tcp"
+	. "nanomsg.org/go/mangos/v2/internal/test"
+	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 )
 
-func testStarNonBlock(t *testing.T, addr string) {
+func TestStarNonBlock(t *testing.T) {
 	maxqlen := 2
 
-	rp, err := star.NewSocket()
+	rp, err := NewSocket()
 	MustSucceed(t, err)
 	MustNotBeNil(t, rp)
 	defer rp.Close()
 
 	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, maxqlen))
-	MustSucceed(t, rp.Listen(addr))
+	MustSucceed(t, rp.Listen(AddrTestInp()))
 
 	msg := []byte{'A', 'B', 'C'}
 
@@ -42,8 +42,4 @@ func testStarNonBlock(t *testing.T, addr string) {
 	}
 	end := time.Now()
 	MustBeTrue(t, end.Sub(start) < time.Second/10)
-}
-
-func TestStarNonBlockTCP(t *testing.T) {
-	testStarNonBlock(t, AddrTestTCP())
 }

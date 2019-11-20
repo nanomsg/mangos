@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package star
 
 import (
 	"math/rand"
@@ -20,9 +20,8 @@ import (
 	"time"
 
 	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/star"
-	"nanomsg.org/go/mangos/v2/protocol/xstar"
-	_ "nanomsg.org/go/mangos/v2/transport/all"
+	. "nanomsg.org/go/mangos/v2/internal/test"
+	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 )
 
 type starTester struct {
@@ -99,7 +98,7 @@ func starTestNewServer(t *testing.T, addr string, id int) *starTester {
 	var err error
 	bt := &starTester{id: id, rdoneq: make(chan bool), sdoneq: make(chan bool)}
 
-	if bt.sock, err = star.NewSocket(); err != nil {
+	if bt.sock, err = NewSocket(); err != nil {
 		t.Errorf("Failed getting server %d socket: %v", id, err)
 		return nil
 	}
@@ -115,7 +114,7 @@ func starTestNewClient(t *testing.T, addr string, id int) *starTester {
 	var err error
 	bt := &starTester{id: id, rdoneq: make(chan bool), sdoneq: make(chan bool)}
 
-	if bt.sock, err = star.NewSocket(); err != nil {
+	if bt.sock, err = NewSocket(); err != nil {
 		t.Errorf("Failed getting client %d socket: %v", id, err)
 		return nil
 	}
@@ -138,8 +137,7 @@ func starTestCleanup(t *testing.T, bts []*starTester) {
 }
 
 func TestStar(t *testing.T) {
-	addr := "tcp://127.0.0.1:3538"
-
+	addr := AddrTestInp()
 	num := 5
 	pkts := 7
 	bts := make([]*starTester, num)
@@ -197,28 +195,4 @@ func TestStar(t *testing.T) {
 		}
 	}
 	t.Logf("All pass")
-}
-
-func TestStarTTLZero(t *testing.T) {
-	SetTTLZero(t, xstar.NewSocket)
-}
-
-func TestStarTTLNegative(t *testing.T) {
-	SetTTLNegative(t, xstar.NewSocket)
-}
-
-func TestStarTTLTooBig(t *testing.T) {
-	SetTTLTooBig(t, xstar.NewSocket)
-}
-
-func TestStarTTLNotInt(t *testing.T) {
-	SetTTLNotInt(t, xstar.NewSocket)
-}
-
-func TestStarTTLSet(t *testing.T) {
-	SetTTL(t, xstar.NewSocket)
-}
-
-func TestStarTTLDrop(t *testing.T) {
-	TTLDropTest(t, star.NewSocket, star.NewSocket, xstar.NewSocket, xstar.NewSocket)
 }
