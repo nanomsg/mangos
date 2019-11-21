@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -12,27 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package surveyor
 
 import (
 	"testing"
 	"time"
 
 	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/surveyor"
-	_ "nanomsg.org/go/mangos/v2/transport/tcp"
+	. "nanomsg.org/go/mangos/v2/internal/test"
+	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 )
 
-func testSurvNonBlock(t *testing.T, addr string) {
+func TestSurveyorNonBlock(t *testing.T) {
 	maxqlen := 2
 
-	rp, err := surveyor.NewSocket()
+	rp, err := NewSocket()
 	MustSucceed(t, err)
 	MustNotBeNil(t, rp)
 	defer rp.Close()
 
 	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, maxqlen))
-	MustSucceed(t, rp.Listen(addr))
+	MustSucceed(t, rp.Listen(AddrTestInp()))
 
 	msg := []byte{'A', 'B', 'C'}
 	start := time.Now()
@@ -41,8 +41,4 @@ func testSurvNonBlock(t *testing.T, addr string) {
 	}
 	end := time.Now()
 	MustBeTrue(t, end.Sub(start) < time.Second/10)
-}
-
-func TestSurveyorNonBlockTCP(t *testing.T) {
-	testSurvNonBlock(t, AddrTestTCP())
 }

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -22,8 +22,6 @@ import (
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/respondent"
 	"nanomsg.org/go/mangos/v2/protocol/surveyor"
-	"nanomsg.org/go/mangos/v2/protocol/xrespondent"
-	"nanomsg.org/go/mangos/v2/protocol/xsurveyor"
 )
 
 type surveyTest struct {
@@ -141,51 +139,6 @@ func surveyCases() []TestCase {
 	return cases
 }
 
-func TestSurveyTCP(t *testing.T) {
-	RunTestsTCP(t, surveyCases())
-}
-
-func TestSurveyIPC(t *testing.T) {
-	RunTestsIPC(t, surveyCases())
-}
-
 func TestSurveyInp(t *testing.T) {
 	RunTestsInp(t, surveyCases())
-}
-
-func TestSurveyTLS(t *testing.T) {
-	RunTestsTLS(t, surveyCases())
-}
-
-func TestSurveyWS(t *testing.T) {
-	RunTestsWS(t, surveyCases())
-}
-
-func TestSurveyWSS(t *testing.T) {
-	RunTestsWSS(t, surveyCases())
-}
-
-func TestSurveyTTLZero(t *testing.T) {
-	SetTTLZero(t, xrespondent.NewSocket)
-}
-
-func TestSurveyTTLNegative(t *testing.T) {
-	SetTTLNegative(t, xrespondent.NewSocket)
-}
-
-func TestSurveyTTLTooBig(t *testing.T) {
-	SetTTLTooBig(t, xrespondent.NewSocket)
-}
-
-func TestSurveyTTLNotInt(t *testing.T) {
-	SetTTLNotInt(t, xrespondent.NewSocket)
-}
-
-func TestSurveyTTLSet(t *testing.T) {
-	SetTTL(t, xrespondent.NewSocket)
-}
-
-func TestSurveyTTLDrop(t *testing.T) {
-	TTLDropTest(t, surveyor.NewSocket, respondent.NewSocket,
-		xsurveyor.NewSocket, xrespondent.NewSocket)
 }

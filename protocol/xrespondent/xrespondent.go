@@ -244,6 +244,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			return nil
 		}
 		return protocol.ErrBadValue
+
 	case protocol.OptionSendDeadline:
 		if v, ok := value.(time.Duration); ok {
 			s.Lock()
@@ -279,8 +280,6 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			s.recvq = newchan
 			s.Unlock()
 		}
-		// We don't support these
-		// case OptionLinger:
 	}
 
 	return protocol.ErrBadOption

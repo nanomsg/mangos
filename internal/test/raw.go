@@ -35,6 +35,8 @@ func VerifyRaw(t *testing.T, f func() (mangos.Socket, error)) {
 
 	err = s.SetOption(mangos.OptionRaw, false)
 	MustFail(t, err)
+	err = s.SetOption(mangos.OptionRaw, 1)
+	MustFail(t, err)
 }
 
 // VerifyCooked verifies that the socket created is cooked, and cannot be changed to raw.
@@ -51,5 +53,7 @@ func VerifyCooked(t *testing.T, f func() (mangos.Socket, error)) {
 	}
 
 	err = s.SetOption(mangos.OptionRaw, true)
+	MustFail(t, err)
+	err = s.SetOption(mangos.OptionRaw, 0)
 	MustFail(t, err)
 }
