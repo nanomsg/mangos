@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -123,10 +123,6 @@ func MakeSocket(proto mangos.ProtocolBase) mangos.Socket {
 func (s *socket) Close() error {
 
 	s.Lock()
-	if s.closed {
-		s.Unlock()
-		return mangos.ErrClosed
-	}
 	listeners := s.listeners
 	dialers := s.dialers
 	pipes := s.pipes
@@ -273,6 +269,7 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 	s.Lock()
 	if s.closed {
 		s.Unlock()
+		d.Close()
 		return nil, mangos.ErrClosed
 	}
 	s.dialers = append(s.dialers, d)
@@ -326,7 +323,7 @@ func (s *socket) NewListener(addr string, options map[string]interface{}) (mango
 	s.Lock()
 	if s.closed {
 		s.Unlock()
-		tl.Close()
+		l.Close()
 		return nil, mangos.ErrClosed
 	}
 	s.listeners = append(s.listeners, l)
