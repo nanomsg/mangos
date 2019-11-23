@@ -38,7 +38,7 @@ func TestInpSendRecv(t *testing.T) {
 	tt.TestSendRecv(t)
 }
 
-func TestInpSchem(t *testing.T) {
+func TestInpScheme(t *testing.T) {
 	tt.TestScheme(t)
 }
 

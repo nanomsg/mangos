@@ -218,8 +218,13 @@ func (tt *TranTest) TestSendRecv(t *testing.T) {
 		return
 	}
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
 	go func() {
 		defer close(ch)
+		defer wg.Done()
 
 		// Client side
 		t.Logf("Connecting REQ on %s", tt.addr)
@@ -328,6 +333,8 @@ func (tt *TranTest) TestSendRecv(t *testing.T) {
 		t.Error("Client timeout?")
 		return
 	}
+
+	wg.Wait()
 }
 
 // TestScheme tests the Scheme() entry point on the transport.
