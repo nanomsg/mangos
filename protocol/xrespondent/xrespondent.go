@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -71,7 +71,14 @@ func init() {
 // we should send to.
 func (s *socket) SendMsg(m *protocol.Message) error {
 
+	s.Lock()
+	if s.closed {
+		s.Unlock()
+		return protocol.ErrClosed
+	}
+
 	if len(m.Header) < 4 {
+		s.Unlock()
 		m.Free()
 		return nil
 	}
@@ -80,7 +87,6 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	hdr := m.Header
 	m.Header = m.Header[4:]
 
-	s.Lock()
 	p, ok := s.pipes[id]
 	if !ok {
 		s.Unlock()

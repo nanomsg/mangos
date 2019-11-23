@@ -134,6 +134,7 @@ func (s *socket) Close() error {
 	s.listeners = nil
 	s.dialers = nil
 	s.pipes = nil
+	s.closed = true
 	s.Unlock()
 
 	for _, l := range listeners {
@@ -147,8 +148,7 @@ func (s *socket) Close() error {
 		p.Close()
 	}
 
-	s.proto.Close()
-	return nil
+	return s.proto.Close()
 }
 
 func (ctx context) Send(b []byte) error {
