@@ -15,6 +15,7 @@
 package test
 
 import (
+	"nanomsg.org/go/mangos/v2/protocol"
 	"testing"
 
 	"nanomsg.org/go/mangos/v2"
@@ -37,6 +38,11 @@ func VerifyRaw(t *testing.T, f func() (mangos.Socket, error)) {
 	MustFail(t, err)
 	err = s.SetOption(mangos.OptionRaw, 1)
 	MustFail(t, err)
+
+	// Raw Sockets also don't support contexts.
+	_, err = s.OpenContext()
+	MustFail(t, err)
+	MustBeTrue(t, err == protocol.ErrProtoOp)
 }
 
 // VerifyCooked verifies that the socket created is cooked, and cannot be changed to raw.

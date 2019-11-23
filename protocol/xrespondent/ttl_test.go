@@ -18,8 +18,25 @@ import (
 	"testing"
 
 	. "nanomsg.org/go/mangos/v2/internal/test"
+	_ "nanomsg.org/go/mangos/v2/transport/all"
 )
 
-func TestXRespondentRaw(t *testing.T) {
-	VerifyRaw(t, NewSocket)
+func TestXRespondentTTLZero(t *testing.T) {
+	SetTTLZero(t, NewSocket)
+}
+
+func TestXRespondentTTLNegative(t *testing.T) {
+	SetTTLNegative(t, NewSocket)
+}
+
+func TestXRespondentTTLTooBig(t *testing.T) {
+	SetTTLTooBig(t, NewSocket)
+}
+
+func TestXRespondentTTLNotInt(t *testing.T) {
+	SetTTLNotInt(t, NewSocket)
+}
+
+func TestXRespondentTTLSet(t *testing.T) {
+	SetTTL(t, NewSocket)
 }
