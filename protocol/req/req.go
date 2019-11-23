@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -70,7 +70,6 @@ type socket struct {
 	closed  bool                  // true if we are closed
 	sendq   []*context            // contexts waiting to send
 	readyq  []*pipe               // pipes available for sending
-	pipes   map[uint32]*pipe      // all pipes for the socket (by pipe ID)
 }
 
 func (s *socket) send() {
@@ -160,30 +159,8 @@ func (p *pipe) receiver() {
 	go p.Close()
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(s.pipes, p.p.ID())
-
-	for c := range s.ctxs {
-		if c.lastPipe == p {
-			// We are closing this pipe, so we need to
-			// immediately reschedule it.
-			c.lastPipe = nil
-			if m := c.reqMsg; m != nil {
-				go c.resendMessage(m)
-			}
-		}
-	}
-
-	s.Unlock()
-	p.p.Close()
-	return nil
+func (p *pipe) Close() {
+	_ = p.p.Close()
 }
 
 func (c *context) resendMessage(m *protocol.Message) {
@@ -477,16 +454,7 @@ func (s *socket) Close() error {
 		c.cancel()
 		delete(s.ctxs, c)
 	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
 }
 
@@ -513,12 +481,12 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 		p: pp,
 		s: s,
 	}
+	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
 		return protocol.ErrClosed
 	}
-	s.pipes[pp.ID()] = p
 	s.readyq = append(s.readyq, p)
 	s.send()
 	go p.receiver()
@@ -526,33 +494,25 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
 	s.Lock()
-	var pipes []*pipe
-	p := s.pipes[pp.ID()]
-	if p != nil && p.p == pp {
-		p.closed = true
-		pipes = append(pipes, p)
-		delete(s.pipes, pp.ID())
-		for i, rp := range s.readyq {
-			if p == rp {
-				s.readyq = append(s.readyq[:i], s.readyq[i+1:]...)
-			}
+	p.closed = true
+	for i, rp := range s.readyq {
+		if p == rp {
+			s.readyq = append(s.readyq[:i], s.readyq[i+1:]...)
 		}
-		for c := range s.ctxs {
-			if c.lastPipe == p {
-				// We are closing this pipe, so we need to
-				// immediately reschedule it.
-				c.lastPipe = nil
-				if m := c.reqMsg; m != nil {
-					go c.resendMessage(m)
-				}
+	}
+	for c := range s.ctxs {
+		if c.lastPipe == p {
+			// We are closing this pipe, so we need to
+			// immediately reschedule it.
+			c.lastPipe = nil
+			if m := c.reqMsg; m != nil {
+				go c.resendMessage(m)
 			}
 		}
 	}
 	s.Unlock()
-	for _, p := range pipes {
-		p.Close()
-	}
 }
 
 func (*socket) Info() protocol.Info {
@@ -567,7 +527,6 @@ func (*socket) Info() protocol.Info {
 // NewProtocol allocates a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		pipes:   make(map[uint32]*pipe),
 		nextID:  uint32(time.Now().UnixNano()), // quasi-random
 		ctxs:    make(map[*context]struct{}),
 		ctxByID: make(map[uint32]*context),

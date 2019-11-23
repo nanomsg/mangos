@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -34,14 +34,12 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
 	closeq chan struct{}
 }
 
 type socket struct {
 	closed     bool
 	closeq     chan struct{}
-	pipes      map[uint32]*pipe
 	recvQLen   int
 	recvExpire time.Duration
 	recvq      chan *protocol.Message
@@ -142,29 +140,24 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
-	s.Lock()
-	defer s.Unlock()
-	if s.closed {
-		return protocol.ErrClosed
-	}
 	p := &pipe{
 		p:      pp,
 		s:      s,
 		closeq: make(chan struct{}),
 	}
-	s.pipes[pp.ID()] = p
-
+	pp.SetPrivate(p)
+	s.Lock()
+	defer s.Unlock()
+	if s.closed {
+		return protocol.ErrClosed
+	}
 	go p.receiver()
 	return nil
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
-	s.Lock()
-	p, ok := s.pipes[pp.ID()]
-	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeq)
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -182,26 +175,13 @@ func (*socket) Info() protocol.Info {
 
 func (s *socket) Close() error {
 	s.Lock()
-
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
 	s.closed = true
-
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
 	close(s.closeq)
-
-	// This allows synchronous close without the lock.
-	for _, p := range pipes {
-		p.Close()
-	}
-
 	return nil
 }
 
@@ -223,28 +203,16 @@ outer:
 			break outer
 		}
 	}
-	p.Close()
+	p.close()
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		pipes:    make(map[uint32]*pipe),
 		closeq:   make(chan struct{}),
 		recvq:    make(chan *protocol.Message, defaultQLen),
 		recvQLen: defaultQLen,

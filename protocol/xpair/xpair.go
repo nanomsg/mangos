@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -31,13 +31,10 @@ const (
 	PeerName = "pair"
 )
 
-const defaultQlen = 128
-
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
 	closeq chan struct{}
-	closed bool
 }
 
 type socket struct {
@@ -229,13 +226,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
 	s.Lock()
-	p := s.peer
-	if p == nil || pp != p.p {
-		s.Unlock()
-		return
+	if p := s.peer; p != nil && pp == p.p {
+		s.peer = nil
+		close(p.closeq)
 	}
 	s.Unlock()
-	p.Close()
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -258,17 +253,8 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-
-	p := s.peer
-
 	s.Unlock()
 	close(s.closeq)
-
-	// This allows synchronous close without the lock.
-	if p != nil {
-		p.Close()
-	}
-
 	return nil
 }
 
@@ -291,7 +277,7 @@ outer:
 			break outer
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 func (p *pipe) sender() {
@@ -311,24 +297,11 @@ outer:
 			break outer
 		}
 	}
-	p.Close()
+	p.close()
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	if s.peer == p {
-		s.peer = nil
-	}
-	s.Unlock()
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 // NewProtocol returns a new protocol implementation.

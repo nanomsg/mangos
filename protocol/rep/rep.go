@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -42,7 +42,6 @@ type pipe struct {
 type socket struct {
 	sock     protocol.Socket
 	closed   bool
-	pipes    map[uint32]*pipe
 	ttl      int
 	sendQLen int
 	recvCond *sync.Cond
@@ -331,14 +330,7 @@ func (p *pipe) sender() {
 }
 
 func (p *pipe) close() {
-	// Avoid double close
-	p.s.Lock()
-	if !p.closed {
-		p.closed = true
-		p.p.Close()
-		close(p.closeQ)
-	}
-	p.s.Unlock()
+	_ = p.p.Close()
 }
 
 func (s *socket) Close() error {
@@ -351,18 +343,9 @@ func (s *socket) Close() error {
 	}
 	s.closed = true
 	for c := range s.ctxs {
-		go c.Close()
-	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
+		go func() { _ = c.Close() }()
 	}
 	s.Unlock()
-
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.close()
-	}
 	return nil
 }
 
@@ -377,18 +360,18 @@ func (*socket) Info() protocol.Info {
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
 
-	s.Lock()
 	p := &pipe{
 		p:      pp,
 		s:      s,
 		sendQ:  make(chan *protocol.Message, s.sendQLen),
 		closeQ: make(chan struct{}),
 	}
+	pp.SetPrivate(p)
+	s.Lock()
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
-	s.pipes[pp.ID()] = p
 	go p.sender()
 	go p.receiver()
 	s.Unlock()
@@ -397,11 +380,12 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
 
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeQ)
+
 	s.Lock()
-	if p, ok := s.pipes[pp.ID()]; ok {
-		delete(s.pipes, pp.ID())
-		go p.close()
-	}
+	p.closed = true
+	s.recvCond.Broadcast()
 	s.Unlock()
 }
 
@@ -473,7 +457,6 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		ttl:      8,
-		pipes:    make(map[uint32]*pipe),
 		ctxs:     make(map[*context]struct{}),
 		recvCtxs: make(map[*context]struct{}),
 		defCtx: &context{

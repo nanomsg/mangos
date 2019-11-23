@@ -48,7 +48,7 @@ type socket struct {
 
 	listeners []*listener
 	dialers   []*dialer
-	pipes     map[*pipe]struct{}
+	pipes     pipeList
 	pipehook  mangos.PipeEventHook
 }
 
@@ -68,24 +68,25 @@ func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 	ph := s.pipehook
 	s.Unlock()
 
+	// Add to the list of pipes for the socket; this also reserves an ID
+	// for it.
+	s.pipes.Add(p)
+
 	if ph != nil {
 		ph(mangos.PipeEventAttaching, p)
 	}
 
-	s.Lock()
-	if s.pipes == nil || s.proto.AddPipe(p) != nil {
-		s.Unlock()
+	if s.proto.AddPipe(p) != nil {
+		s.pipes.Remove(p)
 		go p.Close()
 		return
 	}
-	s.pipes[p] = struct{}{}
 	if p.d != nil {
 		// This call resets the redial time in the dialer.  Its
 		// kind of ugly that we have the socket doing this, but
 		// the scope is narrow, and it works.
 		go p.d.pipeConnected()
 	}
-	s.Unlock()
 	if ph != nil {
 		ph(mangos.PipeEventAttached, p)
 	}
@@ -96,11 +97,17 @@ func (s *socket) remPipe(p *pipe) {
 	s.proto.RemovePipe(p)
 
 	s.Lock()
-	delete(s.pipes, p)
-	if ph := s.pipehook; ph != nil {
-		go ph(mangos.PipeEventDetached, p)
-	}
+	ph := s.pipehook
 	s.Unlock()
+	s.pipes.Remove(p)
+	go func() {
+		if ph != nil {
+			ph(mangos.PipeEventDetached, p)
+		}
+		// Don't free the pipe ID until the callback is run, to
+		// ensure no use-after-free of the ID itself.
+		pipeIDs.Free(p.id)
+	}()
 }
 
 func newSocket(proto mangos.ProtocolBase) *socket {
@@ -109,7 +116,6 @@ func newSocket(proto mangos.ProtocolBase) *socket {
 		reconnMinTime: defaultReconnMinTime,
 		reconnMaxTime: defaultReconnMaxTime,
 		maxRxSize:     defaultMaxRxSize,
-		pipes:         make(map[*pipe]struct{}),
 	}
 	return s
 }
@@ -125,26 +131,22 @@ func (s *socket) Close() error {
 	s.Lock()
 	listeners := s.listeners
 	dialers := s.dialers
-	pipes := s.pipes
 
 	s.listeners = nil
 	s.dialers = nil
-	s.pipes = nil
-	s.closed = true
+	s.closed = true // ensure we don't add new listeners or dialers
 	s.Unlock()
 
 	for _, l := range listeners {
-		l.Close()
+		_ = l.Close()
 	}
 	for _, d := range dialers {
-		d.Close()
+		_ = d.Close()
 	}
 
-	for p := range pipes {
-		p.Close()
-	}
-
-	return s.proto.Close()
+	err := s.proto.Close()
+	s.pipes.CloseAll()
+	return err
 }
 
 func (ctx context) Send(b []byte) error {

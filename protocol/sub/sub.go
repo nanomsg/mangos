@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -41,15 +41,13 @@ const (
 type socket struct {
 	master *context
 	ctxs   map[*context]struct{}
-	pipes  map[uint32]*pipe
 	closed bool
 	sync.Mutex
 }
 
 type pipe struct {
-	s      *socket
-	p      protocol.Pipe
-	closed bool
+	s *socket
+	p protocol.Pipe
 }
 
 type context struct {
@@ -140,7 +138,7 @@ func (p *pipe) receiver() {
 		m.Free()
 	}
 
-	p.Close()
+	p.close()
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
@@ -153,20 +151,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	if s.closed {
 		return protocol.ErrClosed
 	}
-	s.pipes[p.p.ID()] = p
 	go p.receiver()
 	return nil
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
-	s.Lock()
-	defer s.Unlock()
-	p := s.pipes[pp.ID()]
-	if p != nil && p.p == pp && !p.closed {
-		p.closed = true
-		pp.Close()
-		delete(s.pipes, pp.ID())
-	}
 }
 
 func (s *socket) Close() error {
@@ -179,32 +168,16 @@ func (s *socket) Close() error {
 	for c := range s.ctxs {
 		ctxs = append(ctxs, c)
 	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
+	s.closed = true
 	s.Unlock()
 	for _, c := range ctxs {
-		c.Close()
-	}
-	for _, p := range pipes {
-		p.Close()
+		_ = c.Close()
 	}
 	return nil
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	s.Unlock()
-
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (c *context) matches(m *protocol.Message) bool {
@@ -373,8 +346,7 @@ func (s *socket) Info() protocol.Info {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		pipes: make(map[uint32]*pipe),
-		ctxs:  make(map[*context]struct{}),
+		ctxs: make(map[*context]struct{}),
 	}
 	s.master = &context{
 		s:        s,

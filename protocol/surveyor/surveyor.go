@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -38,7 +38,6 @@ const defaultSurveyTime = time.Second
 type pipe struct {
 	s      *socket
 	p      protocol.Pipe
-	closed bool
 	closeq chan struct{}
 	sendq  chan *protocol.Message
 }
@@ -237,19 +236,8 @@ func (c *context) GetOption(option string) (interface{}, error) {
 	return nil, protocol.ErrBadOption
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (p *pipe) sender() {
@@ -267,7 +255,7 @@ outer:
 			break
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 func (p *pipe) receiver() {
@@ -331,6 +319,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 		sendq:  make(chan *protocol.Message, s.sendQLen),
 		closeq: make(chan struct{}),
 	}
+	pp.SetPrivate((p))
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
@@ -343,15 +332,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeq)
 	s.Lock()
-	defer s.Unlock()
-	p := s.pipes[pp.ID()]
-	if p != nil && p.p == pp && !p.closed {
-		p.closed = true
-		close(p.closeq)
-		pp.Close()
-		delete(s.pipes, pp.ID())
-	}
+	delete(s.pipes, pp.ID())
+	s.Unlock()
 }
 
 func (s *socket) Close() error {
@@ -371,16 +356,7 @@ func (s *socket) Close() error {
 			}
 		}
 	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
 	s.Unlock()
-
-	// This allows synchronous close without the lock.
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
 }
 

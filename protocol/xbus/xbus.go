@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -29,7 +29,6 @@ import (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
 	closeq chan struct{}
 	sendq  chan *protocol.Message
 }
@@ -217,11 +216,8 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
 	s.Lock()
-	p, ok := s.pipes[pp.ID()]
+	delete(s.pipes, pp.ID())
 	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -239,25 +235,13 @@ func (*socket) Info() protocol.Info {
 
 func (s *socket) Close() error {
 	s.Lock()
-
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
 	s.closed = true
-
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
 	close(s.closeq)
-
-	// This allows synchronous close without the lock.
-	for _, p := range pipes {
-		p.Close()
-	}
 
 	return nil
 }
@@ -309,19 +293,8 @@ outer:
 	p.Close()
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) Close() {
+	_ = p.p.Close()
 }
 
 // NewProtocol returns a new protocol implementation.

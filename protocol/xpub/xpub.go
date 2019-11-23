@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -17,16 +17,13 @@
 package xpub
 
 import (
-	"sync"
-	"time"
-
 	"nanomsg.org/go/mangos/v2/protocol"
+	"sync"
 )
 
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
 	closeq chan struct{}
 	sendq  chan *protocol.Message
 }
@@ -44,10 +41,6 @@ const (
 	Peer     = protocol.ProtoSub
 	SelfName = "pub"
 	PeerName = "sub"
-)
-
-var (
-	nilQ <-chan time.Time
 )
 
 const defaultQLen = 128
@@ -110,31 +103,30 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
-	s.Lock()
-	defer s.Unlock()
-	if s.closed {
-		return protocol.ErrClosed
-	}
 	p := &pipe{
 		p:      pp,
 		s:      s,
 		closeq: make(chan struct{}),
 		sendq:  make(chan *protocol.Message, s.sendQLen),
 	}
+	pp.SetPrivate(p)
+	s.Lock()
+	defer s.Unlock()
+	if s.closed {
+		return protocol.ErrClosed
+	}
 	s.pipes[pp.ID()] = p
-
 	go p.sender()
 	go p.receiver()
 	return nil
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
 	s.Lock()
-	p, ok := s.pipes[pp.ID()]
+	delete(s.pipes, pp.ID())
+	close(p.closeq)
 	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -152,24 +144,13 @@ func (*socket) Info() protocol.Info {
 
 func (s *socket) Close() error {
 	s.Lock()
-
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
 	s.Unlock()
-
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
-
 }
 
 func (p *pipe) sender() {
@@ -187,7 +168,7 @@ outer:
 			break
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 func (p *pipe) receiver() {
@@ -198,22 +179,11 @@ func (p *pipe) receiver() {
 		}
 		m.Free()
 	}
-	p.Close()
+	p.close()
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 // NewProtocol returns a new protocol implementation.

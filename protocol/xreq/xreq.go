@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -34,7 +34,6 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
 	closeq chan struct{}
 }
 
@@ -43,7 +42,6 @@ type socket struct {
 	closeq     chan struct{}
 	recvq      chan *protocol.Message
 	sendq      chan *protocol.Message
-	pipes      map[uint32]*pipe
 	recvExpire time.Duration
 	sendExpire time.Duration
 	sendQLen   int
@@ -138,7 +136,7 @@ outer:
 			break outer
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 // This is a puller, and doesn't permit for priorities.  We might want
@@ -160,22 +158,11 @@ outer:
 			break
 		}
 	}
-	p.p.Close()
+	p.close()
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(s.pipes, p.p.ID())
-	s.Unlock()
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (s *socket) SetOption(name string, value interface{}) error {
@@ -275,18 +262,8 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
 	close(s.closeq)
-
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
 }
 
@@ -301,7 +278,6 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 		s:      s,
 		closeq: make(chan struct{}),
 	}
-	s.pipes[pp.ID()] = p
 
 	go p.sender()
 	go p.receiver()
@@ -309,12 +285,6 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
-	s.Lock()
-	p, ok := s.pipes[pp.ID()]
-	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -333,7 +303,6 @@ func (*socket) Info() protocol.Info {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		pipes:    make(map[uint32]*pipe),
 		closeq:   make(chan struct{}),
 		recvq:    make(chan *protocol.Message, defaultQLen),
 		sendq:    make(chan *protocol.Message, defaultQLen),

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -35,7 +35,6 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
 	closeq chan struct{}
 	sendq  chan *protocol.Message
 }
@@ -184,7 +183,7 @@ outer:
 			break outer
 		}
 	}
-	go p.Close()
+	go p.close()
 }
 
 // This is a puller, and doesn't permit for priorities.  We might want
@@ -206,22 +205,11 @@ outer:
 			break
 		}
 	}
-	go p.Close()
+	go p.close()
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(s.pipes, p.p.ID())
-	s.Unlock()
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (s *socket) SetOption(name string, value interface{}) error {
@@ -327,53 +315,42 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 
 func (s *socket) Close() error {
 	s.Lock()
-
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
 	close(s.closeq)
-
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
-	s.Lock()
-	defer s.Unlock()
-	if s.closed {
-		return protocol.ErrClosed
-	}
 	p := &pipe{
 		p:      pp,
 		s:      s,
 		closeq: make(chan struct{}),
 		sendq:  make(chan *protocol.Message, s.sendQLen),
 	}
+	pp.SetPrivate(p)
+	s.Lock()
+	defer s.Unlock()
+	if s.closed {
+		return protocol.ErrClosed
+	}
 	s.pipes[pp.ID()] = p
-
 	go p.sender()
 	go p.receiver()
 	return nil
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeq)
+
 	s.Lock()
-	p, ok := s.pipes[pp.ID()]
+	delete(s.pipes, p.p.ID())
 	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
