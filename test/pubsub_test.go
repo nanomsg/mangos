@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -130,26 +130,6 @@ func pubCases() []TestCase {
 
 }
 
-func TestPubSubTCP(t *testing.T) {
-	RunTestsTCP(t, pubCases())
-}
-
-func TestPubSubIPC(t *testing.T) {
-	RunTestsIPC(t, pubCases())
-}
-
 func TestPubSubInp(t *testing.T) {
 	RunTestsInp(t, pubCases())
-}
-
-func TestPubSubTLS(t *testing.T) {
-	RunTestsTLS(t, pubCases())
-}
-
-func TestPubSubWS(t *testing.T) {
-	RunTestsWS(t, pubCases())
-}
-
-func TestPubSubWSS(t *testing.T) {
-	RunTestsWSS(t, pubCases())
 }

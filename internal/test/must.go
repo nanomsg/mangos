@@ -16,6 +16,7 @@ package test
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -23,7 +24,8 @@ import (
 // If it is not nil, we call t.Fatalf() to fail the test immediately.
 func MustSucceed(t *testing.T, e error) {
 	if e != nil {
-		t.Fatalf("Error is not nil: %v", e)
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Error is not nil: %v", file, line, e)
 	}
 }
 
@@ -31,34 +33,39 @@ func MustSucceed(t *testing.T, e error) {
 // If it is nil, the test is a fatal failure.
 func MustFail(t *testing.T, e error) {
 	if e == nil {
-		t.Fatalf("Error is nil")
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Error is nil", file, line)
 	}
 }
 
 // MustBeTrue verifies that the condition is true.
 func MustBeTrue(t *testing.T, b bool) {
 	if !b {
-		t.Fatalf("Condition is false")
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Condition is false", file, line)
 	}
 }
 
 // MustBeFalse verifies that the condition is true.
 func MustBeFalse(t *testing.T, b bool) {
 	if b {
-		t.Fatalf("Condition is true")
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Condition is true", file, line)
 	}
 }
 
 // MustNotBeNil verifies that the provided value is not nil
 func MustNotBeNil(t *testing.T, v interface{}) {
 	if reflect.ValueOf(v).IsNil() {
-		t.Fatalf("Value is nil")
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Value is nil", file, line)
 	}
 }
 
 // MustBeNil verifies that the provided value is nil
 func MustBeNil(t *testing.T, v interface{}) {
 	if !reflect.ValueOf(v).IsNil() {
-		t.Fatalf("Value is not nil: %v", v)
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Value is not nil", file, line)
 	}
 }

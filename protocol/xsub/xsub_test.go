@@ -16,7 +16,9 @@ package xsub
 
 import (
 	"nanomsg.org/go/mangos/v2"
+	"nanomsg.org/go/mangos/v2/protocol/pub"
 	"testing"
+	"time"
 
 	. "nanomsg.org/go/mangos/v2/internal/test"
 	_ "nanomsg.org/go/mangos/v2/transport/inproc"
@@ -65,6 +67,7 @@ func TestXSubCannotSubscribe(t *testing.T) {
 	e = s.SetOption(mangos.OptionSubscribe, []byte("topic"))
 	MustFail(t, e)
 	MustBeTrue(t, e == mangos.ErrBadOption)
+	_ = s.Close()
 }
 
 func TestXSubCannotUnsubscribe(t *testing.T) {
@@ -74,4 +77,68 @@ func TestXSubCannotUnsubscribe(t *testing.T) {
 	e = s.SetOption(mangos.OptionUnsubscribe, []byte("topic"))
 	MustFail(t, e)
 	MustBeTrue(t, e == mangos.ErrBadOption)
+	_ = s.Close()
+}
+
+func TestXSubRecvDeadline(t *testing.T) {
+	s, e := NewSocket()
+	MustSucceed(t, e)
+	e = s.SetOption(mangos.OptionRecvDeadline, time.Millisecond)
+	MustSucceed(t, e)
+	m, e := s.RecvMsg()
+	MustFail(t, e)
+	MustBeTrue(t, e == mangos.ErrRecvTimeout)
+	MustBeNil(t, m)
+	_ = s.Close()
+}
+
+func TestXSubRecvClean(t *testing.T) {
+	s, e := NewSocket()
+	MustSucceed(t, e)
+	p, e := pub.NewSocket()
+	MustSucceed(t, e)
+	addr := AddrTestInp()
+	MustSucceed(t, s.Listen(addr))
+	MustSucceed(t, p.Dial(addr))
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Second))
+	m := mangos.NewMessage(0)
+	m.Body = append(m.Body, []byte("Hello world")...)
+	e = p.SendMsg(m)
+	MustSucceed(t, e)
+	m, e = s.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	MustBeTrue(t, string(m.Body) == "Hello world")
+	_ = p.Close()
+	_ = s.Close()
+}
+
+func TestXSubRecvQLen(t *testing.T) {
+	s, e := NewSocket()
+	MustSucceed(t, e)
+	p, e := pub.NewSocket()
+	MustSucceed(t, e)
+	addr := AddrTestInp()
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 2))
+	MustSucceed(t, s.Listen(addr))
+	MustSucceed(t, p.Dial(addr))
+	MustSucceed(t, p.Send([]byte("one")))
+	MustSucceed(t, p.Send([]byte("two")))
+	MustSucceed(t, p.Send([]byte("three")))
+	MustSucceed(t, e)
+	time.Sleep(time.Millisecond*500)
+	m, e := s.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	m, e = s.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	// this verifies we discarded the oldest first
+	MustBeTrue(t, string(m.Body) == "three")
+	m, e = s.RecvMsg()
+	MustFail(t, e)
+	MustBeTrue(t, e == mangos.ErrRecvTimeout)
+	_ = p.Close()
+	_ = s.Close()
 }

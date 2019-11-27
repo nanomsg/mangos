@@ -201,6 +201,16 @@ outer:
 		case <-p.s.closeq:
 			m.Free()
 			break outer
+		default:
+			// Yank the oldest message first, so we can
+			// inject new stuff.  We really prefer to have
+			// more recent data.
+			select {
+			case m2 := <-p.s.recvq:
+				m2.Free()
+			default:
+			}
+			p.s.recvq<-m
 		}
 	}
 	p.close()

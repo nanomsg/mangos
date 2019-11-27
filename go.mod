@@ -6,3 +6,5 @@ require (
 	github.com/gorilla/websocket v1.4.1
 	golang.org/x/sys v0.0.0-20181128092732-4ed8d59d0b35 // indirect
 )
+
+go 1.13
