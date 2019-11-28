@@ -61,7 +61,7 @@ var (
 const defaultQLen = 128
 
 func init() {
-	closedQ := make(chan time.Time)
+	closedQ = make(chan time.Time)
 	close(closedQ)
 }
 
@@ -157,10 +157,10 @@ outer:
 		ttl := s.ttl
 		s.Unlock()
 
-		hops := 0
+		hops := 1
 		finish := false
 		for !finish {
-			if hops > ttl {
+			if hops >= ttl {
 				m.Free()
 				continue outer
 			}
@@ -263,6 +263,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			// This does not impact pipes already connected.
 			s.sendQLen = v
 			s.Unlock()
+			return nil
 		}
 		return protocol.ErrBadValue
 
@@ -273,7 +274,9 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			s.recvQLen = v
 			s.recvq = newchan
 			s.Unlock()
+			return nil
 		}
+		return protocol.ErrBadValue
 	}
 
 	return protocol.ErrBadOption

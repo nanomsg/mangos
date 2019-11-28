@@ -50,7 +50,7 @@ type socket struct {
 }
 
 var (
-	nilQ <-chan time.Time
+	nilQ    <-chan time.Time
 )
 
 const defaultQLen = 128
@@ -61,15 +61,13 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
+
 	// This could benefit from optimization to avoid useless duplicates.
 	for _, p := range s.pipes {
 		pm := m.Dup()
 		select {
 		case p.sendq <- pm:
-		case <-p.closeq:
-			pm.Free()
 		default:
-			// backpressure, but we do not exert
 			pm.Free()
 		}
 	}
@@ -143,9 +141,9 @@ func (s *socket) SetOption(name string, value interface{}) error {
 					m.Free()
 				}
 			}
+			return nil
 		}
-		// We don't support these
-		// case OptionLinger:
+		return protocol.ErrBadValue
 	}
 
 	return protocol.ErrBadOption
