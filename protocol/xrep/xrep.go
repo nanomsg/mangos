@@ -61,7 +61,7 @@ var (
 const defaultQLen = 128
 
 func init() {
-	closedQ := make(chan time.Time)
+	closedQ = make(chan time.Time)
 	close(closedQ)
 }
 
@@ -80,14 +80,14 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	m.Header = m.Header[4:]
 
 	s.Lock()
+	bestEffort := s.bestEffort
+	tq := nilQ
 	p, ok := s.pipes[id]
 	if !ok {
 		s.Unlock()
 		m.Free()
 		return nil
 	}
-	bestEffort := s.bestEffort
-	tq := nilQ
 	if bestEffort {
 		tq = closedQ
 	} else if s.sendExpire > 0 {
@@ -138,10 +138,6 @@ outer:
 		if m == nil {
 			break
 		}
-		if len(m.Body) < 4 {
-			m.Free()
-			continue
-		}
 
 		// Outer most value of header is pipe ID
 		m.Header = append(make([]byte, 4), m.Header...)
@@ -151,7 +147,7 @@ outer:
 		ttl := s.ttl
 		s.Unlock()
 
-		hops := 0
+		hops := 1
 		finish := false
 		for !finish {
 			if hops > ttl {
@@ -232,6 +228,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			return nil
 		}
 		return protocol.ErrBadValue
+
 	case protocol.OptionSendDeadline:
 		if v, ok := value.(time.Duration); ok {
 			s.Lock()
@@ -256,6 +253,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			// This does not impact pipes already connected.
 			s.sendQLen = v
 			s.Unlock()
+			return nil
 		}
 		return protocol.ErrBadValue
 
@@ -266,9 +264,9 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			s.recvQLen = v
 			s.recvq = newchan
 			s.Unlock()
+			return nil
 		}
-		// We don't support these
-		// case OptionLinger:
+		return protocol.ErrBadValue
 	}
 
 	return protocol.ErrBadOption

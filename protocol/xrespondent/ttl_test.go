@@ -15,6 +15,9 @@
 package xrespondent
 
 import (
+	"nanomsg.org/go/mangos/v2/protocol/respondent"
+	"nanomsg.org/go/mangos/v2/protocol/surveyor"
+	"nanomsg.org/go/mangos/v2/protocol/xsurveyor"
 	"testing"
 
 	. "nanomsg.org/go/mangos/v2/internal/test"
@@ -39,4 +42,8 @@ func TestXRespondentTTLNotInt(t *testing.T) {
 
 func TestXRespondentTTLSet(t *testing.T) {
 	SetTTL(t, NewSocket)
+}
+
+func TestXRespondentTTLDrop(t *testing.T) {
+	TTLDropTest(t, surveyor.NewSocket, respondent.NewSocket, xsurveyor.NewSocket, NewSocket)
 }

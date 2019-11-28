@@ -113,7 +113,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 					// Discard the oldest stuff, keeping
 					// the newest.
 					m2 := <-newchan
-					newchan<-m
+					newchan <- m
 					m2.Free()
 				}
 			}
@@ -146,8 +146,8 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
 	p := &pipe{
-		p:      pp,
-		s:      s,
+		p: pp,
+		s: s,
 	}
 	s.Lock()
 	defer s.Unlock()
@@ -208,7 +208,7 @@ outer:
 				m2.Free()
 			default:
 			}
-			p.s.recvq<-m
+			p.s.recvq <- m
 		}
 	}
 	p.close()

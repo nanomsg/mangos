@@ -16,7 +16,6 @@ package test
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 	"time"
 
@@ -133,7 +132,10 @@ func TTLDropTest(t *testing.T,
 	nhop := 3
 	clis := make([]mangos.Socket, 0, nhop)
 	srvs := make([]mangos.Socket, 0, nhop)
-	a := AddrTestInp()
+	var addrs []string
+	for i := 0; i < nhop; i++ {
+		addrs = append(addrs, AddrTestInp())
+	}
 
 	for i := 0; i < nhop; i++ {
 		var fn func() (mangos.Socket, error)
@@ -143,18 +145,11 @@ func TTLDropTest(t *testing.T,
 			fn = rawsrv
 		}
 		s, err := fn()
-		if err != nil {
-			t.Errorf("Failed to make server: %v", err)
-			return
-		}
+		MustSucceed(t, err)
+		MustNotBeNil(t, s)
 		defer s.Close()
 
-		err = s.Listen(a + fmt.Sprintf("HOP%d", i))
-		if err != nil {
-			t.Errorf("Failed listen: %v", err)
-			return
-		}
-
+		MustSucceed(t, s.Listen(addrs[i]))
 		srvs = append(srvs, s)
 	}
 
@@ -166,28 +161,18 @@ func TTLDropTest(t *testing.T,
 			fn = rawcli
 		}
 		s, err := fn()
-		if err != nil {
-			t.Errorf("Failed to make client: %v", err)
-			return
-		}
+		MustSucceed(t, err)
+		MustNotBeNil(t, s)
 		defer s.Close()
 
-		err = s.Dial(a + fmt.Sprintf("HOP%d", i))
-		if err != nil {
-			t.Errorf("Failed dial: %v", err)
-			return
-		}
+		MustSucceed(t, s.Dial(addrs[i]))
 
 		clis = append(clis, s)
 	}
 
 	// Now make the device chain
 	for i := 0; i < nhop-1; i++ {
-		err := mangos.Device(srvs[i], clis[i+1])
-		if err != nil {
-			t.Errorf("Device failed: %v", err)
-			return
-		}
+		MustSucceed(t, mangos.Device(srvs[i], clis[i+1]))
 	}
 
 	// Wait for the various connections to plumb up
@@ -199,48 +184,17 @@ func TTLDropTest(t *testing.T,
 	rq := clis[0]
 	rp := srvs[nhop-1]
 
-	err := rp.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100)
-	if err != nil {
-		t.Errorf("Failed set recv deadline")
-		return
-	}
-
-	t.Logf("Socket for sending is %s", rq.Info().SelfName)
-	if err = rq.Send([]byte("GOOD")); err != nil {
-		t.Errorf("Failed first send: %v", err)
-		return
-	}
-	t.Logf("Socket for receiving is %s", rp.Info().SelfName)
+	MustSucceed(t, rp.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100))
+	MustSucceed(t, rq.Send([]byte("GOOD")))
 	v, err := rp.Recv()
-	if err != nil {
-		t.Errorf("Failed first recv: %v", err)
-		return
-	} else if !bytes.Equal(v, []byte("GOOD")) {
-		t.Errorf("Got wrong message: %v", v)
-		return
-	} else {
-		t.Logf("Got good message: %v", v)
-	}
+	MustSucceed(t, err)
+	MustBeTrue(t, bytes.Equal(v, []byte("GOOD")))
 
 	// Now try setting the option.
-	err = rp.SetOption(mangos.OptionTTL, nhop-1)
-	if err != nil {
-		t.Errorf("Failed set TTL: %v", err)
-		return
-	}
+	MustSucceed(t, rp.SetOption(mangos.OptionTTL, nhop-1))
 
-	if err = rq.Send([]byte("DROP")); err != nil {
-		t.Errorf("Failed send drop: %v", err)
-		return
-	}
+	MustSucceed(t, rq.Send([]byte("DROP")))
 
 	v, err = rp.Recv()
-	switch err {
-	case mangos.ErrRecvTimeout: // expected
-		t.Logf("TTL honored")
-	case nil:
-		t.Errorf("Message not dropped: %v", v)
-	default:
-		t.Errorf("Got unexpected error: %v", err)
-	}
+	MustBeError(t, err, mangos.ErrRecvTimeout)
 }

@@ -117,7 +117,7 @@ func TestXSubRecvQLen(t *testing.T) {
 	MustSucceed(t, p.Send([]byte("two")))
 	MustSucceed(t, p.Send([]byte("three")))
 	MustSucceed(t, e)
-	time.Sleep(time.Millisecond*50)
+	time.Sleep(time.Millisecond * 50)
 	m, e := s.RecvMsg()
 	MustSucceed(t, e)
 	MustNotBeNil(t, m)
@@ -147,7 +147,7 @@ func TestXSubRecvQLenResizeDiscard(t *testing.T) {
 	MustSucceed(t, p.Send([]byte("two")))
 	MustSucceed(t, p.Send([]byte("three")))
 	MustSucceed(t, e)
-	time.Sleep(time.Millisecond*50)
+	time.Sleep(time.Millisecond * 50)
 	// Shrink it
 	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 2))
 	m, e := s.RecvMsg()
