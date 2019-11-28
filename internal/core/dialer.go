@@ -123,6 +123,7 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 			d.Unlock()
 			return nil
 		}
+		return mangos.ErrBadValue
 	}
 	// Transport specific options passed down.
 	return d.d.SetOption(n, v)

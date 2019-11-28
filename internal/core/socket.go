@@ -349,7 +349,6 @@ func (s *socket) SetOption(name string, value interface{}) error {
 		} else {
 			return mangos.ErrBadValue
 		}
-		break
 	case mangos.OptionReconnectTime:
 		if v, ok := value.(time.Duration); ok {
 			s.reconnMinTime = v
