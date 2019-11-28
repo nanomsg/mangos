@@ -176,6 +176,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			return nil
 		}
 		return protocol.ErrBadValue
+
 	case protocol.OptionSendDeadline:
 		if v, ok := value.(time.Duration); ok {
 			s.Lock()
@@ -202,6 +203,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			s.sendQLen = v
 			s.sendq = newchan
 			s.Unlock()
+			return nil
 		}
 		return protocol.ErrBadValue
 
@@ -212,9 +214,9 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			s.recvQLen = v
 			s.recvq = newchan
 			s.Unlock()
+			return nil
 		}
-		// We don't support these
-		// case OptionLinger:
+		return protocol.ErrBadValue
 	}
 
 	return protocol.ErrBadOption
@@ -262,6 +264,7 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
+	s.sendq = nil
 	s.Unlock()
 	close(s.closeq)
 	return nil

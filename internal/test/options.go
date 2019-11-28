@@ -66,3 +66,25 @@ func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option strin
 	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
 	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
 }
+
+func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option string) {
+	s, err := f()
+	MustSucceed(t, err)
+	defer s.Close()
+	val, err := s.GetOption(option)
+	MustSucceed(t, err)
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(true))
+
+	MustSucceed(t, s.SetOption(option, true))
+	val, err = s.GetOption(option)
+	MustSucceed(t, err)
+	MustBeTrue(t, val.(bool) == true)
+
+	MustSucceed(t, s.SetOption(option, false))
+	val, err = s.GetOption(option)
+	MustSucceed(t, err)
+	MustBeTrue(t, val.(bool) == false)
+
+	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
+	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
+}
