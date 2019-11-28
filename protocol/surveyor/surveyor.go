@@ -414,6 +414,7 @@ func NewProtocol() protocol.Protocol {
 		recvQLen:   defaultQLen,
 		survExpire: defaultSurveyTime,
 	}
+	s.ctxs[s.master] = struct{}{}
 	return s
 }
 

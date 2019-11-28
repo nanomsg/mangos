@@ -65,3 +65,11 @@ func TestSurveyorOptions(t *testing.T) {
 	VerifyOptionQLen(t, NewSocket, mangos.OptionReadQLen)
 	VerifyOptionQLen(t, NewSocket, mangos.OptionWriteQLen)
 }
+
+func TestSurveyorClosed(t *testing.T) {
+	VerifyClosedRecv(t, NewSocket)
+	VerifyClosedSend(t, NewSocket)
+	VerifyClosedClose(t, NewSocket)
+	VerifyClosedDial(t, NewSocket)
+	VerifyClosedListen(t, NewSocket)
+}
