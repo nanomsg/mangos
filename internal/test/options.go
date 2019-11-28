@@ -67,6 +67,26 @@ func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option strin
 	MustSucceed(t, s.Close())
 }
 
+func VerifyOptionQLen(t *testing.T, f func() (mangos.Socket, error), option string) {
+	s, err := f()
+	MustSucceed(t, err)
+	val, err := s.GetOption(option)
+	MustSucceed(t, err)
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(1))
+
+	MustSucceed(t, s.SetOption(option, 2))
+	val, err = s.GetOption(option)
+	MustSucceed(t, err)
+	MustBeTrue(t, val.(int) == 2)
+
+	// Queue lengths are not permitted to be negative.
+	MustBeError(t, s.SetOption(option, -1), mangos.ErrBadValue)
+
+	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
+	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
+	MustSucceed(t, s.Close())
+}
+
 func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
