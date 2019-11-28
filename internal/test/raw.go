@@ -25,7 +25,6 @@ import (
 func VerifyRaw(t *testing.T, f func() (mangos.Socket, error)) {
 	s, err := f()
 	MustSucceed(t, err)
-	defer s.Close()
 	val, err := s.GetOption(mangos.OptionRaw)
 	MustSucceed(t, err)
 	if b, ok := val.(bool); ok {
@@ -43,13 +42,13 @@ func VerifyRaw(t *testing.T, f func() (mangos.Socket, error)) {
 	_, err = s.OpenContext()
 	MustFail(t, err)
 	MustBeTrue(t, err == protocol.ErrProtoOp)
+	MustSucceed(t, s.Close())
 }
 
 // VerifyCooked verifies that the socket created is cooked, and cannot be changed to raw.
 func VerifyCooked(t *testing.T, f func() (mangos.Socket, error)) {
 	s, err := f()
 	MustSucceed(t, err)
-	defer s.Close()
 	val, err := s.GetOption(mangos.OptionRaw)
 	MustSucceed(t, err)
 	if b, ok := val.(bool); ok {
@@ -62,4 +61,5 @@ func VerifyCooked(t *testing.T, f func() (mangos.Socket, error)) {
 	MustFail(t, err)
 	err = s.SetOption(mangos.OptionRaw, 0)
 	MustFail(t, err)
+	MustSucceed(t, s.Close())
 }

@@ -208,7 +208,13 @@ outer:
 				m2.Free()
 			default:
 			}
-			p.s.recvq <- m
+			// We might be contending with other pipes; in that
+			// case we've done the best we can; give up.
+			select {
+			case p.s.recvq <- m:
+			default:
+				m.Free()
+			}
 		}
 	}
 	p.close()

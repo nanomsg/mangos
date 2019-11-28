@@ -101,7 +101,7 @@ func (c *context) Close() error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
-	s.closed = true
+	c.closed = true
 	delete(s.ctxs, c)
 	s.Unlock()
 	close(c.closeq)
@@ -130,7 +130,21 @@ func (p *pipe) receiver() {
 				select {
 				case c.recvq <- dm:
 				default:
-					dm.Free()
+					// We try to delete the oldest
+					// message.  However, note that
+					// new messages from other pipes
+					// might be coming in on this, and
+					// thus still contending.
+					select {
+					case m2 := <-c.recvq:
+						m2.Free()
+					default:
+					}
+					select {
+					case c.recvq <- dm:
+					default:
+						dm.Free()
+					}
 				}
 			}
 		}
@@ -235,13 +249,36 @@ func (c *context) unsubscribe(topic []byte) error {
 func (c *context) SetOption(name string, value interface{}) error {
 	s := c.s
 
+	var fn func([]byte) error
+
 	switch name {
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok {
 			newchan := make(chan *protocol.Message, v)
 			c.s.Lock()
+			oldchan := c.recvq
 			c.recvq = newchan
 			c.recvQLen = v
+			close(oldchan)
+			for m := range oldchan {
+				select {
+				case c.recvq <- m:
+				default:
+					// Eat an old message to make room
+					select {
+					case m2 := <-c.recvq:
+						m2.Free()
+					default:
+					}
+					// And try to inject the new.  This
+					// can fail due to concurrency.
+					select {
+					case c.recvq <- m:
+					default:
+						m.Free()
+					}
+				}
+			}
 			c.s.Unlock()
 			return nil
 		}
@@ -257,7 +294,9 @@ func (c *context) SetOption(name string, value interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionSubscribe:
+		fn = c.subscribe
 	case protocol.OptionUnsubscribe:
+		fn = c.unsubscribe
 	default:
 		return protocol.ErrBadOption
 	}
@@ -276,16 +315,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	s.Lock()
 	defer s.Unlock()
 
-	switch name {
-	case protocol.OptionSubscribe:
-		return c.subscribe(vb)
-
-	case protocol.OptionUnsubscribe:
-		return c.unsubscribe(vb)
-
-	default:
-		return protocol.ErrBadOption
-	}
+	return fn(vb)
 }
 
 func (c *context) GetOption(name string) (interface{}, error) {

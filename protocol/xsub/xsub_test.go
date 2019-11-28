@@ -113,11 +113,14 @@ func TestXSubRecvQLen(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 2))
 	MustSucceed(t, s.Listen(addr))
 	MustSucceed(t, p.Dial(addr))
+	time.Sleep(time.Millisecond * 50)
+
 	MustSucceed(t, p.Send([]byte("one")))
 	MustSucceed(t, p.Send([]byte("two")))
 	MustSucceed(t, p.Send([]byte("three")))
-	MustSucceed(t, e)
 	time.Sleep(time.Millisecond * 50)
+
+	MustSucceed(t, e)
 	m, e := s.RecvMsg()
 	MustSucceed(t, e)
 	MustNotBeNil(t, m)

@@ -25,18 +25,17 @@ import (
 func VerifyInvalidOption(t *testing.T, f func() (mangos.Socket, error)) {
 	s, err := f()
 	MustSucceed(t, err)
-	defer s.Close()
 	_, err = s.GetOption("nosuchoption")
 	MustBeError(t, err, mangos.ErrBadOption)
 
 	MustBeError(t, s.SetOption("nosuchoption", 0), mangos.ErrBadOption)
+	MustSucceed(t, s.Close())
 }
 
 // VerifyOptionDuration validates time.Duration options
 func VerifyOptionDuration(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
-	defer s.Close()
 	val, err := s.GetOption(option)
 	MustSucceed(t, err)
 	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(time.Duration(0)))
@@ -48,15 +47,15 @@ func VerifyOptionDuration(t *testing.T, f func() (mangos.Socket, error), option 
 
 	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
 	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
+	MustSucceed(t, s.Close())
 }
 
 func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
-	defer s.Close()
 	val, err := s.GetOption(option)
 	MustSucceed(t, err)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(int(1)))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(1))
 
 	MustSucceed(t, s.SetOption(option, 2))
 	val, err = s.GetOption(option)
@@ -65,12 +64,12 @@ func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option strin
 
 	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
 	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
+	MustSucceed(t, s.Close())
 }
 
 func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
-	defer s.Close()
 	val, err := s.GetOption(option)
 	MustSucceed(t, err)
 	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(true))
@@ -87,4 +86,5 @@ func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option stri
 
 	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
 	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
+	MustSucceed(t, s.Close())
 }
