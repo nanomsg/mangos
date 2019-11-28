@@ -295,6 +295,11 @@ func (c *context) GetOption(name string) (interface{}, error) {
 		v := c.recvQLen
 		c.s.Unlock()
 		return v, nil
+	case protocol.OptionRecvDeadline:
+		c.s.Lock()
+		v := c.recvExpire
+		c.s.Unlock()
+		return v, nil
 	}
 	return nil, protocol.ErrBadOption
 }
