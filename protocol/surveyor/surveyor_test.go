@@ -23,13 +23,27 @@ import (
 	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 )
 
+func TestSurveyorIdentity(t *testing.T) {
+	s, err := NewSocket()
+	MustSucceed(t, err)
+	id := s.Info()
+	MustBeTrue(t, id.Self == mangos.ProtoSurveyor)
+	MustBeTrue(t, id.SelfName == "surveyor")
+	MustBeTrue(t, id.Peer == mangos.ProtoRespondent)
+	MustBeTrue(t, id.PeerName == "respondent")
+	MustSucceed(t, s.Close())
+}
+
+func TestSurveyorCooked(t *testing.T) {
+	VerifyCooked(t, NewSocket)
+}
+
 func TestSurveyorNonBlock(t *testing.T) {
 	maxqlen := 2
 
 	rp, err := NewSocket()
 	MustSucceed(t, err)
 	MustNotBeNil(t, rp)
-	defer rp.Close()
 
 	MustSucceed(t, rp.SetOption(mangos.OptionWriteQLen, maxqlen))
 	MustSucceed(t, rp.Listen(AddrTestInp()))
@@ -41,4 +55,13 @@ func TestSurveyorNonBlock(t *testing.T) {
 	}
 	end := time.Now()
 	MustBeTrue(t, end.Sub(start) < time.Second/10)
+	MustSucceed(t, rp.Close())
+}
+
+func TestSurveyorOptions(t *testing.T) {
+	VerifyInvalidOption(t, NewSocket)
+	VerifyOptionDuration(t, NewSocket, mangos.OptionRecvDeadline)
+	VerifyOptionDuration(t, NewSocket, mangos.OptionSurveyTime)
+	VerifyOptionQLen(t, NewSocket, mangos.OptionReadQLen)
+	VerifyOptionQLen(t, NewSocket, mangos.OptionWriteQLen)
 }

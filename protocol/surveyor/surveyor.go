@@ -200,7 +200,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionReadQLen:
-		if v, ok := value.(int); ok {
+		if v, ok := value.(int); ok && v >= 0 {
 			newchan := make(chan *protocol.Message, v)
 			c.s.Lock()
 			c.recvq = newchan
@@ -378,7 +378,7 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 func (s *socket) SetOption(option string, value interface{}) error {
 	switch option {
 	case protocol.OptionWriteQLen:
-		if v, ok := value.(int); ok {
+		if v, ok := value.(int); ok && v >= 0 {
 			s.Lock()
 			s.sendQLen = v
 			s.Unlock()
