@@ -127,7 +127,7 @@ func TestXSubRecvQLen(t *testing.T) {
 	MustSucceed(t, p.Send([]byte("two")))
 	MustSucceed(t, p.Send([]byte("three")))
 	MustSucceed(t, e)
-	time.Sleep(time.Millisecond*500)
+	time.Sleep(time.Millisecond*50)
 	m, e := s.RecvMsg()
 	MustSucceed(t, e)
 	MustNotBeNil(t, m)
@@ -141,4 +141,42 @@ func TestXSubRecvQLen(t *testing.T) {
 	MustBeTrue(t, e == mangos.ErrRecvTimeout)
 	_ = p.Close()
 	_ = s.Close()
+}
+
+func TestXSubRecvQLenResizeDiscard(t *testing.T) {
+	s, e := NewSocket()
+	MustSucceed(t, e)
+	p, e := pub.NewSocket()
+	MustSucceed(t, e)
+	addr := AddrTestInp()
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 3))
+	MustSucceed(t, s.Listen(addr))
+	MustSucceed(t, p.Dial(addr))
+	MustSucceed(t, p.Send([]byte("one")))
+	MustSucceed(t, p.Send([]byte("two")))
+	MustSucceed(t, p.Send([]byte("three")))
+	MustSucceed(t, e)
+	time.Sleep(time.Millisecond*50)
+	// Shrink it
+	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 2))
+	m, e := s.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	m, e = s.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	// this verifies we discarded the oldest first
+	MustBeTrue(t, string(m.Body) == "three")
+	m, e = s.RecvMsg()
+	MustFail(t, e)
+	MustBeTrue(t, e == mangos.ErrRecvTimeout)
+	_ = p.Close()
+	_ = s.Close()
+}
+
+func TestXSubOptions(t *testing.T) {
+	VerifyInvalidOption(t, NewSocket)
+	VerifyOptionDuration(t, NewSocket, mangos.OptionRecvDeadline)
+	VerifyOptionInt(t, NewSocket, mangos.OptionReadQLen)
 }

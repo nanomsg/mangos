@@ -25,7 +25,8 @@ import (
 func MustSucceed(t *testing.T, e error) {
 	if e != nil {
 		_, file, line, _ := runtime.Caller(1)
-		t.Fatalf("Failed at %s:%d: Error is not nil: %v", file, line, e)
+		t.Fatalf("Failed at %s:%d: Error is not nil: %v",
+			file, line, e)
 	}
 }
 
@@ -35,6 +36,20 @@ func MustFail(t *testing.T, e error) {
 	if e == nil {
 		_, file, line, _ := runtime.Caller(1)
 		t.Fatalf("Failed at %s:%d: Error is nil", file, line)
+	}
+}
+
+// MustBeError verifies that a value is a specific error.
+func MustBeError(t *testing.T, e error, compare error) {
+
+	if e == nil {
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Error is nil", file, line)
+	}
+	if e.Error() != compare.Error() {
+		_, file, line, _ := runtime.Caller(1)
+		t.Fatalf("Failed at %s:%d: Error was %v, expected %v",
+			file, line, e, compare)
 	}
 }
 

@@ -109,7 +109,12 @@ func (s *socket) SetOption(name string, value interface{}) error {
 				select {
 				case newchan <- m:
 				default:
-					m.Free()
+					// No room for this element.
+					// Discard the oldest stuff, keeping
+					// the newest.
+					m2 := <-newchan
+					newchan<-m
+					m2.Free()
 				}
 			}
 			return nil
@@ -143,9 +148,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	p := &pipe{
 		p:      pp,
 		s:      s,
-		closeq: make(chan struct{}),
 	}
-	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
@@ -156,8 +159,6 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
-	p := pp.GetPrivate().(*pipe)
-	close(p.closeq)
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -195,9 +196,6 @@ outer:
 
 		select {
 		case p.s.recvq <- m:
-		case <-p.closeq:
-			m.Free()
-			break outer
 		case <-p.s.closeq:
 			m.Free()
 			break outer
