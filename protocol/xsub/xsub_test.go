@@ -35,24 +35,14 @@ func TestXSubIdentity(t *testing.T) {
 	MustBeTrue(t, id.PeerName == "pub")
 }
 
-
 func TestXSubRaw(t *testing.T) {
 	VerifyRaw(t, NewSocket)
 }
 
-func TestXSubClosedRecv(t *testing.T) {
+func TestXSubClosed(t *testing.T) {
 	VerifyClosedRecv(t, NewSocket)
-}
-
-func TestXSubDoubleClose(t *testing.T) {
 	VerifyClosedClose(t, NewSocket)
-}
-
-func TestXSubClosedDial(t *testing.T) {
 	VerifyClosedDial(t, NewSocket)
-}
-
-func TestXSubClosedListen(t *testing.T) {
 	VerifyClosedListen(t, NewSocket)
 }
 

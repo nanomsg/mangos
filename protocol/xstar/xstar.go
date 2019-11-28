@@ -78,8 +78,6 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		pm := m.Dup()
 		select {
 		case p.sendq <- pm:
-		case <-p.closeq:
-			pm.Free()
 		default:
 			// backpressure, but we do not exert
 			pm.Free()
@@ -290,8 +288,6 @@ outer:
 			m2 := m.Dup()
 			select {
 			case p2.sendq <- m2:
-			case <-s.closeq:
-				m2.Free()
 			default:
 				m2.Free()
 			}
