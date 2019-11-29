@@ -1,4 +1,4 @@
-// Copyright 2016 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -108,10 +108,12 @@ var messageCache = []msgCacheInfo{
 // for the resources to be recycled without engaging GC.  This can have
 // rather substantial benefits for performance.
 func (m *Message) Free() {
-	for i := range messageCache {
-		if m.bsize == messageCache[i].maxbody {
-			messageCache[i].pool.Put(m)
-			return
+	if m != nil {
+		for i := range messageCache {
+			if m.bsize == messageCache[i].maxbody {
+				messageCache[i].pool.Put(m)
+				return
+			}
 		}
 	}
 }

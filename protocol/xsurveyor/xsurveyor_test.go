@@ -154,15 +154,15 @@ func TestXSurveyorBroadcast(t *testing.T) {
 	MustSucceed(t, s2.SetOption(mangos.OptionRecvDeadline, time.Millisecond*50))
 
 	m := mangos.NewMessage(0)
-	m.Header = append(m.Header, 0x80, 1, 2 ,3)
+	m.Header = append(m.Header, 0x80, 1, 2, 3)
 	m.Body = append(m.Body, []byte("one")...)
 	MustSucceed(t, s.SendMsg(m))
 	m = mangos.NewMessage(0)
-	m.Header = append(m.Header, 0x80, 1, 2 ,4)
+	m.Header = append(m.Header, 0x80, 1, 2, 4)
 	m.Body = append(m.Body, []byte("two")...)
 	MustSucceed(t, s.SendMsg(m))
 	m = mangos.NewMessage(0)
-	m.Header = append(m.Header, 0x80, 1, 2 ,5)
+	m.Header = append(m.Header, 0x80, 1, 2, 5)
 	m.Body = append(m.Body, []byte("three")...)
 	MustSucceed(t, s.SendMsg(m))
 
@@ -171,11 +171,10 @@ func TestXSurveyorBroadcast(t *testing.T) {
 	pass1 := false
 	pass2 := false
 
-	f := func(s mangos.Socket, pass *bool) { // Subscriber one
+	f := func(s mangos.Socket, pass *bool) {
 		defer wg.Done()
 		v, e := s.Recv()
 		MustSucceed(t, e)
-		println(string(v))
 		MustBeTrue(t, string(v) == "one")
 
 		v, e = s.Recv()

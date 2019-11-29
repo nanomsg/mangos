@@ -50,7 +50,7 @@ type socket struct {
 }
 
 var (
-	nilQ    <-chan time.Time
+	nilQ <-chan time.Time
 )
 
 const defaultQLen = 128

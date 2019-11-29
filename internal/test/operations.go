@@ -23,8 +23,7 @@ import (
 
 // CannotSend verifies that the socket cannot send.
 func CannotSend(t *testing.T, f func() (mangos.Socket, error)) {
-	s, err := f()
-	MustSucceed(t, err)
+	s := GetSocket(t, f)
 
 	// Not all protocols support this option, but try.
 	_ = s.SetOption(mangos.OptionSendDeadline, time.Millisecond)
@@ -35,12 +34,18 @@ func CannotSend(t *testing.T, f func() (mangos.Socket, error)) {
 
 // CannotRecv verifies that the socket cannot recv.
 func CannotRecv(t *testing.T, f func() (mangos.Socket, error)) {
-	s, err := f()
-	MustSucceed(t, err)
-
+	s := GetSocket(t, f)
 	_ = s.SetOption(mangos.OptionRecvDeadline, time.Millisecond)
 
-	_, err = s.Recv()
+	v, err := s.Recv()
 	MustBeError(t, err, mangos.ErrProtoOp)
+	MustBeNil(t, v)
 	MustSucceed(t, s.Close())
+}
+
+func GetSocket(t *testing.T, f func() (mangos.Socket, error)) mangos.Socket {
+	s, err := f()
+	MustSucceed(t, err)
+	MustNotBeNil(t, s)
+	return s
 }
