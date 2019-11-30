@@ -141,6 +141,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	s.Unlock()
 
 	var last *pipe
+	reused := false
 	if len(pipes) > 0 {
 		last = pipes[len(pipes)-1]
 	}
@@ -150,7 +151,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		var dm *protocol.Message
 		if p == last {
 			dm = m
-			m = nil
+			reused = true
 		} else {
 			dm = m.Dup()
 		}
@@ -160,7 +161,9 @@ func (c *context) SendMsg(m *protocol.Message) error {
 			dm.Free()
 		}
 	}
-	m.Free() // harmless if m is nil
+	if !reused {
+		m.Free()
+	}
 	return nil
 }
 
@@ -367,7 +370,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 		sendQ:  make(chan *protocol.Message, s.sendQLen),
 		closeQ: make(chan struct{}),
 	}
-	pp.SetPrivate((p))
+	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
