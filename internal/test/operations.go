@@ -15,6 +15,7 @@
 package test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -48,4 +49,28 @@ func GetSocket(t *testing.T, f func() (mangos.Socket, error)) mangos.Socket {
 	MustSucceed(t, err)
 	MustNotBeNil(t, s)
 	return s
+}
+
+func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
+	a := AddrTestInp()
+	wg1 := sync.WaitGroup{}
+	wg2 := sync.WaitGroup{}
+	wg1.Add(1)
+	wg2.Add(1)
+	o1 := s1.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
+		if ev == mangos.PipeEventAttached {
+			wg1.Done()
+		}
+	})
+	o2 := s2.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
+		if ev == mangos.PipeEventAttached {
+			wg2.Done()
+		}
+	})
+	MustSucceed(t, s1.Listen(a))
+	MustSucceed(t, s2.Dial(a))
+	wg1.Wait()
+	wg2.Wait()
+	s1.SetPipeEventHook(o1)
+	s2.SetPipeEventHook(o2)
 }
