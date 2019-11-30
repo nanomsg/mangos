@@ -34,15 +34,17 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closeq chan struct{}
+	closeQ chan struct{}
 }
 
 type socket struct {
-	closed     bool
-	closeq     chan struct{}
-	recvQLen   int
-	recvExpire time.Duration
-	recvq      chan *protocol.Message
+	closed         bool
+	closeQ         chan struct{}
+	sizeQ          chan struct{}
+	recvQ          chan *protocol.Message
+	recvQLen       int
+	resizeDiscards bool // only for testing (facilitates coverage)
+	recvExpire     time.Duration
 	sync.Mutex
 }
 
@@ -61,18 +63,25 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	// socket.  Later we can look at moving this to priority queues
 	// based on socket pipes.
 	tq := nilQ
-	s.Lock()
-	if s.recvExpire > 0 {
-		tq = time.After(s.recvExpire)
-	}
-	s.Unlock()
-	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
-	case m := <-s.recvq:
-		return m, nil
+	for {
+		s.Lock()
+		if s.recvExpire > 0 {
+			tq = time.After(s.recvExpire)
+		}
+		cq := s.closeQ
+		rq := s.recvQ
+		zq := s.sizeQ
+		s.Unlock()
+		select {
+		case <-cq:
+			return nil, protocol.ErrClosed
+		case <-tq:
+			return nil, protocol.ErrRecvTimeout
+		case <-zq:
+			continue
+		case m := <-rq:
+			return m, nil
+		}
 	}
 }
 
@@ -90,31 +99,46 @@ func (s *socket) SetOption(name string, value interface{}) error {
 
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
+			newQ := make(chan *protocol.Message, v)
 			s.Lock()
 			s.recvQLen = v
-			oldchan := s.recvq
-			s.recvq = newchan
+			oldQ := s.recvQ
+			s.recvQ = newQ
+			zq := s.sizeQ
+			s.sizeQ = make(chan struct{})
+			discard := s.resizeDiscards
 			s.Unlock()
 
-			for {
-				var m *protocol.Message
-				select {
-				case m = <-oldchan:
-				default:
-				}
-				if m == nil {
-					break
-				}
-				select {
-				case newchan <- m:
-				default:
-					m.Free()
+			close(zq)
+			if !discard {
+				for {
+					var m *protocol.Message
+					select {
+					case m = <-oldQ:
+					default:
+					}
+					if m == nil {
+						break
+					}
+					select {
+					case newQ <- m:
+					default:
+						m.Free()
+					}
 				}
 			}
 			return nil
 		}
 		return protocol.ErrBadValue
+
+	case "_resizeDiscards":
+		// This option is here to facilitate testing.
+		if v, ok := value.(bool); ok {
+			s.Lock()
+			s.resizeDiscards = v
+			s.Unlock()
+		}
+		return nil
 	}
 
 	return protocol.ErrBadOption
@@ -143,7 +167,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	p := &pipe{
 		p:      pp,
 		s:      s,
-		closeq: make(chan struct{}),
+		closeQ: make(chan struct{}),
 	}
 	pp.SetPrivate(p)
 	s.Lock()
@@ -157,7 +181,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
 	p := pp.GetPrivate().(*pipe)
-	close(p.closeq)
+	close(p.closeQ)
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -181,11 +205,12 @@ func (s *socket) Close() error {
 	}
 	s.closed = true
 	s.Unlock()
-	close(s.closeq)
+	close(s.closeQ)
 	return nil
 }
 
 func (p *pipe) receiver() {
+	s := p.s
 outer:
 	for {
 		m := p.p.RecvMsg()
@@ -193,14 +218,26 @@ outer:
 			break
 		}
 
-		select {
-		case p.s.recvq <- m:
-		case <-p.closeq:
-			m.Free()
-			break outer
-		case <-p.s.closeq:
-			m.Free()
-			break outer
+	inner:
+		for {
+			s.Lock()
+			rq := s.recvQ
+			zq := s.sizeQ
+			cq := s.closeQ
+			s.Unlock()
+
+			select {
+			case rq <- m:
+				continue outer
+			case <-zq:
+				continue inner
+			case <-p.closeQ:
+				m.Free()
+				break outer
+			case <-cq:
+				m.Free()
+				break outer
+			}
 		}
 	}
 	p.close()
@@ -213,8 +250,9 @@ func (p *pipe) close() {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		closeq:   make(chan struct{}),
-		recvq:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
 		recvQLen: defaultQLen,
 	}
 	return s

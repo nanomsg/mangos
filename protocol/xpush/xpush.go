@@ -195,6 +195,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 					m.Free()
 				}
 			}
+			return nil
 		}
 		return protocol.ErrBadValue
 	}

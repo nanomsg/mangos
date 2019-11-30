@@ -72,3 +72,35 @@ func VerifyClosedDial(t *testing.T, f func() (mangos.Socket, error)) {
 	MustFail(t, err)
 	MustBeTrue(t, err == protocol.ErrClosed)
 }
+
+type nullPipe struct {
+	p interface{}
+}
+
+func (*nullPipe) ID() uint32 {
+	return 100
+}
+func (*nullPipe) Address() string {
+	return "null"
+}
+func (*nullPipe) Close() error {
+	return protocol.ErrProtoOp
+}
+func (*nullPipe) RecvMsg() *protocol.Message {
+	return nil
+}
+func (*nullPipe) SendMsg(*protocol.Message) error {
+	return protocol.ErrProtoOp
+}
+func (n *nullPipe) GetPrivate() interface{} {
+	return n.p
+}
+func (n *nullPipe) SetPrivate(p interface{}) {
+	n.p = p
+}
+
+func VerifyClosedAddPipe(t *testing.T, f func() protocol.Protocol) {
+	p := f()
+	MustSucceed(t, p.Close())
+	MustBeError(t, p.AddPipe(&nullPipe{}), mangos.ErrClosed)
+}

@@ -12,14 +12,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package xpull
+package pull
 
 import (
+	"nanomsg.org/go/mangos/v2"
 	"testing"
 
 	. "nanomsg.org/go/mangos/v2/internal/test"
 )
 
-func TestXPullRaw(t *testing.T) {
-	VerifyRaw(t, NewSocket)
+func TestPullIdentity(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	id := s.Info()
+	MustBeTrue(t, id.Self == mangos.ProtoPull)
+	MustBeTrue(t, id.SelfName == "pull")
+	MustBeTrue(t, id.Peer == mangos.ProtoPush)
+	MustBeTrue(t, id.PeerName == "push")
+	MustSucceed(t, s.Close())
+}
+
+func TestPullCooked(t *testing.T) {
+	VerifyCooked(t, NewSocket)
+}
+
+func TestPullNoContext(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	_, e := s.OpenContext()
+	MustBeError(t, e, mangos.ErrProtoOp)
+	MustSucceed(t, s.Close())
+}
+
+func TestPullOptions(t *testing.T) {
+	VerifyInvalidOption(t, NewSocket)
 }
