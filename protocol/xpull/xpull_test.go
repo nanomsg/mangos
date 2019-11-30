@@ -48,7 +48,7 @@ func TestXPullClosed(t *testing.T) {
 	VerifyClosedDial(t, NewSocket)
 	VerifyClosedClose(t, NewSocket)
 	VerifyClosedRecv(t, NewSocket)
-	VerifyClosedAddPipe(t, NewProtocol)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
 func TestXPullOptions(t *testing.T) {

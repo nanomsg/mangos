@@ -59,11 +59,6 @@ type context struct {
 func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 	p := newPipe(tp, s, d, l)
 
-	// Either listener or dialer is non-nil.
-	if l == nil && d == nil {
-		panic("both l and d should not be nil")
-	}
-
 	s.Lock()
 	ph := s.pipehook
 	s.Unlock()
