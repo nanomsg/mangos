@@ -29,18 +29,19 @@ import (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closeq chan struct{}
-	sendq  chan *protocol.Message
+	closeQ chan struct{}
+	sendQ  chan *protocol.Message
 }
 
 type socket struct {
 	closed     bool
-	closeq     chan struct{}
+	closeQ     chan struct{}
+	sizeQ      chan struct{}
 	pipes      map[uint32]*pipe
 	recvQLen   int
 	sendQLen   int
 	recvExpire time.Duration
-	recvq      chan *protocol.Message
+	recvQ      chan *protocol.Message
 	sync.Mutex
 }
 
@@ -85,11 +86,9 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		}
 		pm := m.Dup()
 		select {
-		case p.sendq <- pm:
-		case <-p.closeq:
-			pm.Free()
+		case p.sendQ <- pm:
 		default:
-			// backpressure, but we do not exert
+			// back-pressure, but we do not exert
 			pm.Free()
 		}
 	}
@@ -102,19 +101,27 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	// For now this uses a simple unified queue for the entire
 	// socket.  Later we can look at moving this to priority queues
 	// based on socket pipes.
-	tq := nilQ
-	s.Lock()
-	if s.recvExpire > 0 {
-		tq = time.After(s.recvExpire)
-	}
-	s.Unlock()
-	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
-	case m := <-s.recvq:
-		return m, nil
+	for {
+		s.Lock()
+		rq := s.recvQ
+		cq := s.closeQ
+		zq := s.sizeQ
+		tq := nilQ
+		if s.recvExpire > 0 {
+			tq = time.After(s.recvExpire)
+		}
+		s.Unlock()
+
+		select {
+		case <-cq:
+			return nil, protocol.ErrClosed
+		case <-zq:
+			continue
+		case <-tq:
+			return nil, protocol.ErrRecvTimeout
+		case m := <-rq:
+			return m, nil
+		}
 	}
 }
 
@@ -141,28 +148,32 @@ func (s *socket) SetOption(name string, value interface{}) error {
 
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
+			newQ := make(chan *protocol.Message, v)
 			s.Lock()
 			s.recvQLen = v
-			oldchan := s.recvq
-			s.recvq = newchan
-			s.Unlock()
+			oldQ := s.recvQ
+			s.recvQ = newQ
+			sizeQ := s.sizeQ
+			s.sizeQ = make(chan struct{})
 
 			for {
 				var m *protocol.Message
 				select {
-				case m = <-oldchan:
+				case m = <-oldQ:
 				default:
 				}
 				if m == nil {
 					break
 				}
 				select {
-				case newchan <- m:
+				case newQ <- m:
 				default:
 					m.Free()
 				}
 			}
+			s.Unlock()
+			close(sizeQ)
+
 			return nil
 		}
 		return protocol.ErrBadValue
@@ -201,13 +212,15 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	if s.closed {
 		return protocol.ErrClosed
 	}
+
 	p := &pipe{
 		p:      pp,
 		s:      s,
-		closeq: make(chan struct{}),
-		sendq:  make(chan *protocol.Message, s.sendQLen),
+		closeQ: make(chan struct{}),
+		sendQ:  make(chan *protocol.Message, s.sendQLen),
 	}
 	s.pipes[pp.ID()] = p
+	pp.SetPrivate(p)
 
 	go p.sender()
 	go p.receiver()
@@ -215,9 +228,12 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
-	s.Lock()
-	delete(s.pipes, pp.ID())
-	s.Unlock()
+	if p, ok := pp.GetPrivate().(*pipe); ok {
+		s.Lock()
+		delete(s.pipes, pp.ID())
+		s.Unlock()
+		close(p.closeQ)
+	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -241,7 +257,7 @@ func (s *socket) Close() error {
 	}
 	s.closed = true
 	s.Unlock()
-	close(s.closeq)
+	close(s.closeQ)
 
 	return nil
 }
@@ -251,9 +267,9 @@ outer:
 	for {
 		var m *protocol.Message
 		select {
-		case <-p.closeq:
+		case <-p.closeQ:
 			break outer
-		case m = <-p.sendq:
+		case m = <-p.sendQ:
 		}
 
 		if err := p.p.SendMsg(m); err != nil {
@@ -281,11 +297,11 @@ outer:
 		binary.BigEndian.PutUint32(m.Header, p.p.ID())
 
 		select {
-		case p.s.recvq <- m:
-		case <-p.closeq:
+		case p.s.recvQ <- m:
+		case <-p.closeQ:
 			m.Free()
 			break outer
-		case <-p.s.closeq:
+		case <-p.s.closeQ:
 			m.Free()
 			break outer
 		}
@@ -301,8 +317,9 @@ func (p *pipe) Close() {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		pipes:    make(map[uint32]*pipe),
-		closeq:   make(chan struct{}),
-		recvq:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
 		recvQLen: defaultQLen,
 	}

@@ -74,3 +74,17 @@ func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
 	s1.SetPipeEventHook(o1)
 	s2.SetPipeEventHook(o2)
 }
+
+func MustRecv(t *testing.T, s mangos.Socket) []byte {
+	m, e := s.Recv()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	return m
+}
+
+func MustRecvMsg(t *testing.T, s mangos.Socket) *mangos.Message {
+	m, e := s.RecvMsg()
+	MustSucceed(t, e)
+	MustNotBeNil(t, m)
+	return m
+}

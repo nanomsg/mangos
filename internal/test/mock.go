@@ -40,16 +40,18 @@ type mockCreator struct {
 
 // mockPipe implements a mocked transport.Pipe
 type mockPipe struct {
-	lProto    uint16
-	rProto    uint16
-	closeQ    chan struct{}
-	recvQ     chan *mangos.Message
-	sendQ     chan *mangos.Message
-	recvErrQ  chan error
-	sendErrQ  chan error
-	addr      string
-	closeOnce sync.Once
-	initOnce  sync.Once
+	lProto     uint16
+	rProto     uint16
+	closeQ     chan struct{}
+	recvQ      chan *mangos.Message
+	sendQ      chan *mangos.Message
+	recvErrQ   chan error
+	sendErrQ   chan error
+	addr       string
+	deferClose bool
+	closed     bool
+	lock       sync.Mutex
+	initOnce   sync.Once
 }
 
 func (mp *mockPipe) init() {
@@ -129,10 +131,32 @@ func (mp *mockPipe) GetOption(name string) (interface{}, error) {
 }
 
 func (mp *mockPipe) Close() error {
-	mp.closeOnce.Do(func() {
-		close(mp.closeQ)
-	})
+	mp.lock.Lock()
+	defer mp.lock.Unlock()
+	if !mp.closed {
+		mp.closed = true
+		if !mp.deferClose {
+			select {
+			case <-mp.closeQ:
+			default:
+				close(mp.closeQ)
+			}
+		}
+	}
 	return nil
+}
+
+func (mp *mockPipe) DeferClose(later bool) {
+	mp.lock.Lock()
+	defer mp.lock.Unlock()
+	mp.deferClose = later
+	if !later && mp.closed {
+		select {
+		case <-mp.closeQ:
+		default:
+			close(mp.closeQ)
+		}
+	}
 }
 
 func NewMockPipe(lProto, rProto uint16) MockPipe {
@@ -160,6 +184,9 @@ type MockPipe interface {
 	// InjectRecvError is used to inject an error that will be seen
 	// by the next Recv() operation.
 	InjectRecvError(error)
+
+	// DeferClose defers closing.
+	DeferClose(deferring bool)
 
 	transport.Pipe
 }
@@ -345,4 +372,21 @@ func GetMockDialer(t *testing.T, s mangos.Socket) (mangos.Dialer, MockCreator) {
 	ml, ok := v.(MockCreator)
 	MustBeTrue(t, ok)
 	return d, ml
+}
+
+func MockAddPipe(t *testing.T, s mangos.Socket, c MockCreator, p MockPipe) mangos.Pipe {
+	var rv mangos.Pipe
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	hook := s.SetPipeEventHook(func(ev mangos.PipeEvent, pipe mangos.Pipe) {
+		switch ev {
+		case mangos.PipeEventAttached:
+			rv = pipe
+			wg.Done()
+		}
+	})
+	MustSucceed(t, c.AddPipe(p))
+	wg.Wait()
+	s.SetPipeEventHook(hook)
+	return rv
 }
