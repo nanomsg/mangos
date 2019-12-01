@@ -82,9 +82,24 @@ func MustRecv(t *testing.T, s mangos.Socket) []byte {
 	return m
 }
 
+func MustNotRecv(t *testing.T, s mangos.Socket, err error) {
+	m, e := s.Recv()
+	MustBeError(t, e, err)
+	MustBeNil(t, m)
+}
+
 func MustRecvMsg(t *testing.T, s mangos.Socket) *mangos.Message {
 	m, e := s.RecvMsg()
 	MustSucceed(t, e)
 	MustNotBeNil(t, m)
 	return m
+}
+
+func MustSendString(t *testing.T, s mangos.Socket, m string) {
+	MustSucceed(t, s.Send([]byte(m)))
+}
+
+func MustRecvString(t *testing.T, s mangos.Socket, m string) {
+	b := MustRecv(t, s)
+	MustBeTrue(t, string(b) == m)
 }

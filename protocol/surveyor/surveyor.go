@@ -49,6 +49,7 @@ type survey struct {
 	id     uint32
 	ctx    *context
 	sock   *socket
+	err    error
 	once   sync.Once
 }
 
@@ -79,12 +80,13 @@ var (
 
 const defaultQLen = 128
 
-func (s *survey) cancel() {
+func (s *survey) cancel(err error) {
 
 	s.once.Do(func() {
 		sock := s.sock
 		ctx := s.ctx
 
+		s.err = err
 		s.timer.Stop()
 		sock.Lock()
 		if ctx.surv == s {
@@ -105,7 +107,9 @@ func (s *survey) cancel() {
 
 func (s *survey) start(qLen int, expire time.Duration) {
 	// NB: Called with the socket lock held
-	s.timer = time.AfterFunc(expire, s.cancel)
+	s.timer = time.AfterFunc(expire, func() {
+		s.cancel(protocol.ErrProtoState)
+	})
 	s.recvQ = make(chan *protocol.Message, qLen)
 	s.sock.surveys[s.id] = s
 	s.ctx.surv = s
@@ -132,7 +136,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	oldsurv := c.surv
 	newsurv.start(c.recvQLen, c.survExpire)
 	if oldsurv != nil {
-		go oldsurv.cancel()
+		go oldsurv.cancel(protocol.ErrCanceled)
 	}
 	pipes := make([]*pipe, 0, len(s.pipes))
 	for _, p := range s.pipes {
@@ -193,12 +197,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 		if m == nil {
 			// Sometimes the recvQ can get closed ahead of
 			// the closeQ, but the closeQ takes precedence.
-			select {
-			case <-c.closeQ:
-				return nil, protocol.ErrClosed
-			default:
-				return nil, protocol.ErrProtoState
-			}
+			return nil, surv.err
 		}
 		return m, nil
 
@@ -213,7 +212,7 @@ func (c *context) close() {
 		close(c.closeQ)
 		if surv := c.surv; surv != nil {
 			c.surv = nil
-			go surv.cancel()
+			go surv.cancel(protocol.ErrClosed)
 		}
 	}
 }

@@ -98,7 +98,7 @@ func TestSurveyorCancel(t *testing.T) {
 	pass := false
 	go func() {
 		v, e := s.Recv()
-		MustBeError(t, e, mangos.ErrProtoState)
+		MustBeError(t, e, mangos.ErrCanceled)
 		MustBeNil(t, v)
 		pass = true
 		wg.Done()

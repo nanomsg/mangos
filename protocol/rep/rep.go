@@ -107,7 +107,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	s.Unlock()
 
 	if exptime > 0 {
-		wq = time.After(exptime * 10)
+		wq = time.After(exptime)
 	}
 
 	var err error

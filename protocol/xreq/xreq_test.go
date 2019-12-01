@@ -62,12 +62,7 @@ func TestXReqBestEffort(t *testing.T) {
 	timeout := time.Millisecond
 	msg := []byte{'0', '1', '2', '3'}
 
-	s, err := NewSocket()
-	MustSucceed(t, err)
-	MustNotBeNil(t, s)
-
-	defer s.Close()
-
+	s := GetSocket(t, NewSocket)
 	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 0))
 	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, timeout))
 	MustSucceed(t, s.Listen(AddrTestInp()))
