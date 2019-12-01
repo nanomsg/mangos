@@ -158,7 +158,7 @@ func TestBusFanIn(t *testing.T) {
 	peers := make([]mangos.Socket, nPeers)
 	self := GetSocket(t, NewSocket)
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, count*nPeers))
-	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Second))
 
 	for i := 0; i < nPeers; i++ {
 		peers[i] = GetSocket(t, NewSocket)
@@ -185,12 +185,8 @@ func TestBusFanIn(t *testing.T) {
 	}
 
 	counts := make([]uint32, nPeers)
-	for {
-		m, e := self.Recv()
-		if e != nil {
-			MustBeError(t, e, mangos.ErrRecvTimeout)
-			break
-		}
+	for i := 0; i < count*nPeers; i++ {
+		m := MustRecv(t, self)
 		MustBeTrue(t, len(m) == 8)
 		index := binary.BigEndian.Uint32(m)
 		num := binary.BigEndian.Uint32(m[4:])
@@ -199,6 +195,11 @@ func TestBusFanIn(t *testing.T) {
 		MustBeTrue(t, num < uint32(count))
 		counts[index]++
 	}
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline,
+		time.Millisecond*10))
+	_, e := self.Recv()
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+
 	wg.Wait()
 	for i := 0; i < nPeers; i++ {
 		MustBeTrue(t, counts[i] == uint32(count))
