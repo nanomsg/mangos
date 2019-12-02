@@ -87,8 +87,8 @@ func (s *survey) cancel(err error) {
 		ctx := s.ctx
 
 		s.err = err
-		s.timer.Stop()
 		sock.Lock()
+		s.timer.Stop()
 		if ctx.surv == s {
 			ctx.surv = nil
 		}
@@ -107,12 +107,12 @@ func (s *survey) cancel(err error) {
 
 func (s *survey) start(qLen int, expire time.Duration) {
 	// NB: Called with the socket lock held
-	s.timer = time.AfterFunc(expire, func() {
-		s.cancel(protocol.ErrProtoState)
-	})
 	s.recvQ = make(chan *protocol.Message, qLen)
 	s.sock.surveys[s.id] = s
 	s.ctx.surv = s
+	s.timer = time.AfterFunc(expire, func() {
+		s.cancel(protocol.ErrProtoState)
+	})
 }
 
 func (c *context) SendMsg(m *protocol.Message) error {
