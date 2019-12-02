@@ -149,31 +149,24 @@ func (s *socket) SetOption(name string, value interface{}) error {
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
 			newQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			s.Lock()
 			s.recvQLen = v
 			oldQ := s.recvQ
 			s.recvQ = newQ
-			sizeQ := s.sizeQ
-			s.sizeQ = make(chan struct{})
-
+			close(s.sizeQ)
+			s.sizeQ = sizeQ
+			s.Unlock()
+		loop:
+			// Wish we could range this.
 			for {
-				var m *protocol.Message
 				select {
-				case m = <-oldQ:
-				default:
-				}
-				if m == nil {
-					break
-				}
-				select {
-				case newQ <- m:
-				default:
+				case m := <-oldQ:
 					m.Free()
+				default:
+					break loop
 				}
 			}
-			s.Unlock()
-			close(sizeQ)
-
 			return nil
 		}
 		return protocol.ErrBadValue
@@ -281,6 +274,7 @@ outer:
 }
 
 func (p *pipe) receiver() {
+	s := p.s
 outer:
 	for {
 		m := p.p.RecvMsg()
@@ -296,13 +290,22 @@ outer:
 		m.Header = make([]byte, 4)
 		binary.BigEndian.PutUint32(m.Header, p.p.ID())
 
+		s.Lock()
+		rq := s.recvQ
+		cq := s.closeQ
+		zq := s.sizeQ
+		s.Unlock()
+
 		select {
-		case p.s.recvQ <- m:
+		case rq <- m:
 		case <-p.closeQ:
 			m.Free()
 			break outer
-		case <-p.s.closeQ:
+		case <-cq:
 			m.Free()
+			break outer
+		case <-zq:
+			m.Free() // discard this one
 			break outer
 		}
 	}

@@ -176,69 +176,27 @@ func TestXBusResizeRecv(t *testing.T) {
 	MustSucceed(t, self.Close())
 }
 
-func TestXBusResizeShrink(t *testing.T) {
+func TestXBusResize(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	peer := GetSocket(t, NewSocket)
-	MustSucceed(t, peer.SetOption(mangos.OptionWriteQLen, 20))
-	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 20))
-	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond))
-	ConnectPair(t, self, peer)
-
-	// Fill the pipe
-	for i := 0; i < 20; i++ {
-		// These all will work, but the back-pressure will go all the
-		// way to the sender.
-		MustSucceed(t, peer.Send([]byte{byte(i)}))
-	}
-
-	time.Sleep(time.Millisecond * 20)
-	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 1))
-	// Sleep so the resize filler finishes
-	time.Sleep(time.Millisecond * 20)
-
-	pass := false
-	for i := 0; i < 20; i++ {
-		if _, e := self.Recv(); e != nil {
-			pass = true
-			MustBeError(t, e, mangos.ErrRecvTimeout)
-			break
-		}
-	}
-	MustBeTrue(t, pass)
-	MustSucceed(t, self.Close())
-}
-
-func TestXBusResizeGrow(t *testing.T) {
-	self := GetSocket(t, NewSocket)
-	peer := GetSocket(t, NewSocket)
-	MustSucceed(t, peer.SetOption(mangos.OptionWriteQLen, 20))
+	MustSucceed(t, peer.SetOption(mangos.OptionWriteQLen, 5))
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 5))
 	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond))
 	ConnectPair(t, self, peer)
 
-	// Fill the pipe
-	for i := 0; i < 5; i++ {
+	// Over-fill the pipe -- this gets the reader stuck in the right place.
+	for i := 0; i < 10; i++ {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSucceed(t, peer.Send([]byte{byte(i)}))
 	}
 
-	time.Sleep(time.Millisecond * 20)
+	time.Sleep(time.Millisecond * 200)
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 10))
 	// Sleep so the resize filler finishes
 	time.Sleep(time.Millisecond * 20)
 
-	pass := true
-	for i := 0; i < 5; i++ {
-		if _, e := self.Recv(); e != nil {
-			pass = false
-			MustBeError(t, e, mangos.ErrRecvTimeout)
-			break
-		}
-	}
-	_, e := self.Recv()
-	MustBeError(t, e, mangos.ErrRecvTimeout)
-	MustBeTrue(t, pass)
+	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 	MustSucceed(t, self.Close())
 }
 
