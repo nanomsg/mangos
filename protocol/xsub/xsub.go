@@ -34,15 +34,16 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closeq chan struct{}
+	closeQ chan struct{}
 }
 
 type socket struct {
 	closed     bool
-	closeq     chan struct{}
+	closeQ     chan struct{}
 	recvQLen   int
 	recvExpire time.Duration
-	recvq      chan *protocol.Message
+	recvQ      chan *protocol.Message
+	sizeQ      chan struct{}
 	sync.Mutex
 }
 
@@ -52,7 +53,7 @@ var (
 
 const defaultQLen = 128
 
-func (s *socket) SendMsg(m *protocol.Message) error {
+func (s *socket) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
@@ -60,19 +61,26 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	// For now this uses a simple unified queue for the entire
 	// socket.  Later we can look at moving this to priority queues
 	// based on socket pipes.
-	tq := nilQ
-	s.Lock()
-	if s.recvExpire > 0 {
-		tq = time.After(s.recvExpire)
-	}
-	s.Unlock()
-	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
-	case m := <-s.recvq:
-		return m, nil
+	timeQ := nilQ
+	for {
+		s.Lock()
+		if s.recvExpire > 0 {
+			timeQ = time.After(s.recvExpire)
+		}
+		closeQ := s.closeQ
+		sizeQ := s.sizeQ
+		recvQ := s.recvQ
+		s.Unlock()
+		select {
+		case <-closeQ:
+			return nil, protocol.ErrClosed
+		case <-timeQ:
+			return nil, protocol.ErrRecvTimeout
+		case <-sizeQ:
+			continue
+		case m := <-recvQ:
+			return m, nil
+		}
 	}
 }
 
@@ -90,33 +98,17 @@ func (s *socket) SetOption(name string, value interface{}) error {
 
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
+			recvQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			s.Lock()
+			recvQ, s.recvQ = s.recvQ, recvQ
+			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.recvQLen = v
-			oldchan := s.recvq
-			s.recvq = newchan
 			s.Unlock()
+			close(sizeQ)
 
-			for {
-				var m *protocol.Message
-				select {
-				case m = <-oldchan:
-				default:
-				}
-				if m == nil {
-					break
-				}
-				select {
-				case newchan <- m:
-				default:
-					// No room for this element.
-					// Discard the oldest stuff, keeping
-					// the newest.
-					m2 := <-newchan
-					newchan <- m
-					m2.Free()
-				}
-			}
+			// This leaks a few messages.  But it doesn't really
+			// matter.  Resizing the queue tosses the messages.
 			return nil
 		}
 		return protocol.ErrBadValue
@@ -158,7 +150,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	return nil
 }
 
-func (s *socket) RemovePipe(pp protocol.Pipe) {
+func (s *socket) RemovePipe(protocol.Pipe) {
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -182,11 +174,12 @@ func (s *socket) Close() error {
 	}
 	s.closed = true
 	s.Unlock()
-	close(s.closeq)
+	close(s.closeQ)
 	return nil
 }
 
 func (p *pipe) receiver() {
+	s := p.s
 outer:
 	for {
 		m := p.p.RecvMsg()
@@ -194,24 +187,33 @@ outer:
 			break
 		}
 
+		s.Lock()
+		recvQ := s.recvQ
+		closeQ := s.closeQ
+		s.Unlock()
+
+		// No need to test for resizing here, because we never block
+		// anyway.
+
 		select {
-		case p.s.recvq <- m:
-		case <-p.s.closeq:
+		case recvQ <- m:
+		case <-closeQ:
 			m.Free()
 			break outer
+
 		default:
 			// Yank the oldest message first, so we can
 			// inject new stuff.  We really prefer to have
 			// more recent data.
 			select {
-			case m2 := <-p.s.recvq:
+			case m2 := <-recvQ:
 				m2.Free()
 			default:
 			}
 			// We might be contending with other pipes; in that
 			// case we've done the best we can; give up.
 			select {
-			case p.s.recvq <- m:
+			case recvQ <- m:
 			default:
 				m.Free()
 			}
@@ -227,8 +229,9 @@ func (p *pipe) close() {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		closeq:   make(chan struct{}),
-		recvq:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
 		recvQLen: defaultQLen,
 	}
 	return s
