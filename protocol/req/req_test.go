@@ -16,7 +16,6 @@ package req
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"sync"
 	"testing"
@@ -246,41 +245,37 @@ func TestReqRetryReconnect(t *testing.T) {
 func TestReqRecvGarbage(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	mock, pipe := MockConnect(t, self)
+	expire := time.Millisecond * 10
 
-	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, expire))
 	MustSucceed(t, self.SetOption(mangos.OptionBestEffort, true))
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*10)
 	MustSendString(t, self, "")
-	MockMustSendStr(t, mock, ctx, "abc")
+	MockMustSendStr(t, mock, "abc", expire)
 	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 
 	var msg []byte
 	// No header
-	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond*10)
 	MustSendString(t, self, "")
-	MockMustSend(t, mock, ctx, msg)
+	MockMustSend(t, mock, msg, expire)
 	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 
 	// No request ID
 	MustSendString(t, self, "")
 	msg = append(msg, 0, 1, 2, 3)
-	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond*10)
-	MockMustSend(t, mock, ctx, msg)
+	MockMustSend(t, mock, msg, expire)
 	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 
 	// Incorrect pipe ID
 	MustSendString(t, self, "")
 	binary.BigEndian.PutUint32(msg, pipe.ID()^0xff)
 	msg = append(msg, 0x80, 4, 3, 2)
-	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond*10)
-	MockMustSend(t, mock, ctx, msg)
+	MockMustSend(t, mock, msg, expire)
 	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 
 	// Also send a bogus header -- no request ID
 	MustSendString(t, self, "")
-	ctx, _ = context.WithTimeout(context.Background(), time.Millisecond*10)
-	MockMustSendStr(t, mock, ctx, "\001\002\003\004")
+	MockMustSendStr(t, mock, "\001\002\003\004", time.Millisecond*10)
 	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 
 	MustSucceed(t, self.Close())

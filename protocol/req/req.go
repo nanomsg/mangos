@@ -39,7 +39,7 @@ type pipe struct {
 	closed bool
 }
 
-type state struct {
+type context struct {
 	s          *socket
 	cond       *sync.Cond
 	resendTime time.Duration     // tunable resend time
@@ -63,13 +63,13 @@ type state struct {
 
 type socket struct {
 	sync.Mutex
-	defCtx  *state              // default context
-	ctxs    map[*state]struct{} // all contexts (set)
-	ctxByID map[uint32]*state   // contexts by request ID
-	nextID  uint32              // next request ID
-	closed  bool                // true if we are closed
-	sendq   []*state            // contexts waiting to send
-	readyq  []*pipe             // pipes available for sending
+	defCtx  *context              // default context
+	ctxs    map[*context]struct{} // all contexts (set)
+	ctxByID map[uint32]*context   // contexts by request ID
+	nextID  uint32                // next request ID
+	closed  bool                  // true if we are closed
+	sendq   []*context            // contexts waiting to send
+	readyq  []*pipe               // pipes available for sending
 }
 
 func (s *socket) send() {
@@ -102,7 +102,7 @@ func (s *socket) send() {
 	}
 }
 
-func (p *pipe) sendCtx(c *state, m *protocol.Message) {
+func (p *pipe) sendCtx(c *context, m *protocol.Message) {
 	s := p.s
 
 	// Send this message.  If an error occurs, we examine the
@@ -163,7 +163,7 @@ func (p *pipe) Close() {
 	_ = p.p.Close()
 }
 
-func (c *state) resendMessage() {
+func (c *context) resendMessage() {
 	s := c.s
 	s.Lock()
 	defer s.Unlock()
@@ -172,7 +172,7 @@ func (c *state) resendMessage() {
 	s.send()
 }
 
-func (c *state) unscheduleSend() {
+func (c *context) unscheduleSend() {
 	s := c.s
 	if c.wantw {
 		c.wantw = false
@@ -186,7 +186,7 @@ func (c *state) unscheduleSend() {
 	}
 }
 
-func (c *state) cancel() {
+func (c *context) cancel() {
 	s := c.s
 	c.unscheduleSend()
 	if c.reqID != 0 {
@@ -218,7 +218,7 @@ func (c *state) cancel() {
 	c.cond.Broadcast()
 }
 
-func (c *state) SendMsg(m *protocol.Message) error {
+func (c *context) SendMsg(m *protocol.Message) error {
 
 	s := c.s
 
@@ -288,7 +288,7 @@ func (c *state) SendMsg(m *protocol.Message) error {
 	return nil
 }
 
-func (c *state) RecvMsg() (*protocol.Message, error) {
+func (c *context) RecvMsg() (*protocol.Message, error) {
 	s := c.s
 	s.Lock()
 	defer s.Unlock()
@@ -335,7 +335,7 @@ func (c *state) RecvMsg() (*protocol.Message, error) {
 	return m, nil
 }
 
-func (c *state) SetOption(name string, value interface{}) error {
+func (c *context) SetOption(name string, value interface{}) error {
 	switch name {
 	case protocol.OptionRetryTime:
 		if v, ok := value.(time.Duration); ok {
@@ -377,7 +377,7 @@ func (c *state) SetOption(name string, value interface{}) error {
 	return protocol.ErrBadOption
 }
 
-func (c *state) GetOption(option string) (interface{}, error) {
+func (c *context) GetOption(option string) (interface{}, error) {
 	switch option {
 	case protocol.OptionRetryTime:
 		c.s.Lock()
@@ -404,7 +404,7 @@ func (c *state) GetOption(option string) (interface{}, error) {
 	return nil, protocol.ErrBadOption
 }
 
-func (c *state) Close() error {
+func (c *context) Close() error {
 	s := c.s
 	c.s.Lock()
 	defer c.s.Unlock()
@@ -460,7 +460,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	if s.closed {
 		return nil, protocol.ErrClosed
 	}
-	c := &state{
+	c := &context{
 		s:          s,
 		cond:       sync.NewCond(s),
 		bestEffort: s.defCtx.bestEffort,
@@ -522,10 +522,10 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		nextID:  uint32(time.Now().UnixNano()), // quasi-random
-		ctxs:    make(map[*state]struct{}),
-		ctxByID: make(map[uint32]*state),
+		ctxs:    make(map[*context]struct{}),
+		ctxByID: make(map[uint32]*context),
 	}
-	s.defCtx = &state{
+	s.defCtx = &context{
 		s:          s,
 		cond:       sync.NewCond(s),
 		resendTime: time.Minute,

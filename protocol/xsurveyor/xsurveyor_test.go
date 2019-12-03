@@ -15,7 +15,6 @@
 package xsurveyor
 
 import (
-	"context"
 	"encoding/binary"
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol"
@@ -109,8 +108,7 @@ func TestXSurveyorRecvJunk(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	mock, _ := MockConnect(t, self)
 
-	c, _ := context.WithTimeout(context.Background(), time.Second)
-	MockMustSendStr(t, mock, c, "")
+	MockMustSendStr(t, mock, "", time.Second)
 	time.Sleep(time.Millisecond * 10)
 	MustSucceed(t, self.Close())
 }

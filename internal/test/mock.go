@@ -15,12 +15,12 @@
 package test
 
 import (
-	"context"
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol"
 	"nanomsg.org/go/mangos/v2/transport"
 	"sync"
 	"testing"
+	"time"
 )
 
 // This file implements a mock transport, useful for testing.
@@ -159,19 +159,19 @@ func (mp *mockPipe) DeferClose(later bool) {
 	}
 }
 
-func (mp *mockPipe) MockRecvMsg(ctx context.Context) (*protocol.Message, error) {
+func (mp *mockPipe) MockRecvMsg(d time.Duration) (*protocol.Message, error) {
 	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
+	case <-time.After(d):
+		return nil, mangos.ErrRecvTimeout
 	case m := <-mp.sendQ:
 		return m, nil
 	}
 }
 
-func (mp *mockPipe) MockSendMsg(ctx context.Context, m *protocol.Message) error {
+func (mp *mockPipe) MockSendMsg(m *protocol.Message, d time.Duration) error {
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-time.After(d):
+		return mangos.ErrSendTimeout
 	case mp.recvQ <- m:
 		return nil
 	}
@@ -207,10 +207,10 @@ type MockPipe interface {
 	DeferClose(deferring bool)
 
 	// MockSendMsg lets us inject a message into the queue.
-	MockSendMsg(context.Context, *protocol.Message) error
+	MockSendMsg(*protocol.Message, time.Duration) error
 
 	// MockRecvMsg lets us attempt to receive a message.
-	MockRecvMsg(context.Context) (*protocol.Message, error)
+	MockRecvMsg(time.Duration) (*protocol.Message, error)
 
 	transport.Pipe
 }
@@ -281,7 +281,7 @@ func (mc *mockCreator) Listen() error {
 	}
 }
 
-func (mc *mockCreator) SetOption(s string, i interface{}) error {
+func (mc *mockCreator) SetOption(string, interface{}) error {
 	return mangos.ErrBadOption
 }
 
@@ -312,15 +312,15 @@ func (mc *mockCreator) AddPipe(mp MockPipe) error {
 // still creating pipes even after close.  It doesn't actually do a close,
 // but if this is disabled, and Close() was called previously, then the
 // close will happen immediately.
-func (md *mockCreator) DeferClose(b bool) {
-	md.lock.Lock()
-	defer md.lock.Unlock()
-	md.deferClose = b
-	if md.closed && !md.deferClose {
+func (mc *mockCreator) DeferClose(b bool) {
+	mc.lock.Lock()
+	defer mc.lock.Unlock()
+	mc.deferClose = b
+	if mc.closed && !mc.deferClose {
 		select {
-		case <-md.closeQ:
+		case <-mc.closeQ:
 		default:
-			close(md.closeQ)
+			close(mc.closeQ)
 		}
 	}
 }
@@ -438,20 +438,26 @@ func MockConnect(t *testing.T, s mangos.Socket) (MockPipe, mangos.Pipe) {
 	return mp, pipe
 }
 
-func MockMustSend(t *testing.T, p MockPipe, ctx context.Context, data []byte) {
+func MockMustSendMsg(t *testing.T, p MockPipe, m *mangos.Message, d time.Duration) {
+	MustSucceed(t, p.MockSendMsg(m, d))
+}
+
+func MockMustSend(t *testing.T, p MockPipe, data []byte, d time.Duration) {
 	msg := mangos.NewMessage(0)
-	msg.Body = data
-	MustSucceed(t, p.MockSendMsg(ctx, msg))
+	msg.Body = append(msg.Body, data...)
+	MockMustSendMsg(t, p, msg, d)
 }
 
-func MockMustSendStr(t *testing.T, p MockPipe, ctx context.Context, str string) {
-	MockMustSend(t, p, ctx, []byte(str))
+func MockMustSendStr(t *testing.T, p MockPipe, str string, d time.Duration) {
+	msg := mangos.NewMessage(0)
+	msg.Body = []byte(str)
+	MockMustSendMsg(t, p, msg, d)
 }
 
-func MockMustRecvStr(t *testing.T, p MockPipe, ctx context.Context, str string) {
+func MockMustRecvStr(t *testing.T, p MockPipe, str string, d time.Duration) {
 	m := mangos.NewMessage(0)
 	m.Body = append(m.Body, []byte(str)...)
-	msg, err := p.MockRecvMsg(ctx)
+	msg, err := p.MockRecvMsg(d)
 	MustSucceed(t, err)
 	MustBeTrue(t, string(msg.Body) == str)
 }

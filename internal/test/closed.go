@@ -101,3 +101,22 @@ func VerifyClosedAddPipe(t *testing.T, f func() (mangos.Socket, error)) {
 	wg.Wait()
 	MustBeTrue(t, pass)
 }
+
+func VerifyClosedContext(t *testing.T, f func() (mangos.Socket, error)) {
+	s := GetSocket(t, f)
+	c, e := s.OpenContext()
+	MustSucceed(t, e)
+	MustNotBeNil(t, c)
+	MustSucceed(t, c.Close())
+	MustBeError(t, c.Close(), mangos.ErrClosed)
+
+	c, e = s.OpenContext()
+	MustSucceed(t, e)
+	MustNotBeNil(t, c)
+
+	MustSucceed(t, s.Close())
+	MustBeError(t, c.Close(), mangos.ErrClosed)
+
+	c, e = s.OpenContext()
+	MustBeError(t, e, mangos.ErrClosed)
+}
