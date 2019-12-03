@@ -40,7 +40,6 @@ func starTestSender(t *testing.T, bt *starTester, cnt int) {
 		time.Sleep(d * time.Microsecond)
 		start := time.Now()
 		tstr := start.Format(time.StampMilli)
-		t.Logf("%s: Peer %d: Sending %d", tstr, bt.id, i)
 		msg := mangos.NewMessage(2)
 		msg.Body = append(msg.Body, byte(bt.id), byte(i))
 		if err := bt.sock.SendMsg(msg); err != nil {
@@ -49,8 +48,6 @@ func starTestSender(t *testing.T, bt *starTester, cnt int) {
 			return
 		}
 		tstr = time.Now().Format(time.StampMilli)
-		t.Logf("%s: Peer %d: Sent %d (%v)", tstr, bt.id, i,
-			time.Since(start))
 	}
 }
 
@@ -85,13 +82,10 @@ func starTestReceiver(t *testing.T, bt *starTester, cnt int, numID int) {
 				peer)
 			return
 		}
-		t.Logf("%s: Peer %d: Good rcv from peer %d (%d)", now, bt.id, peer,
-			rcpt[peer])
 		rcpt[peer]++
 		tot++
 		msg.Free()
 	}
-	t.Logf("%s: Peer %d: Finish", time.Now().Format(time.StampMilli), bt.id)
 }
 
 func starTestNewServer(t *testing.T, addr string, id int) *starTester {
@@ -129,7 +123,6 @@ func starTestNewClient(t *testing.T, addr string, id int) *starTester {
 func starTestCleanup(t *testing.T, bts []*starTester) {
 	time.Sleep(time.Second / 2)
 	for id := 0; id < len(bts); id++ {
-		t.Logf("Cleanup %d", id)
 		if bts[id].sock != nil {
 			bts[id].sock.Close()
 		}
@@ -143,7 +136,6 @@ func TestStar(t *testing.T) {
 	bts := make([]*starTester, num)
 	defer starTestCleanup(t, bts)
 
-	t.Logf("Creating star network")
 	for id := 0; id < num; id++ {
 		if id == 0 {
 			bts[id] = starTestNewServer(t, addr, id)
@@ -157,7 +149,6 @@ func TestStar(t *testing.T) {
 	}
 
 	// start receivers first... avoids first missed dropped packet
-	t.Logf("Starting recv")
 	for id := 0; id < num; id++ {
 		go starTestReceiver(t, bts[id], pkts, num)
 	}
@@ -166,7 +157,6 @@ func TestStar(t *testing.T) {
 	time.Sleep(time.Second / 7)
 
 	// then start senders
-	t.Logf("Starting send")
 	for id := 0; id < num; id++ {
 		go starTestSender(t, bts[id], pkts)
 	}
@@ -194,5 +184,4 @@ func TestStar(t *testing.T) {
 			return
 		}
 	}
-	t.Logf("All pass")
 }
