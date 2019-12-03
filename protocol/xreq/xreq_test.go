@@ -19,6 +19,7 @@ import (
 	"nanomsg.org/go/mangos/v2/protocol/rep"
 	"nanomsg.org/go/mangos/v2/protocol/req"
 	"nanomsg.org/go/mangos/v2/protocol/xrep"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +48,7 @@ func TestXReqClosed(t *testing.T) {
 	VerifyClosedClose(t, NewSocket)
 	VerifyClosedDial(t, NewSocket)
 	VerifyClosedListen(t, NewSocket)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
 func TestXReqOptions(t *testing.T) {
@@ -125,4 +127,114 @@ func TestXReqRecvDeadline(t *testing.T) {
 	MustBeTrue(t, e == mangos.ErrRecvTimeout)
 	MustBeNil(t, m)
 	_ = s.Close()
+}
+
+func TestXReqResizeSendDiscard(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 1))
+	MustSucceed(t, self.Send([]byte{}))
+	MustSucceed(t, self.SetOption(mangos.OptionSendDeadline, time.Millisecond*10))
+	MustBeError(t, self.Send([]byte{}), mangos.ErrSendTimeout)
+	MustSucceed(t, self.SetOption(mangos.OptionSendDeadline, time.Millisecond*50))
+	time.AfterFunc(time.Millisecond*5, func() {
+		self.SetOption(mangos.OptionWriteQLen, 1)
+	})
+	MustSucceed(t, self.Send([]byte{}))
+	MustSucceed(t, self.Close())
+}
+
+func TestXReqResizeRecvOk(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mock, _ := MockConnect(t, self)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	pass := false
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Second))
+	go func() {
+		defer wg.Done()
+		_ = MustRecvMsg(t, self)
+		pass = true
+	}()
+	time.Sleep(time.Millisecond * 50)
+	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 1))
+	time.Sleep(time.Millisecond * 10)
+	MockMustSend(t, mock, []byte{0x80, 0, 0, 1}, time.Second)
+	wg.Wait()
+	MustSucceed(t, self.Close())
+	MustBeTrue(t, pass)
+}
+
+func TestXReqRecvNoHeader(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mock, _ := MockConnect(t, self)
+
+	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 2))
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond*50))
+	MockMustSend(t, mock, []byte{}, time.Millisecond*5)
+	MustNotRecv(t, self, mangos.ErrRecvTimeout)
+	MustSucceed(t, self.Close())
+}
+
+func TestXReqRecvResizeDiscard(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mock, _ := MockConnect(t, self)
+	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 1))
+
+	stopQ := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		time.Sleep(time.Millisecond * 10)
+		MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 2))
+		close(stopQ)
+	}()
+loop:
+	for {
+		select {
+		case <-stopQ:
+			break loop
+		default:
+			MockMustSend(t, mock, []byte{0x80, 0, 0, 1}, time.Second)
+		}
+	}
+	MustSucceed(t, self.Close())
+}
+
+func TestXReqCloseRecv(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 0))
+	mock, pipe := MockConnect(t, self)
+	MockMustSend(t, mock, []byte{0x80, 0, 0, 1}, time.Second)
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, pipe.Close())
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, self.Close())
+}
+
+func TestXReqCloseSend0(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	_, pipe := MockConnect(t, self)
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, pipe.Close())
+	time.Sleep(time.Millisecond * 10)
+}
+
+func TestXReqCloseSend1(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	_, _ = MockConnect(t, self)
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, self.Close())
+	time.Sleep(time.Millisecond * 10)
+}
+
+func TestXReqCloseSend2(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 2))
+	_, _ = MockConnect(t, self)
+	MustSucceed(t, self.Send([]byte{0x80, 1, 1, 1}))
+	MustSucceed(t, self.Send([]byte{0x80, 1, 1, 2}))
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, self.Close())
+	time.Sleep(time.Millisecond * 10)
 }
