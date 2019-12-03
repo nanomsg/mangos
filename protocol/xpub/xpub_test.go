@@ -16,6 +16,7 @@ package xpub
 
 import (
 	"testing"
+	"time"
 
 	"nanomsg.org/go/mangos/v2"
 	. "nanomsg.org/go/mangos/v2/internal/test"
@@ -35,6 +36,7 @@ func TestXPubClosed(t *testing.T) {
 	VerifyClosedClose(t, NewSocket)
 	VerifyClosedDial(t, NewSocket)
 	VerifyClosedListen(t, NewSocket)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
 func TestXPubOptions(t *testing.T) {
@@ -58,4 +60,54 @@ func TestXPubNonBlock(t *testing.T) {
 		MustSucceed(t, p.Send(msg))
 	}
 	MustSucceed(t, p.Close())
+}
+
+func TestXPubNonBlock2(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 2))
+
+	_, _ = MockConnect(t, self)
+
+	for i := 0; i < 100; i++ {
+		MustSendString(t, self, "yep")
+	}
+	MustSucceed(t, self.Close())
+}
+
+func TestXPubSendClose(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 2))
+
+	_, _ = MockConnect(t, self)
+
+	time.AfterFunc(time.Millisecond*10, func() {
+		MustSucceed(t, self.Close())
+	})
+	for {
+		e := self.Send([]byte{})
+		if e != nil {
+			MustBeError(t, e, mangos.ErrClosed)
+			break
+		}
+	}
+	time.Sleep(time.Millisecond * 40)
+	//MustSucceed(t, self.Close())
+}
+
+func TestXPubSendClose2(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 2))
+	_, _ = MockConnect(t, self)
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, self.Close())
+}
+
+func TestXPubRecvDiscard(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 2))
+	mock, _ := MockConnect(t, self)
+	time.Sleep(time.Millisecond * 10)
+	MockMustSendStr(t, mock, "garbage", time.Second)
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, self.Close())
 }
