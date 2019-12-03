@@ -205,6 +205,7 @@ func TestRepDoubleRecv(t *testing.T) {
 		pass = true
 	}()
 	MustNotRecv(t, self, mangos.ErrClosed)
+	wg.Wait()
 	MustBeTrue(t, pass)
 }
 
