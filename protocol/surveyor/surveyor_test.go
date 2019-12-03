@@ -90,24 +90,22 @@ func TestSurveyorRecvState(t *testing.T) {
 // This test demonstrates that sending a second survey cancels any Rx on the
 // earlier outstanding ones.
 func TestSurveyorCancel(t *testing.T) {
-	s := GetSocket(t, NewSocket)
-	MustSucceed(t, s.SetOption(mangos.OptionSurveyTime, time.Millisecond*100))
-	MustSucceed(t, s.Send([]byte("first")))
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionSurveyTime, time.Second))
+	MustSucceed(t, self.Send([]byte("first")))
 	var wg sync.WaitGroup
 	wg.Add(1)
 	pass := false
 	go func() {
-		v, e := s.Recv()
-		MustBeError(t, e, mangos.ErrCanceled)
-		MustBeNil(t, v)
+		MustNotRecv(t, self, mangos.ErrCanceled)
 		pass = true
 		wg.Done()
 	}()
 	time.Sleep(time.Millisecond * 50) // to allow go routine to run
-	MustSucceed(t, s.Send([]byte("second")))
+	MustSucceed(t, self.Send([]byte("second")))
 	wg.Wait()
+	MustSucceed(t, self.Close())
 	MustBeTrue(t, pass)
-	MustSucceed(t, s.Close())
 }
 
 // This test demonstrates that sending a second survey discards any received
