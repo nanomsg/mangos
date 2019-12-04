@@ -34,20 +34,21 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closeq chan struct{}
+	closeQ chan struct{}
 }
 
 type socket struct {
 	closed     bool
-	closeq     chan struct{}
+	closeQ     chan struct{}
+	sizeQ      chan struct{}
 	peer       *pipe
 	recvQLen   int
 	sendQLen   int
 	recvExpire time.Duration
 	sendExpire time.Duration
 	bestEffort bool
-	recvq      chan *protocol.Message
-	sendq      chan *protocol.Message
+	recvQ      chan *protocol.Message
+	sendQ      chan *protocol.Message
 	sync.Mutex
 }
 
@@ -64,47 +65,61 @@ func init() {
 const defaultQLen = 128
 
 func (s *socket) SendMsg(m *protocol.Message) error {
-	tq := nilQ
+	timeQ := nilQ
 	s.Lock()
-	if s.bestEffort {
-		tq = closedQ
-	} else if s.sendExpire > 0 {
-		tq = time.After(s.sendExpire)
+	if s.closed {
+		s.Unlock()
+		return protocol.ErrClosed
 	}
+	if s.bestEffort {
+		timeQ = closedQ
+	} else if s.sendExpire > 0 {
+		timeQ = time.After(s.sendExpire)
+	}
+	sizeQ := s.sizeQ
+	sendQ := s.sendQ
+	closeQ := s.closeQ
 	s.Unlock()
 
 	select {
-	case <-s.closeq:
+	case <-closeQ:
 		return protocol.ErrClosed
-	case <-tq:
-		if tq == closedQ {
+	case <-timeQ:
+		if timeQ == closedQ {
 			m.Free()
 			return nil
 		}
 		return protocol.ErrSendTimeout
 
-	case s.sendq <- m:
+	case <-sizeQ:
+		m.Free()
+		return nil
+
+	case sendQ <- m:
 		return nil
 	}
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	// For now this uses a simple unified queue for the entire
-	// socket.  Later we can look at moving this to priority queues
-	// based on socket pipes.
-	tq := nilQ
-	s.Lock()
-	if s.recvExpire > 0 {
-		tq = time.After(s.recvExpire)
-	}
-	s.Unlock()
-	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
-	case m := <-s.recvq:
-		return m, nil
+	for {
+		timeQ := nilQ
+		s.Lock()
+		if s.recvExpire > 0 {
+			timeQ = time.After(s.recvExpire)
+		}
+		closeQ := s.closeQ
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
+		s.Unlock()
+		select {
+		case <-closeQ:
+			return nil, protocol.ErrClosed
+		case <-timeQ:
+			return nil, protocol.ErrRecvTimeout
+		case m := <-recvQ:
+			return m, nil
+		case <-sizeQ:
+		}
 	}
 }
 
@@ -140,12 +155,14 @@ func (s *socket) SetOption(name string, value interface{}) error {
 
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
-
+			recvQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			s.Lock()
 			s.recvQLen = v
-			s.recvq = newchan
+			s.recvQ = recvQ
+			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.Unlock()
+			close(sizeQ)
 
 			return nil
 		}
@@ -153,12 +170,14 @@ func (s *socket) SetOption(name string, value interface{}) error {
 
 	case protocol.OptionWriteQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
-
+			sendQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			s.Lock()
 			s.sendQLen = v
-			s.sendq = newchan
+			s.sendQ = sendQ
+			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.Unlock()
+			close(sizeQ)
 
 			return nil
 		}
@@ -198,7 +217,6 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 		v := s.sendQLen
 		s.Unlock()
 		return v, nil
-
 	}
 
 	return nil, protocol.ErrBadOption
@@ -216,7 +234,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	p := &pipe{
 		p:      pp,
 		s:      s,
-		closeq: make(chan struct{}),
+		closeQ: make(chan struct{}),
 	}
 	s.peer = p
 	go p.receiver()
@@ -228,7 +246,7 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 	s.Lock()
 	if p := s.peer; p != nil && pp == p.p {
 		s.peer = nil
-		close(p.closeq)
+		close(p.closeQ)
 	}
 	s.Unlock()
 }
@@ -254,7 +272,7 @@ func (s *socket) Close() error {
 	}
 	s.closed = true
 	s.Unlock()
-	close(s.closeq)
+	close(s.closeQ)
 	return nil
 }
 
@@ -267,12 +285,16 @@ outer:
 			break
 		}
 
+		s.Lock()
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
+		s.Unlock()
+
 		select {
-		case s.recvq <- m:
-		case <-s.closeq:
+		case recvQ <- m:
+		case <-sizeQ:
 			m.Free()
-			break outer
-		case <-p.closeq:
+		case <-p.closeQ:
 			m.Free()
 			break outer
 		}
@@ -284,16 +306,21 @@ func (p *pipe) sender() {
 	s := p.s
 outer:
 	for {
+		s.Lock()
+		sendQ := s.sendQ
+		sizeQ := s.sizeQ
+		s.Unlock()
+
 		select {
-		case m := <-s.sendq:
+		case m := <-sendQ:
 			if err := p.p.SendMsg(m); err != nil {
 				m.Free()
 				break outer
 			}
 
-		case <-s.closeq:
-			break outer
-		case <-p.closeq:
+		case <-sizeQ:
+
+		case <-p.closeQ:
 			break outer
 		}
 	}
@@ -307,9 +334,10 @@ func (p *pipe) close() {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		closeq:   make(chan struct{}),
-		recvq:    make(chan *protocol.Message, defaultQLen),
-		sendq:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
+		sendQ:    make(chan *protocol.Message, defaultQLen),
 		recvQLen: defaultQLen,
 		sendQLen: defaultQLen,
 	}
