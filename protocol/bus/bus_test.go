@@ -56,7 +56,7 @@ func TestBusClosed(t *testing.T) {
 
 func TestBusDevice(t *testing.T) {
 	hops := 25 // number of devices
-	count := 100
+	count := 10
 
 	var socks []mangos.Socket
 
@@ -102,7 +102,7 @@ func TestBusDevice(t *testing.T) {
 
 func TestBusFanOut(t *testing.T) {
 	count := 20
-	nPeers := 1000
+	nPeers := 100
 
 	peers := make([]mangos.Socket, nPeers)
 	self := GetSocket(t, NewSocket)
@@ -153,7 +153,7 @@ func TestBusFanOut(t *testing.T) {
 
 func TestBusFanIn(t *testing.T) {
 	count := 20
-	nPeers := 1000
+	nPeers := 100
 
 	peers := make([]mangos.Socket, nPeers)
 	self := GetSocket(t, NewSocket)
