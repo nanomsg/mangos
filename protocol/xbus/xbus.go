@@ -152,21 +152,10 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			sizeQ := make(chan struct{})
 			s.Lock()
 			s.recvQLen = v
-			oldQ := s.recvQ
 			s.recvQ = newQ
-			close(s.sizeQ)
-			s.sizeQ = sizeQ
+			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.Unlock()
-		loop:
-			// Wish we could range this.
-			for {
-				select {
-				case m := <-oldQ:
-					m.Free()
-				default:
-					break loop
-				}
-			}
+			close(sizeQ)
 			return nil
 		}
 		return protocol.ErrBadValue
@@ -292,16 +281,12 @@ outer:
 
 		s.Lock()
 		rq := s.recvQ
-		cq := s.closeQ
 		zq := s.sizeQ
 		s.Unlock()
 
 		select {
 		case rq <- m:
 		case <-p.closeQ:
-			m.Free()
-			break outer
-		case <-cq:
 			m.Free()
 			break outer
 		case <-zq:
