@@ -5,13 +5,21 @@ ifdef::env-github[]
 endif::[]
 = mangos v2
 
-image:https://img.shields.io/circleci/project/github/nanomsg/mangos.svg?label=linux[Linux Status,link="https://circleci.com/gh/nanomsg/mangos"]
-image:https://img.shields.io/appveyor/ci/nanomsg/mangos.svg?label=windows[Windows Status,link="https://ci.appveyor.com/project/nanomsg/mangos"]
-image:https://img.shields.io/badge/license-APACHE2-blue.svg[Apache License,link="https://github.com/nanomsg/mangos/blob/master/LICENSE"]
-image:https://img.shields.io/discord/639573728212156478?label=discord[Discord,link="https://discord.gg/wewTkby"]
-image:https://img.shields.io/codecov/c/github/nanomsg/mangos[Coverage,link="https://codecov.io/gh/nanomsg/mangos"]
-image:https://img.shields.io/badge/godoc-reference-blue.svg[GoDoc,link="https://godoc.org/nanomsg.org/go/mangos/v2"]
-image:https://goreportcard.com/badge/nanomsg.org/go/mangos/v2[Go Report Card,link="https://goreportcard.com/report/nanomsg.org/go/mangos/v2"]
+image:https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=ubuntu&label=[Linux Status,link="https://github.com/nanomsg/mangos/actions"]
+image:https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=[Windows Status,link="https://github.com/nanomsg/mangos/actions"]
+image:https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=[Darwin Status,link="https://github.com/nanomsg/mangos/actions"]
+image:https://img.shields.io/codecov/c/github/nanomsg/mangos?logoColor=grey&logo=codecov&label=[Coverage,link="https://codecov.io/gh/nanomsg/mangos"]
+image:https://img.shields.io/codefactor/grade/github/nanomsg/mangos?logoColor=grey&logo=codefactor&label=[Code Quality,link="https://www.codefactor.io/repository/github/nanomsg/mangos"]
+image:https://img.shields.io/discord/639573728212156478?label=&logo=discord[Discord,link="https://discord.gg/wewTkby"]
+image:https://img.shields.io/badge/godoc-docs-blue.svg?label=&logo=go[GoDoc,link="https://godoc.org/nanomsg.org/go/mangos/v2"]
+image:https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=Open Source Initiative&label=&color=blue[Apache 2.0 License,link="https://github.com/nanomsg/mangos/blob/master/LICENSE"]
+// image:https://goreportcard.com/badge/nanomsg.org/go/mangos/v2?style=flat[Go Report Card,link="https://goreportcard.com/report/nanomsg.org/go/mangos/v2"]
+// image:https://github.com/nanomsg/mangos/workflows/linux/badge.svg[linux status,link="https://github.com/nanomsg/mangos/actions/""]
+// image:https://github.com/nanomsg/mangos/workflows/windows/badge.svg[windows status,link="https://github.com/nanomsg/mangos/actions/""]
+// image:https://github.com/nanomsg/mangos/workflows/darwin/badge.svg[darwin status,link="https://github.com/nanomsg/mangos/actions/""]
+// image:https://codecov.io/gh/nanomsg/mangos/branch/master/graph/badge.svg[coverage,link="https://codecov.io/gh/nanomsg/mangos"]
+// image:https://img.shields.io/circleci/project/github/nanomsg/mangos.svg?label=linux&logo=circleci[Linux Status,link="https://circleci.com/gh/nanomsg/mangos"]
+// image:https://img.shields.io/appveyor/ci/nanomsg/mangos.svg?label=windows&logo=appveyor[Windows Status,link="https://ci.appveyor.com/project/nanomsg/mangos"]
 
 
 [cols="2",grid="none",frame="none",options="autowidth"]
@@ -26,13 +34,13 @@ NOTE: This is version 2 of _mangos_, and contains breaking changes and
 rather different API in some circumstances relative to version 1.  To use the
 original version of _mangos_ please see https://github.com/nanomsg/mangos-v1
 
-The modern C implemenation of the SP protocols is available as
+The modern C implementation of the SP protocols is available as
 https://github.com/nanomsg/nng[__NNG&trade;__].
 
 The original implementation of the SP protocols is available as
 http://www.nanomsg.org[__nanomsg&trade;__].
 
-Generally (modulo a few caveats) all of these implementations can interoperate.
+Generally (modulo a few caveats) all of these implementations can inter-operate.
 
 The design is intended to make it easy to add new transports with almost
 trivial effort, as well as new topologies ("`protocols`" in SP parlance.)
@@ -57,14 +65,6 @@ Additionally there are a number of projects that use the two products together.
 // If you find this useful, I would appreciate knowing about it.  I can be reached
 // via my email address, garrett -at- damore -dot- org
 
-== Installing
-
-===  Using *go get*
-
-    $ go get -u nanomsg.org/go/mangos/v2
-
-You can use `go get -u -a` to update all installed packages.
-
 == Documentation
 
 For docs, see https://godoc.org/nanomsg.org/go/mangos/v2 or run:
@@ -85,12 +85,12 @@ There are also internal benchmarks available:
 
     $ go test -bench=. nanomsg.org/go/mangos/v2/test
 
-## Commercial Support
+== Commercial Support
 
 mailto:info@staysail.tech[Staysail Systems, Inc.] offers
 http://staysail.tech/support/mangos[commercial support] for mangos.
 
-## Examples
+== Examples
 
 Some examples are posted in the directories under `examples/` in this project.
 
@@ -102,7 +102,7 @@ to run each example program.
 
 Enjoy!
 
----
-Copyright 2018 The Mangos Authors
+'''
+Copyright 2019 The Mangos Authors
 
 mangos&trade;, Nanomsg&trade; and NNG&trade; are http://nanomsg.org/trademarks.html[trademarks] of Garrett D'Amore.
