@@ -30,6 +30,7 @@ import (
 type mockCreator struct {
 	pipeQ      chan MockPipe
 	closeQ     chan struct{}
+	peerCloseQ chan struct{}
 	errorQ     chan error
 	proto      uint16
 	deferClose bool // sometimes we don't want close to really work yet
@@ -460,4 +461,8 @@ func MockMustRecvStr(t *testing.T, p MockPipe, str string, d time.Duration) {
 	msg, err := p.MockRecvMsg(d)
 	MustSucceed(t, err)
 	MustBeTrue(t, string(msg.Body) == str)
+}
+
+func AddrMock() string {
+	return "mock://mock"
 }

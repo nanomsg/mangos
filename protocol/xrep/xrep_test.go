@@ -15,13 +15,16 @@
 package xrep
 
 import (
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/req"
-	"nanomsg.org/go/mangos/v2/protocol/xreq"
+	"encoding/binary"
 	"testing"
 	"time"
 
+	"nanomsg.org/go/mangos/v2"
+	"nanomsg.org/go/mangos/v2/protocol/req"
+	"nanomsg.org/go/mangos/v2/protocol/xreq"
+
 	. "nanomsg.org/go/mangos/v2/internal/test"
+	. "nanomsg.org/go/mangos/v2/protocol"
 	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 )
 
@@ -30,172 +33,177 @@ func TestXRepRaw(t *testing.T) {
 }
 
 func TestXRepIdentity(t *testing.T) {
-	s, err := NewSocket()
-	MustSucceed(t, err)
-	id := s.Info()
-	MustBeTrue(t, id.Self == mangos.ProtoRep)
+	id := MustGetInfo(t, NewSocket)
+	MustBeTrue(t, id.Self == ProtoRep)
 	MustBeTrue(t, id.SelfName == "rep")
-	MustBeTrue(t, id.Peer == mangos.ProtoReq)
+	MustBeTrue(t, id.Peer == ProtoReq)
 	MustBeTrue(t, id.PeerName == "req")
-	_ = s.Close()
 }
 
 func TestXRepClosed(t *testing.T) {
 	VerifyClosedRecv(t, NewSocket)
-	// Checking send closed is harder, because we have extra checks
-	// in place.
-	//VerifyClosedSend(t, NewSocket)
+	VerifyClosedSend(t, NewSocket)
 	VerifyClosedClose(t, NewSocket)
 	VerifyClosedDial(t, NewSocket)
 	VerifyClosedListen(t, NewSocket)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
 func TestXRepOptions(t *testing.T) {
 	VerifyInvalidOption(t, NewSocket)
-	VerifyOptionDuration(t, NewSocket, mangos.OptionRecvDeadline)
-	VerifyOptionDuration(t, NewSocket, mangos.OptionSendDeadline)
-	VerifyOptionInt(t, NewSocket, mangos.OptionReadQLen)
-	VerifyOptionInt(t, NewSocket, mangos.OptionWriteQLen)
-	VerifyOptionBool(t, NewSocket, mangos.OptionBestEffort)
-	VerifyOptionInt(t, NewSocket, mangos.OptionTTL)
+	VerifyOptionDuration(t, NewSocket, OptionRecvDeadline)
+	VerifyOptionDuration(t, NewSocket, OptionSendDeadline)
+	VerifyOptionInt(t, NewSocket, OptionReadQLen)
+	VerifyOptionInt(t, NewSocket, OptionWriteQLen)
+	VerifyOptionBool(t, NewSocket, OptionBestEffort)
+	VerifyOptionTTL(t, NewSocket)
 }
 
 func TestXRepNoHeader(t *testing.T) {
-	s, err := NewSocket()
-	MustSucceed(t, err)
-	m := mangos.NewMessage(0)
-	MustSucceed(t, s.SendMsg(m))
-	_ = s.Close()
+	self := GetSocket(t, NewSocket)
+	MustSendString(t, self, "")
+	MustClose(t, self)
 }
 
 func TestXRepMismatchHeader(t *testing.T) {
-	s, err := NewSocket()
-	MustSucceed(t, err)
+	self := GetSocket(t, NewSocket)
 
 	m := mangos.NewMessage(0)
 	m.Header = append(m.Header, []byte{1, 1, 1, 1, 0x80, 0, 0, 1}...)
 
-	MustSucceed(t, s.SendMsg(m))
-	_ = s.Close()
+	MustSendMsg(t, self, m)
+	MustClose(t, self)
 }
 
 func TestXRepRecvDeadline(t *testing.T) {
-	s, e := NewSocket()
-	MustSucceed(t, e)
-	e = s.SetOption(mangos.OptionRecvDeadline, time.Millisecond)
-	MustSucceed(t, e)
-	m, e := s.RecvMsg()
-	MustFail(t, e)
-	MustBeTrue(t, e == mangos.ErrRecvTimeout)
-	MustBeNil(t, m)
-	_ = s.Close()
-}
-
-func TestXRepTTLZero(t *testing.T) {
-	SetTTLZero(t, NewSocket)
-}
-
-func TestXRepTTLNegative(t *testing.T) {
-	SetTTLNegative(t, NewSocket)
-}
-
-func TestXRepTTLTooBig(t *testing.T) {
-	SetTTLTooBig(t, NewSocket)
-}
-
-func TestXRepTTLSet(t *testing.T) {
-	SetTTL(t, NewSocket)
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond))
+	MustNotRecv(t, self, ErrRecvTimeout)
+	MustClose(t, self)
 }
 
 func TestXRepTTLDrop(t *testing.T) {
 	TTLDropTest(t, req.NewSocket, NewSocket, xreq.NewSocket, NewSocket)
 }
 
+func newRequest(id uint32, content string) *mangos.Message {
+	m := mangos.NewMessage(len(content) + 8)
+	b := make([]byte, 4)
+	binary.BigEndian.PutUint32(b[:4], id|0x80000000)
+	// Requests (coming in) will be entirely on the body.
+	m.Body = append(m.Body, b...)
+	m.Body = append(m.Body, []byte(content)...)
+	return m
+}
+
+func newReply(id uint32, p mangos.Pipe, content string) *mangos.Message {
+	m := mangos.NewMessage(len(content))
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint32(b, p.ID())            // outgoing pipe ID
+	binary.BigEndian.PutUint32(b[4:], id|0x80000000) // request ID
+	m.Header = append(m.Header, b...)
+	m.Body = append(m.Body, []byte(content)...)
+	return m
+}
+
 func TestXRepSendTimeout(t *testing.T) {
 	timeout := time.Millisecond * 10
 
-	s, err := NewSocket()
-	MustSucceed(t, err)
-	MustNotBeNil(t, s)
+	self := GetSocket(t, NewSocket)
 
-	r, err := xreq.NewSocket()
-	MustSucceed(t, err)
-	MustNotBeNil(t, r)
+	MustSucceed(t, self.SetOption(OptionWriteQLen, 0))
+	MustSucceed(t, self.SetOption(OptionSendDeadline, timeout))
 
-	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 1))
-	MustSucceed(t, r.SetOption(mangos.OptionReadQLen, 0))
-	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, timeout))
-	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, timeout))
-	MustSucceed(t, r.SetOption(mangos.OptionRecvDeadline, timeout))
-	MustSucceed(t, r.SetOption(mangos.OptionSendDeadline, timeout))
-
-	// We need to setup a connection so that we can get a meaningful
-	// pipe ID.  We get this by receiving a message.
-	a := AddrTestInp()
-	MustSucceed(t, s.Listen(a))
-	MustSucceed(t, r.Dial(a))
-
-	time.Sleep(time.Millisecond * 20)
-	MustSucceed(t, r.Send([]byte{0x80, 0, 0, 1})) // Request ID #1
-	m, e := s.RecvMsg()
-	MustSucceed(t, e)
-	MustBeTrue(t, len(m.Header) >= 8) // request ID and pipe ID
-
-	// Because of vagaries in the queuing, we slam messages until we
-	// hit a timeout.  We expect to do so after only a modest number
-	// of messages, as we have no reader on the other side.
-	for i := 0; i < 100; i++ {
-		e = s.SendMsg(m.Dup())
-		if e != nil {
-			break
-		}
-	}
-	MustBeError(t, s.SendMsg(m.Dup()), mangos.ErrSendTimeout)
-	_ = s.Close()
-	_ = r.Close()
+	_, p := MockConnect(t, self)
+	MustSendMsg(t, self, newReply(0, p, "zero"))
+	MustBeError(t, self.SendMsg(newReply(1, p, "one")), ErrSendTimeout)
+	MustClose(t, self)
 }
 
-func TestXRepBestEffort(t *testing.T) {
+func TestXRepSendBestEffort(t *testing.T) {
 	timeout := time.Millisecond * 10
 
-	s, err := NewSocket()
-	MustSucceed(t, err)
-	MustNotBeNil(t, s)
+	self := GetSocket(t, NewSocket)
 
-	r, err := xreq.NewSocket()
-	MustSucceed(t, err)
-	MustNotBeNil(t, r)
+	MustSucceed(t, self.SetOption(OptionWriteQLen, 0))
+	MustSucceed(t, self.SetOption(OptionSendDeadline, timeout))
+	MustSucceed(t, self.SetOption(OptionBestEffort, true))
 
-	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 1))
-	MustSucceed(t, r.SetOption(mangos.OptionReadQLen, 0))
-	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, timeout))
-	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, timeout))
-	MustSucceed(t, r.SetOption(mangos.OptionRecvDeadline, timeout))
-	MustSucceed(t, r.SetOption(mangos.OptionSendDeadline, timeout))
-
-	// We need to setup a connection so that we can get a meaningful
-	// pipe ID.  We get this by receiving a message.
-	a := AddrTestInp()
-	MustSucceed(t, s.Listen(a))
-	MustSucceed(t, r.Dial(a))
-
-	time.Sleep(time.Millisecond * 20)
-	MustSucceed(t, r.Send([]byte{0x80, 0, 0, 1})) // Request ID #1
-	m, e := s.RecvMsg()
-	MustSucceed(t, e)
-	MustBeTrue(t, len(m.Header) >= 8) // request ID and pipe ID
-	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, true))
-
-	// Because of vagaries in the queuing, we slam messages until we
-	// hit a timeout.  We expect to do so after only a modest number
-	// of messages, as we have no reader on the other side.
+	_, p := MockConnect(t, self)
 	for i := 0; i < 100; i++ {
-		e = s.SendMsg(m.Dup())
-		if e != nil {
-			break
-		}
+		MustSendMsg(t, self, newReply(0, p, ""))
 	}
-	MustSucceed(t, e)
-	_ = s.Close()
-	_ = r.Close()
+	MustClose(t, self)
+}
+
+func TestXRepPipeCloseAbort(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+
+	MustSucceed(t, self.SetOption(OptionWriteQLen, 0))
+	MustSucceed(t, self.SetOption(OptionSendDeadline, time.Second))
+
+	_, p := MockConnect(t, self)
+	time.AfterFunc(time.Millisecond*20, func() {
+		MustSucceed(t, p.Close())
+	})
+	MustSendMsg(t, self, newReply(0, p, "good"))
+	MustBeError(t, self.SendMsg(newReply(1, p, "bad")), ErrClosed)
+	MustClose(t, self)
+}
+
+func TestXRepRecvCloseAbort(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+
+	MustSucceed(t, self.SetOption(OptionReadQLen, 1))
+	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond*10))
+
+	mp, p := MockConnect(t, self)
+	MockMustSendMsg(t, mp, newRequest(1, "one"), time.Second)
+	MockMustSendMsg(t, mp, newRequest(2, "two"), time.Second)
+
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, p.Close())
+	MustClose(t, self)
+}
+
+func TestXRepResizeRecv1(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mp, _ := MockConnect(t, self)
+	MustSucceed(t, self.SetOption(OptionReadQLen, 0))
+	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond))
+	MockMustSendMsg(t, mp, newRequest(1, "hello"), time.Second)
+
+	time.Sleep(time.Millisecond * 50)
+	MustSucceed(t, self.SetOption(OptionReadQLen, 2))
+	MustNotRecv(t, self, ErrRecvTimeout)
+	MustClose(t, self)
+}
+
+func TestXRepResizeRecv2(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mp, _ := MockConnect(t, self)
+	MustSucceed(t, self.SetOption(OptionReadQLen, 1))
+	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Second))
+
+	time.AfterFunc(time.Millisecond*50, func() {
+		MustSucceed(t, self.SetOption(OptionReadQLen, 2))
+		MockMustSendMsg(t, mp, newRequest(1, "hello"), time.Second)
+	})
+	MustRecvString(t, self, "hello")
+	MustClose(t, self)
+}
+
+func TestXRepRecvJunk(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(OptionReadQLen, 20))
+	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond*10))
+
+	mp, _ := MockConnect(t, self)
+	MockMustSend(t, mp, []byte{}, time.Second)
+	MockMustSend(t, mp, []byte{0, 1}, time.Second)
+	MockMustSend(t, mp, []byte{0, 1, 2, 3}, time.Second)
+	MockMustSend(t, mp, []byte{0, 1, 2, 3, 0x80}, time.Second)
+
+	MustNotRecv(t, self, ErrRecvTimeout)
+	MustClose(t, self)
 }

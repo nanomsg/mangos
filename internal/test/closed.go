@@ -55,24 +55,21 @@ func VerifyClosedClose(t *testing.T, f func() (mangos.Socket, error)) {
 
 // VerifyClosedListen verifies that Listen returns protocol.ErrClosed on a closed socket.
 func VerifyClosedListen(t *testing.T, f func() (mangos.Socket, error)) {
-	s, err := f()
-	MustSucceed(t, err)
-	MustSucceed(t, s.Close())
-	err = s.Listen(AddrTestInp())
-	MustFail(t, err)
-	MustBeTrue(t, err == protocol.ErrClosed)
+	s := GetSocket(t, f)
+	AddMockTransport()
+	MustClose(t, s)
+	MustBeError(t, s.Listen(AddrMock()), protocol.ErrClosed)
 }
 
 // VerifyClosedDial verifies that Dial returns protocol.ErrClosed on a closed socket.
 func VerifyClosedDial(t *testing.T, f func() (mangos.Socket, error)) {
-	s, err := f()
-	MustSucceed(t, err)
-	MustSucceed(t, s.Close())
-	err = s.DialOptions(AddrTestInp(), map[string]interface{}{
+	s := GetSocket(t, f)
+	AddMockTransport()
+	MustClose(t, s)
+	err := s.DialOptions(AddrMock(), map[string]interface{}{
 		mangos.OptionDialAsynch: true,
 	})
-	MustFail(t, err)
-	MustBeTrue(t, err == protocol.ErrClosed)
+	MustBeError(t, err, protocol.ErrClosed)
 }
 
 func VerifyClosedAddPipe(t *testing.T, f func() (mangos.Socket, error)) {

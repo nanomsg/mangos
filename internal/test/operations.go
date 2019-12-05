@@ -51,6 +51,17 @@ func GetSocket(t *testing.T, f func() (mangos.Socket, error)) mangos.Socket {
 	return s
 }
 
+func MustClose(t *testing.T, s mangos.Socket) {
+	MustSucceed(t, s.Close())
+}
+
+func MustGetInfo(t *testing.T, f func() (mangos.Socket, error)) mangos.ProtocolInfo {
+	s := GetSocket(t, f)
+	id := s.Info()
+	MustClose(t, s)
+	return id
+}
+
 func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
 	a := AddrTestInp()
 	wg1 := sync.WaitGroup{}
@@ -95,8 +106,16 @@ func MustRecvMsg(t *testing.T, s mangos.Socket) *mangos.Message {
 	return m
 }
 
+func MustSendMsg(t *testing.T, s mangos.Socket, m *mangos.Message) {
+	MustSucceed(t, s.SendMsg(m))
+}
+
+func MustSend(t *testing.T, s mangos.Socket, b []byte) {
+	MustSucceed(t, s.Send(b))
+}
+
 func MustSendString(t *testing.T, s mangos.Socket, m string) {
-	MustSucceed(t, s.Send([]byte(m)))
+	MustSend(t, s, []byte(m))
 }
 
 func MustRecvString(t *testing.T, s mangos.Socket, m string) {

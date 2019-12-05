@@ -108,3 +108,11 @@ func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option stri
 	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)
 	MustSucceed(t, s.Close())
 }
+
+func VerifyOptionTTL(t *testing.T, f func() (mangos.Socket, error)) {
+	VerifyOptionInt(t, f, mangos.OptionTTL)
+	SetTTLZero(t, f)
+	SetTTLNegative(t, f)
+	SetTTLTooBig(t, f)
+	SetTTL(t, f)
+}
