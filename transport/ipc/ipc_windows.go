@@ -19,11 +19,12 @@
 package ipc
 
 import (
-	"net"
-
 	"github.com/Microsoft/go-winio"
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/transport"
+	"net"
+	"sync"
+	"sync/atomic"
 )
 
 const Transport = ipcTran(0)
@@ -55,10 +56,11 @@ const (
 )
 
 type dialer struct {
-	path       string
-	proto      transport.ProtocolInfo
-	opts       map[string]interface{}
-	handshaker transport.Handshaker
+	path        string
+	proto       transport.ProtocolInfo
+	hs          transport.Handshaker
+	recvMaxSize int32
+	lock        sync.Mutex
 }
 
 // Dial implements the PipeDialer Dial method.
@@ -68,74 +70,85 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := transport.NewConnPipeIPC(conn, d.proto, d.opts)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if err = d.handshaker.Start(p); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return d.handshaker.Wait()
+	p := transport.NewConnPipeIPC(conn, d.proto)
+	p.SetMaxRecvSize(int(atomic.LoadInt32(&d.recvMaxSize)))
+	d.hs.Start(p)
+	return d.hs.Wait()
 }
 
 // SetOption implements a stub PipeDialer SetOption method.
 func (d *dialer) SetOption(n string, v interface{}) error {
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		if val, ok := v.(int); ok {
+			atomic.StoreInt32(&d.recvMaxSize, int32(val))
+			return nil
+		}
+		return mangos.ErrBadValue
+	}
+
 	return mangos.ErrBadOption
 }
 
 // GetOption implements a stub PipeDialer GetOption method.
 func (d *dialer) GetOption(n string) (interface{}, error) {
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		return int(atomic.LoadInt32(&d.recvMaxSize)), nil
+	}
 	return nil, mangos.ErrBadOption
 }
 
 type listener struct {
-	path       string
-	proto      transport.ProtocolInfo
-	listener   net.Listener
-	opts       map[string]interface{}
-	handshaker transport.Handshaker
-	closeq     chan struct{}
+	path             string
+	proto            transport.ProtocolInfo
+	listener         net.Listener
+	hs               transport.Handshaker
+	closeQ           chan struct{}
+	recvMaxSize      int32
+	outputBufferSize int32
+	inputBufferSize  int32
+	securityDesc     string
+	once             sync.Once
+	lock             sync.Mutex
 }
 
 // Listen implements the PipeListener Listen method.
 func (l *listener) Listen() error {
 
+	l.lock.Lock()
 	config := &winio.PipeConfig{
-		InputBufferSize:    l.opts[OptionInputBufferSize].(int32),
-		OutputBufferSize:   l.opts[OptionOutputBufferSize].(int32),
-		SecurityDescriptor: l.opts[OptionSecurityDescriptor].(string),
+		InputBufferSize:    atomic.LoadInt32(&l.inputBufferSize),
+		OutputBufferSize:   atomic.LoadInt32(&l.outputBufferSize),
+		SecurityDescriptor: l.securityDesc,
 		MessageMode:        false,
 	}
+	l.lock.Unlock()
 
-	closeq := make(chan struct{})
+	select {
+	case <-l.closeQ:
+		return mangos.ErrClosed
+	default:
+	}
 	listener, err := winio.ListenPipe("\\\\.\\pipe\\"+l.path, config)
 	if err != nil {
 		return err
 	}
 	l.listener = listener
-	l.closeq = closeq
 	go func() {
 		for {
-			conn, err := l.listener.Accept()
+			conn, err := listener.Accept()
 			if err != nil {
 				select {
-				case <-closeq:
+				case <-l.closeQ:
 					return
 				default:
 					continue
 				}
 			}
-			p, err := transport.NewConnPipeIPC(conn, l.proto, l.opts)
-			if err != nil {
-				conn.Close()
-				continue
-			}
-			if err = l.handshaker.Start(p); err != nil {
-				conn.Close()
-				continue
-			}
+			p := transport.NewConnPipeIPC(conn, l.proto)
+			p.SetMaxRecvSize(int(atomic.LoadInt32(&l.recvMaxSize)))
+			l.hs.Start(p)
 		}
 	}()
 	return nil
@@ -148,15 +161,21 @@ func (l *listener) Address() string {
 // Accept implements the the PipeListener Accept method.
 func (l *listener) Accept() (mangos.TranPipe, error) {
 
-	return l.handshaker.Wait()
+	if l.listener == nil {
+		return nil, mangos.ErrClosed
+	}
+	return l.hs.Wait()
 }
 
 // Close implements the PipeListener Close method.
 func (l *listener) Close() error {
-	if l.listener != nil {
-		l.listener.Close()
-	}
-	l.handshaker.Close()
+	l.once.Do(func() {
+		if l.listener != nil {
+			_ = l.listener.Close()
+		}
+		l.hs.Close()
+		close(l.closeQ)
+	})
 	return nil
 }
 
@@ -164,24 +183,28 @@ func (l *listener) Close() error {
 func (l *listener) SetOption(name string, val interface{}) error {
 	switch name {
 	case OptionInputBufferSize:
-		fallthrough
+		if b, ok := val.(int32); ok {
+			atomic.StoreInt32(&l.inputBufferSize, b)
+			return nil
+		}
+		return mangos.ErrBadValue
 	case OptionOutputBufferSize:
-		if v, ok := val.(int32); ok {
-			l.opts[name] = v
+		if b, ok := val.(int32); ok {
+			atomic.StoreInt32(&l.outputBufferSize, b)
 			return nil
 		}
 		return mangos.ErrBadValue
 
 	case OptionSecurityDescriptor:
-		if v, ok := val.(string); ok {
-			l.opts[name] = v
+		if b, ok := val.(string); ok {
+			l.securityDesc = b
 			return nil
 		}
 		return mangos.ErrBadValue
 
 	case mangos.OptionMaxRecvSize:
-		if v, ok := val.(int); ok {
-			l.opts[name] = v
+		if b, ok := val.(int); ok {
+			atomic.StoreInt32(&l.recvMaxSize, int32(b))
 			return nil
 		}
 		return mangos.ErrBadValue
@@ -192,8 +215,15 @@ func (l *listener) SetOption(name string, val interface{}) error {
 
 // GetOption implements a stub PipeListener GetOption method.
 func (l *listener) GetOption(name string) (interface{}, error) {
-	if v, ok := l.opts[name]; ok {
-		return v, nil
+	switch name {
+	case mangos.OptionMaxRecvSize:
+		return int(atomic.LoadInt32(&l.recvMaxSize)), nil
+	case OptionInputBufferSize:
+		return atomic.LoadInt32(&l.inputBufferSize), nil
+	case OptionOutputBufferSize:
+		return atomic.LoadInt32(&l.outputBufferSize), nil
+	case OptionSecurityDescriptor:
+		return l.securityDesc, nil
 	}
 	return nil, mangos.ErrBadOption
 }
@@ -214,13 +244,10 @@ func (t ipcTran) NewDialer(address string, sock mangos.Socket) (mangos.TranDiale
 	}
 
 	d := &dialer{
-		proto:      sock.Info(),
-		path:       address,
-		opts:       make(map[string]interface{}),
-		handshaker: transport.NewConnHandshaker(),
+		proto: sock.Info(),
+		path:  address,
+		hs:    transport.NewConnHandshaker(),
 	}
-
-	d.opts[mangos.OptionMaxRecvSize] = 0
 
 	return d, nil
 }
@@ -234,16 +261,16 @@ func (t ipcTran) NewListener(address string, sock mangos.Socket) (transport.List
 	}
 
 	l := &listener{
-		proto:      sock.Info(),
-		path:       address,
-		opts:       make(map[string]interface{}),
-		handshaker: transport.NewConnHandshaker(),
+		proto:  sock.Info(),
+		path:   address,
+		hs:     transport.NewConnHandshaker(),
+		closeQ: make(chan struct{}),
 	}
 
-	l.opts[OptionInputBufferSize] = int32(4096)
-	l.opts[OptionOutputBufferSize] = int32(4096)
-	l.opts[OptionSecurityDescriptor] = ""
-	l.opts[mangos.OptionMaxRecvSize] = 0
+	l.inputBufferSize = 4096
+	l.outputBufferSize = 4096
+	l.securityDesc = ""
+	l.recvMaxSize = 0
 
 	return l, nil
 }

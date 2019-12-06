@@ -115,14 +115,6 @@ func (mp *mockPipe) Recv() (*mangos.Message, error) {
 	}
 }
 
-func (mp *mockPipe) LocalProtocol() uint16 {
-	return mp.lProto
-}
-
-func (mp *mockPipe) RemoteProtocol() uint16 {
-	return mp.rProto
-}
-
 func (mp *mockPipe) GetOption(name string) (interface{}, error) {
 	switch name {
 	case mangos.OptionRemoteAddr, mangos.OptionLocalAddr:

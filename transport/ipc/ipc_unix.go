@@ -21,6 +21,8 @@ package ipc
 import (
 	"net"
 	"os"
+	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -37,40 +39,11 @@ func init() {
 	transport.RegisterTransport(Transport)
 }
 
-// options is used for shared GetOption/SetOption logic.
-type options map[string]interface{}
-
-// GetOption retrieves an option value.
-func (o options) get(name string) (interface{}, error) {
-	if o == nil {
-		return nil, mangos.ErrBadOption
-	}
-	v, ok := o[name]
-	if !ok {
-		return nil, mangos.ErrBadOption
-	}
-	return v, nil
-}
-
-// SetOption sets an option.
-func (o options) set(name string, val interface{}) error {
-	switch name {
-	case mangos.OptionMaxRecvSize:
-		if v, ok := val.(int); ok {
-			o[name] = v
-			return nil
-		}
-		return mangos.ErrBadValue
-	}
-
-	return mangos.ErrBadOption
-}
-
 type dialer struct {
-	addr       *net.UnixAddr
-	proto      transport.ProtocolInfo
-	opts       options
-	handshaker transport.Handshaker
+	addr        *net.UnixAddr
+	proto       transport.ProtocolInfo
+	hs          transport.Handshaker
+	maxRecvSize int32
 }
 
 // Dial implements the Dialer Dial method
@@ -80,39 +53,58 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := transport.NewConnPipeIPC(conn, d.proto, d.opts)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if err = d.handshaker.Start(p); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return d.handshaker.Wait()
+	p := transport.NewConnPipeIPC(conn, d.proto)
+	p.SetMaxRecvSize(int(atomic.LoadInt32(&d.maxRecvSize)))
+	d.hs.Start(p)
+	return d.hs.Wait()
 }
 
 // SetOption implements Dialer SetOption method.
 func (d *dialer) SetOption(n string, v interface{}) error {
-	return d.opts.set(n, v)
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		if b, ok := v.(int); ok {
+			atomic.StoreInt32(&d.maxRecvSize, int32(b))
+			return nil
+		}
+		return mangos.ErrBadValue
+	}
+	return mangos.ErrBadOption
 }
 
 // GetOption implements Dialer GetOption method.
 func (d *dialer) GetOption(n string) (interface{}, error) {
-	return d.opts.get(n)
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		return int(atomic.LoadInt32(&d.maxRecvSize)), nil
+	}
+	return nil, mangos.ErrBadOption
 }
 
 type listener struct {
-	addr       *net.UnixAddr
-	proto      transport.ProtocolInfo
-	listener   *net.UnixListener
-	opts       options
-	handshaker transport.Handshaker
-	closeq     chan struct{}
+	addr        *net.UnixAddr
+	proto       transport.ProtocolInfo
+	listener    *net.UnixListener
+	hs          transport.Handshaker
+	closeq      chan struct{}
+	closed      bool
+	maxRecvSize int32
+	once        sync.Once
+	lock        sync.Mutex
 }
 
 // Listen implements the PipeListener Listen method.
 func (l *listener) Listen() error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	select {
+	case <-l.closeq:
+		return mangos.ErrClosed
+	default:
+	}
+	if l.listener != nil {
+		return mangos.ErrAddrInUse
+	}
 	listener, err := net.ListenUnix("unix", l.addr)
 
 	if err != nil && (isSyscallError(err, syscall.EADDRINUSE) || isSyscallError(err, syscall.EEXIST)) {
@@ -122,29 +114,21 @@ func (l *listener) Listen() error {
 	if err != nil {
 		return err
 	}
-	closeq := make(chan struct{})
-	l.closeq = closeq
 	l.listener = listener
 	go func() {
 		for {
 			conn, err := l.listener.AcceptUnix()
 			if err != nil {
 				select {
-				case <-closeq:
+				case <-l.closeq:
 					return
 				default:
 					continue
 				}
 			}
-			p, err := transport.NewConnPipeIPC(conn, l.proto, l.opts)
-			if err != nil {
-				conn.Close()
-				continue
-			}
-			if err = l.handshaker.Start(p); err != nil {
-				conn.Close()
-				continue
-			}
+			p := transport.NewConnPipeIPC(conn, l.proto)
+			p.SetMaxRecvSize(int(atomic.LoadInt32(&l.maxRecvSize)))
+			l.hs.Start(p)
 		}
 	}()
 	return nil
@@ -156,27 +140,50 @@ func (l *listener) Address() string {
 
 // Accept implements the the PipeListener Accept method.
 func (l *listener) Accept() (transport.Pipe, error) {
-
-	return l.handshaker.Wait()
+	l.lock.Lock()
+	if l.listener == nil {
+		l.lock.Unlock()
+		return nil, mangos.ErrClosed
+	}
+	l.lock.Unlock()
+	return l.hs.Wait()
 }
 
 // Close implements the PipeListener Close method.
 func (l *listener) Close() error {
-	if l.listener != nil {
-		l.listener.Close()
-	}
-	l.handshaker.Close()
+	l.once.Do(func() {
+		l.lock.Lock()
+		l.closed = true
+		if l.listener != nil {
+			l.listener.Close()
+		}
+		l.hs.Close()
+		close(l.closeq)
+		l.lock.Unlock()
+	})
 	return nil
 }
 
 // SetOption implements a stub PipeListener SetOption method.
 func (l *listener) SetOption(n string, v interface{}) error {
-	return l.opts.set(n, v)
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		if b, ok := v.(int); ok {
+			atomic.StoreInt32(&l.maxRecvSize, int32(b))
+			return nil
+		}
+		return mangos.ErrBadValue
+	}
+	return mangos.ErrBadOption
 }
 
 // GetOption implements a stub PipeListener GetOption method.
 func (l *listener) GetOption(n string) (interface{}, error) {
-	return l.opts.get(n)
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		return int(atomic.LoadInt32(&l.maxRecvSize)), nil
+	}
+	return nil, mangos.ErrBadOption
 }
 
 func (l *listener) removeStaleIPC() {
@@ -200,17 +207,15 @@ func (ipcTran) Scheme() string {
 // NewDialer implements the Transport NewDialer method.
 func (t ipcTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, error) {
 	var err error
+	d := &dialer{
+		proto: sock.Info(),
+		hs:    transport.NewConnHandshaker(),
+	}
 
 	if addr, err = transport.StripScheme(t, addr); err != nil {
 		return nil, err
 	}
 
-	d := &dialer{
-		proto:      sock.Info(),
-		opts:       make(map[string]interface{}),
-		handshaker: transport.NewConnHandshaker(),
-	}
-	d.opts[mangos.OptionMaxRecvSize] = 0
 	if d.addr, err = net.ResolveUnixAddr("unix", addr); err != nil {
 		return nil, err
 	}
@@ -221,10 +226,10 @@ func (t ipcTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, e
 func (t ipcTran) NewListener(addr string, sock mangos.Socket) (transport.Listener, error) {
 	var err error
 	l := &listener{
-		proto: sock.Info(),
-		opts:  make(map[string]interface{}),
+		proto:  sock.Info(),
+		closeq: make(chan struct{}),
+		hs:     transport.NewConnHandshaker(),
 	}
-	l.opts[mangos.OptionMaxRecvSize] = 0
 
 	if addr, err = transport.StripScheme(t, addr); err != nil {
 		return nil, err
@@ -233,8 +238,6 @@ func (t ipcTran) NewListener(addr string, sock mangos.Socket) (transport.Listene
 	if l.addr, err = net.ResolveUnixAddr("unix", addr); err != nil {
 		return nil, err
 	}
-
-	l.handshaker = transport.NewConnHandshaker()
 
 	return l, nil
 }

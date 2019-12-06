@@ -44,6 +44,7 @@ func CannotRecv(t *testing.T, f func() (mangos.Socket, error)) {
 	MustSucceed(t, s.Close())
 }
 
+// GetSocket returns a socket using the constructor function.
 func GetSocket(t *testing.T, f func() (mangos.Socket, error)) mangos.Socket {
 	s, err := f()
 	MustSucceed(t, err)
@@ -51,10 +52,12 @@ func GetSocket(t *testing.T, f func() (mangos.Socket, error)) mangos.Socket {
 	return s
 }
 
+// MustClose closes the socket.
 func MustClose(t *testing.T, s mangos.Socket) {
 	MustSucceed(t, s.Close())
 }
 
+// MustGetInfo returns the Info for the socket.
 func MustGetInfo(t *testing.T, f func() (mangos.Socket, error)) mangos.ProtocolInfo {
 	s := GetSocket(t, f)
 	id := s.Info()
@@ -62,33 +65,37 @@ func MustGetInfo(t *testing.T, f func() (mangos.Socket, error)) mangos.ProtocolI
 	return id
 }
 
-func ConnectPairVia(t *testing.T, addr string, s1 mangos.Socket, s2 mangos.Socket) {
+// ConnectPairVia connects two sockets using the given address.  The pipe event
+// hook is used for this operation, and the function does not return until both
+// sockets have seen the connection.
+func ConnectPairVia(t *testing.T, addr string, s1, s2 mangos.Socket, o1, o2 map[string]interface{}) {
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
 	wg1.Add(1)
 	wg2.Add(1)
-	o1 := s1.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
+	h1 := s1.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
 		if ev == mangos.PipeEventAttached {
 			wg1.Done()
 		}
 	})
-	o2 := s2.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
+	h2 := s2.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
 		if ev == mangos.PipeEventAttached {
 			wg2.Done()
 		}
 	})
-	MustSucceed(t, s1.Listen(addr))
+	MustSucceed(t, s1.ListenOptions(addr, o1))
 	MustSucceed(t, s2.SetOption(mangos.OptionDialAsynch, true))
-	MustSucceed(t, s2.Dial(addr))
+	MustSucceed(t, s2.DialOptions(addr, o2))
 
 	wg1.Wait()
 	wg2.Wait()
-	s1.SetPipeEventHook(o1)
-	s2.SetPipeEventHook(o2)
+	s1.SetPipeEventHook(h1)
+	s2.SetPipeEventHook(h2)
 }
 
+// ConnectPair is like ConnectPairVia but uses inproc.
 func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
-	ConnectPairVia(t, AddrTestInp(), s1, s2)
+	ConnectPairVia(t, AddrTestInp(), s1, s2, nil, nil)
 }
 
 func MustRecv(t *testing.T, s mangos.Socket) []byte {

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -17,23 +17,86 @@ package ws
 import (
 	"testing"
 
-	"nanomsg.org/go/mangos/v2/test"
+	"nanomsg.org/go/mangos/v2"
+	. "nanomsg.org/go/mangos/v2/internal/test"
 )
 
-var tt = test.NewTranTest(Transport, "ws://127.0.0.1:3395/mysock")
+var tran = Transport
 
-func TestWebsockListenAndAccept(t *testing.T) {
-	tt.TestListenAndAccept(t)
+func TestWsOptions(t *testing.T) {
+	TranVerifyInvalidOption(t, tran)
+	TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
+	TranVerifyNoDelayOption(t, tran)
+	TranVerifyBoolOption(t, tran, OptionWebSocketCheckOrigin)
 }
 
-func TestWebsockDuplicateListen(t *testing.T) {
-	tt.TestDuplicateListen(t)
+func TestWsScheme(t *testing.T) {
+	TranVerifyScheme(t, tran)
+}
+func TestWsRecvMax(t *testing.T) {
+	TranVerifyMaxRecvSize(t, AddrTestWS(), nil, nil)
+}
+func TestWsAcceptWithoutListen(t *testing.T) {
+	TranVerifyAcceptWithoutListen(t, tran)
+}
+func TestWsListenAndAccept(t *testing.T) {
+	TranVerifyListenAndAccept(t, tran, nil, nil)
+}
+func TestWsDuplicateListen(t *testing.T) {
+	TranVerifyDuplicateListen(t, tran, nil)
+}
+func TestWsConnectionRefused(t *testing.T) {
+	TranVerifyConnectionRefused(t, tran, nil)
+}
+func TestTcpHandshake(t *testing.T) {
+	TranVerifyHandshakeFail(t, tran, nil, nil)
+}
+func TestWsSendRecv(t *testing.T) {
+	TranVerifySendRecv(t, tran, nil, nil)
+}
+func TestWsAnonymousPort(t *testing.T) {
+	TranVerifyAnonymousPort(t, "ws://127.0.0.1:0/", nil, nil)
+}
+func TestWsInvalidDomain(t *testing.T) {
+	TranVerifyBadAddress(t, "ws://invalid.invalid/", nil, nil)
+}
+func TestWsInvalidURI(t *testing.T) {
+	TranVerifyBadAddress(t, "ws://127.0.0.1:80/\x01", nil, nil)
 }
 
-func TestWebsockConnRefused(t *testing.T) {
-	tt.TestConnRefused(t)
+func TestWsInvalidLocalIP(t *testing.T) {
+	TranVerifyBadLocalAddress(t, "ws://1.1.1.1:80", nil)
+}
+func TestWsBroadcastIP(t *testing.T) {
+	TranVerifyBadAddress(t, "ws://255.255.255.255:80", nil, nil)
 }
 
-func TestWebsockSendRecv(t *testing.T) {
-	tt.TestSendRecv(t)
+func TestWsListenerClosed(t *testing.T) {
+	TranVerifyListenerClosed(t, tran, nil)
+}
+
+func TestWsResolverChange(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+
+	addr := AddrTestWS()
+	MustSucceed(t, sock.Listen(addr))
+
+	d, e := tran.NewDialer(addr, sock)
+	MustSucceed(t, e)
+	td := d.(*dialer)
+	addr = td.addr
+	td.addr = "ws://invalid.invalid:80"
+	p, e := d.Dial()
+	MustFail(t, e)
+	MustBeTrue(t, p == nil)
+
+	td.addr = addr
+	p, e = d.Dial()
+	MustSucceed(t, e)
+	MustSucceed(t, p.Close())
+}
+
+func TestWsPipeOptions(t *testing.T) {
+	TranVerifyPipeOptions(t, tran, nil, nil)
 }

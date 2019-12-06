@@ -40,7 +40,7 @@ func VerifyMaxRx(t *testing.T, addr string, makePair func() (mangos.Socket, erro
 	MustSucceed(t, rx.SetOption(mangos.OptionRecvDeadline, time.Millisecond*50))
 	MustSucceed(t, tx.SetOption(mangos.OptionSendDeadline, time.Second))
 
-	ConnectPairVia(t, addr, rx, tx)
+	ConnectPairVia(t, addr, rx, tx, nil, nil)
 
 	for i := maxrx - 1; i < maxrx+1; i++ {
 		m := mangos.NewMessage(i)

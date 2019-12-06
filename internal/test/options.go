@@ -22,13 +22,14 @@ import (
 	"nanomsg.org/go/mangos/v2"
 )
 
+// VerifyInvalidOption verifies that invalid options fail.
 func VerifyInvalidOption(t *testing.T, f func() (mangos.Socket, error)) {
 	s, err := f()
 	MustSucceed(t, err)
-	_, err = s.GetOption("nosuchoption")
+	_, err = s.GetOption("NoSuchOption")
 	MustBeError(t, err, mangos.ErrBadOption)
 
-	MustBeError(t, s.SetOption("nosuchoption", 0), mangos.ErrBadOption)
+	MustBeError(t, s.SetOption("NoSuchOption", 0), mangos.ErrBadOption)
 	MustSucceed(t, s.Close())
 }
 
@@ -50,6 +51,7 @@ func VerifyOptionDuration(t *testing.T, f func() (mangos.Socket, error), option 
 	MustSucceed(t, s.Close())
 }
 
+// VerifyOptionInt validates integer options.
 func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
@@ -67,6 +69,7 @@ func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option strin
 	MustSucceed(t, s.Close())
 }
 
+// VerifyOptionQLen validates queue length options.
 func VerifyOptionQLen(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
@@ -87,6 +90,7 @@ func VerifyOptionQLen(t *testing.T, f func() (mangos.Socket, error), option stri
 	MustSucceed(t, s.Close())
 }
 
+// VerifyOptionBool validates bool options.
 func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option string) {
 	s, err := f()
 	MustSucceed(t, err)
@@ -109,6 +113,7 @@ func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option stri
 	MustSucceed(t, s.Close())
 }
 
+// VerifyOptionTTL validates OptionTTL.
 func VerifyOptionTTL(t *testing.T, f func() (mangos.Socket, error)) {
 	VerifyOptionInt(t, f, mangos.OptionTTL)
 	SetTTLZero(t, f)
@@ -117,6 +122,7 @@ func VerifyOptionTTL(t *testing.T, f func() (mangos.Socket, error)) {
 	SetTTL(t, f)
 }
 
+// VerifyOptionMaxRecvSize validates OptionMaxRecvSize.
 func VerifyOptionMaxRecvSize(t *testing.T, f func() (mangos.Socket, error)) {
 	VerifyOptionInt(t, f, mangos.OptionMaxRecvSize)
 	// Max Receive size must not be negative.

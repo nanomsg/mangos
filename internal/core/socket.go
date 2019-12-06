@@ -71,11 +71,20 @@ func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 		ph(mangos.PipeEventAttaching, p)
 	}
 
+	p.lock.Lock()
+	if p.closing {
+		p.lock.Lock()
+		return
+	}
 	if s.proto.AddPipe(p) != nil {
+		p.lock.Unlock()
 		s.pipes.Remove(p)
 		go p.Close()
 		return
 	}
+	p.added = true
+	p.lock.Unlock()
+
 	if p.d != nil {
 		// This call resets the redial time in the dialer.  Its
 		// kind of ugly that we have the socket doing this, but

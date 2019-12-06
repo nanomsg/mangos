@@ -47,16 +47,6 @@ type TranPipe interface {
 	// peer.
 	Close() error
 
-	// LocalProtocol returns the 16-bit SP protocol number used by the
-	// local side.  This will normally be sent to the peer during
-	// connection establishment.
-	LocalProtocol() uint16
-
-	// RemoteProtocol returns the 16-bit SP protocol number used by the
-	// remote side.  This will normally be received from the peer during
-	// connection establishment.
-	RemoteProtocol() uint16
-
 	// GetOption returns an arbitrary transport specific option on a
 	// pipe.  Options for pipes are read-only and specific to that
 	// particular connection. If the property doesn't exist, then

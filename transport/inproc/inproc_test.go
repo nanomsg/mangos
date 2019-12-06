@@ -17,31 +17,39 @@ package inproc
 import (
 	"testing"
 
-	"nanomsg.org/go/mangos/v2/test"
+	. "nanomsg.org/go/mangos/v2/internal/test"
 )
 
-var tt = test.NewTranTest(Transport, "inproc://testname")
+var tran = Transport
 
-func TestInpListenAndAccept(t *testing.T) {
-	tt.TestListenAndAccept(t)
-}
-
-func TestInpDuplicateListen(t *testing.T) {
-	tt.TestDuplicateListen(t)
-}
-
-func TestInpConnRefused(t *testing.T) {
-	tt.TestConnRefused(t)
-}
-
-func TestInpSendRecv(t *testing.T) {
-	tt.TestSendRecv(t)
+func TestInpOptions(t *testing.T) {
+	TranVerifyInvalidOption(t, tran)
 }
 
 func TestInpScheme(t *testing.T) {
-	tt.TestScheme(t)
+	TranVerifyScheme(t, tran)
 }
-
-func TestInp(t *testing.T) {
-	tt.TestAll(t)
+func TestInpAcceptWithoutListen(t *testing.T) {
+	TranVerifyAcceptWithoutListen(t, tran)
+}
+func TestInpListenAndAccept(t *testing.T) {
+	TranVerifyListenAndAccept(t, tran, nil, nil)
+}
+func TestInpDuplicateListen(t *testing.T) {
+	TranVerifyDuplicateListen(t, tran, nil)
+}
+func TestInpConnectionRefused(t *testing.T) {
+	TranVerifyConnectionRefused(t, tran, nil)
+}
+func TestInpHandshake(t *testing.T) {
+	TranVerifyHandshakeFail(t, tran, nil, nil)
+}
+func TestInpSendRecv(t *testing.T) {
+	TranVerifySendRecv(t, tran, nil, nil)
+}
+func TestInpListenerClosed(t *testing.T) {
+	TranVerifyListenerClosed(t, tran, nil)
+}
+func TestInpPipeOptions(t *testing.T) {
+	TranVerifyPipeOptions(t, tran, nil, nil)
 }

@@ -104,8 +104,6 @@ func (tt *TranTest) TestListenAndAccept(t *testing.T) {
 			addr := v.(net.Addr)
 			t.Logf("Dialed remote peer %s addr %s", addr.Network(), addr.String())
 		}
-		t.Logf("Connected client: %d (server %d)",
-			client.LocalProtocol(), client.RemoteProtocol())
 	}()
 
 	server, err := l.Accept()
@@ -123,8 +121,6 @@ func (tt *TranTest) TestListenAndAccept(t *testing.T) {
 	}
 	defer server.Close()
 
-	t.Logf("Connected server: %d (client %d)",
-		server.LocalProtocol(), server.RemoteProtocol())
 	wg.Wait()
 }
 

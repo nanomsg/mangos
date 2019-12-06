@@ -25,21 +25,17 @@ import (
 )
 
 // NewConnPipeIPC allocates a new Pipe using the IPC exchange protocol.
-func NewConnPipeIPC(c net.Conn, proto ProtocolInfo, options map[string]interface{}) (Pipe, error) {
+func NewConnPipeIPC(c net.Conn, proto ProtocolInfo) ConnPipe {
 	p := &connipc{
 		conn: conn{
 			c:       c,
 			proto:   proto,
 			options: make(map[string]interface{}),
+			maxrx:   0,
 		},
 	}
-	p.options[mangos.OptionMaxRecvSize] = int64(0)
-	for n, v := range options {
-		p.options[n] = v
-	}
-	p.maxrx = p.options[mangos.OptionMaxRecvSize].(int)
 
-	return p, nil
+	return p
 }
 
 func (p *connipc) Send(msg *Message) error {

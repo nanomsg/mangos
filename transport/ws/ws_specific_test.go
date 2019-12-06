@@ -55,7 +55,6 @@ func TestWebsockPath(t *testing.T) {
 		t.Errorf("Dial passed, when should not have!")
 		return
 	}
-	t.Logf("Got expected error %v", e)
 }
 
 var bogusstr = "THIS IS BOGUS"
@@ -99,7 +98,6 @@ func TestWebsockMux(t *testing.T) {
 		t.Errorf("Dial passed, when should not have!")
 		return
 	}
-	t.Logf("Got expected error %v", e)
 
 	// Now let's try to use http client.
 	resp, err := http.Get("http://127.0.0.1:3336/bogus")
@@ -122,7 +120,6 @@ func TestWebsockMux(t *testing.T) {
 	if string(body) != bogusstr {
 		t.Errorf("Results mismatch: %s != %s", string(body), bogusstr)
 	}
-	t.Logf("Got body: %s", string(body))
 }
 
 // This test verifies that we can use stock http server instances with
@@ -170,7 +167,6 @@ func TestWebsockHandler(t *testing.T) {
 		t.Errorf("Dial passed, when should not have!")
 		return
 	}
-	t.Logf("Got expected error %v", e)
 
 	// Now let's try to use http client.
 	resp, err := http.Get("http://127.0.0.1:3337/bogus")
@@ -193,5 +189,4 @@ func TestWebsockHandler(t *testing.T) {
 	if string(body) != bogusstr {
 		t.Errorf("Results mismatch: %s != %s", string(body), bogusstr)
 	}
-	t.Logf("Got body: %s", string(body))
 }

@@ -89,7 +89,7 @@ func (l *pipeList) Remove(p *pipe) {
 func (l *pipeList) CloseAll() {
 	l.lock.Lock()
 	for _, p := range l.pipes {
-		go p.Close()
+		go p.close()
 	}
 	l.lock.Unlock()
 }
@@ -104,6 +104,9 @@ type pipe struct {
 	s         *socket
 	closeOnce sync.Once
 	data      interface{} // Protocol private
+	added     bool
+	closing   bool
+	lock      sync.Mutex // held across calls to remPipe and addPipe
 }
 
 func newPipe(tp transport.Pipe, s *socket, d *dialer, l *listener) *pipe {
@@ -121,15 +124,24 @@ func (p *pipe) ID() uint32 {
 	return p.id
 }
 
+func (p *pipe) close() {
+	_ = p.Close()
+}
+
 func (p *pipe) Close() error {
 	p.closeOnce.Do(func() {
 		// Close the underlying transport pipe first.
-		p.p.Close()
+		_ = p.p.Close()
 
 		// Deregister it from the socket.  This will also arrange
 		// for asynchronously running the event callback, and
 		// releasing the pipe ID for reuse.
-		p.s.remPipe(p)
+		p.lock.Lock()
+		p.closing = true
+		if p.added {
+			p.s.remPipe(p)
+		}
+		p.lock.Unlock()
 
 		if p.d != nil {
 			// Inform the dialer so that it will redial.
@@ -142,7 +154,7 @@ func (p *pipe) Close() error {
 func (p *pipe) SendMsg(msg *mangos.Message) error {
 
 	if err := p.p.Send(msg); err != nil {
-		p.Close()
+		_ = p.Close()
 		return err
 	}
 	return nil
@@ -152,7 +164,7 @@ func (p *pipe) RecvMsg() *mangos.Message {
 
 	msg, err := p.p.Recv()
 	if err != nil {
-		p.Close()
+		_ = p.Close()
 		return nil
 	}
 	msg.Pipe = p
