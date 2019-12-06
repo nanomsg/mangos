@@ -37,15 +37,14 @@ func VerifyMaxRx(t *testing.T, addr string, makePair func() (mangos.Socket, erro
 	// Now try setting the option
 	MustSucceed(t, rx.SetOption(mangos.OptionMaxRecvSize, maxrx))
 	// At this point, we can issue requests on rq, and read them from rp.
-	MustSucceed(t, rx.SetOption(mangos.OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, rx.SetOption(mangos.OptionRecvDeadline, time.Millisecond*50))
 	MustSucceed(t, tx.SetOption(mangos.OptionSendDeadline, time.Second))
 
 	ConnectPairVia(t, addr, rx, tx)
-	junk := make([]byte, 200)
 
-	for i := maxrx - 10; i < maxrx+10; i++ {
+	for i := maxrx - 1; i < maxrx+1; i++ {
 		m := mangos.NewMessage(i)
-		m.Body = append(m.Body, junk[:i]...)
+		m.Body = append(m.Body, make([]byte, i)...)
 		MustSendMsg(t, tx, m)
 		if i <= maxrx {
 			m = MustRecvMsg(t, rx)
