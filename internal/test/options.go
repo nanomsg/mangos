@@ -116,3 +116,14 @@ func VerifyOptionTTL(t *testing.T, f func() (mangos.Socket, error)) {
 	SetTTLTooBig(t, f)
 	SetTTL(t, f)
 }
+
+func VerifyOptionMaxRecvSize(t *testing.T, f func() (mangos.Socket, error)) {
+	VerifyOptionInt(t, f, mangos.OptionMaxRecvSize)
+	// Max Receive size must not be negative.
+	s := GetSocket(t, f)
+	MustBeError(t, s.SetOption(mangos.OptionMaxRecvSize, -1), mangos.ErrBadValue)
+	// Can set it to zero.
+	MustSucceed(t, s.SetOption(mangos.OptionMaxRecvSize, 0))
+	// Can set it to some other values
+	MustSucceed(t, s.SetOption(mangos.OptionMaxRecvSize, 1024))
+}

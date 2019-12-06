@@ -62,8 +62,7 @@ func MustGetInfo(t *testing.T, f func() (mangos.Socket, error)) mangos.ProtocolI
 	return id
 }
 
-func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
-	a := AddrTestInp()
+func ConnectPairVia(t *testing.T, addr string, s1 mangos.Socket, s2 mangos.Socket) {
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
 	wg1.Add(1)
@@ -78,12 +77,18 @@ func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
 			wg2.Done()
 		}
 	})
-	MustSucceed(t, s1.Listen(a))
-	MustSucceed(t, s2.Dial(a))
+	MustSucceed(t, s1.Listen(addr))
+	MustSucceed(t, s2.SetOption(mangos.OptionDialAsynch, true))
+	MustSucceed(t, s2.Dial(addr))
+
 	wg1.Wait()
 	wg2.Wait()
 	s1.SetPipeEventHook(o1)
 	s2.SetPipeEventHook(o2)
+}
+
+func ConnectPair(t *testing.T, s1 mangos.Socket, s2 mangos.Socket) {
+	ConnectPairVia(t, AddrTestInp(), s1, s2)
 }
 
 func MustRecv(t *testing.T, s mangos.Socket) []byte {
