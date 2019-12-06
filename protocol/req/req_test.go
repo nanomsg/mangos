@@ -104,7 +104,7 @@ func TestReqContextClosed(t *testing.T) {
 // earlier outstanding ones.
 func TestReqCancel(t *testing.T) {
 	s := GetSocket(t, NewSocket)
-	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Millisecond*100))
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, true))
 	MustSendString(t, s, "first")
 	var wg sync.WaitGroup
