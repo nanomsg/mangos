@@ -9,7 +9,7 @@ image:https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoCol
 image:https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=[Windows Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=[Darwin Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/codecov/c/github/nanomsg/mangos?logoColor=grey&logo=codecov&label=[Coverage,link="https://codecov.io/gh/nanomsg/mangos"]
-image:https://img.shields.io/codefactor/grade/github/nanomsg/mangos?logoColor=grey&logo=codefactor&label=[Code Quality,link="https://www.codefactor.io/repository/github/nanomsg/mangos"]
+image:https://img.shields.io/codacy/grade/0addd1f6c00e4251b37854f3499e6d76?logoColor=grey&logo=codacy&label=[Code Quality,link="https://app.codacy.com/manual/gdamore/mangos/dashboard"]
 image:https://img.shields.io/discord/639573728212156478?label=&logo=discord[Discord,link="https://discord.gg/wewTkby"]
 image:https://img.shields.io/badge/godoc-docs-blue.svg?label=&logo=go[GoDoc,link="https://godoc.org/nanomsg.org/go/mangos/v2"]
 image:https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=Open Source Initiative&label=&color=blue[Apache 2.0 License,link="https://github.com/nanomsg/mangos/blob/master/LICENSE"]
@@ -20,6 +20,7 @@ image:https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&
 // image:https://codecov.io/gh/nanomsg/mangos/branch/master/graph/badge.svg[coverage,link="https://codecov.io/gh/nanomsg/mangos"]
 // image:https://img.shields.io/circleci/project/github/nanomsg/mangos.svg?label=linux&logo=circleci[Linux Status,link="https://circleci.com/gh/nanomsg/mangos"]
 // image:https://img.shields.io/appveyor/ci/nanomsg/mangos.svg?label=windows&logo=appveyor[Windows Status,link="https://ci.appveyor.com/project/nanomsg/mangos"]
+// image:https://img.shields.io/codefactor/grade/github/nanomsg/mangos?logoColor=grey&logo=codefactor&label=[Code Quality,link="https://app.codacy.com/manual/gdamore/mangos/dashboard"]
 
 
 [cols="2",grid="none",frame="none",options="autowidth"]
