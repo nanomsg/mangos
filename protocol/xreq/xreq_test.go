@@ -28,10 +28,7 @@ import (
 )
 
 func TestXReqIdentity(t *testing.T) {
-	s, err := NewSocket()
-	defer s.Close()
-	MustSucceed(t, err)
-	id := s.Info()
+	id := MustGetInfo(t, NewSocket)
 	MustBeTrue(t, id.Self == mangos.ProtoReq)
 	MustBeTrue(t, id.SelfName == "req")
 	MustBeTrue(t, id.Peer == mangos.ProtoRep)

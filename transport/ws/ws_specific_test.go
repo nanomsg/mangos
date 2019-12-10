@@ -60,7 +60,7 @@ func TestWebsockPath(t *testing.T) {
 var bogusstr = "THIS IS BOGUS"
 
 func bogusHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, bogusstr)
+	_, _ = fmt.Fprint(w, bogusstr)
 }
 
 func TestWebsockMux(t *testing.T) {

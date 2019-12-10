@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -47,8 +47,6 @@ import (
 )
 
 var verbose int
-var protoSet bool
-var proto string
 var dialAddrs []string
 var listenAddrs []string
 var subscriptions []string
@@ -153,15 +151,6 @@ func setFormat(f string) error {
 		return errors.New("invalid format type")
 	}
 	printFormat = f
-	return nil
-}
-
-func setTLSVer(vmin uint16, vmax uint16) error {
-	if tlscfg.MinVersion != 0 || tlscfg.MaxVersion != 0 {
-		return errors.New("TLS/SSL version already set")
-	}
-	tlscfg.MinVersion = vmin
-	tlscfg.MaxVersion = vmax
 	return nil
 }
 
@@ -489,7 +478,7 @@ func sendRecvLoop(sock mangos.Socket) {
 			fatalf("RecvMsg failed: %v", err)
 		}
 		time.Sleep((time.Second * time.Duration(sendInterval)) -
-			time.Now().Sub(now))
+			time.Since(now))
 	}
 }
 

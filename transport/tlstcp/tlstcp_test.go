@@ -16,7 +16,6 @@ package tlstcp
 
 import (
 	"crypto/tls"
-	"strings"
 	"testing"
 	"time"
 
@@ -126,10 +125,6 @@ func TestTlsTcpAcceptAbort(t *testing.T) {
 		test.MustSucceed(t, l.SetOption(key, val))
 	}
 	test.MustSucceed(t, l.Listen())
-	a2 := l.Address()
-	if strings.HasPrefix(a2, "tls+tcp://") {
-		a2 = a2[len("tls+tcp://"):]
-	}
 	_ = l.(*listener).l.Close()
 	// This will make the accept loop spin hard, but nothing much
 	// we can do about it.

@@ -32,8 +32,6 @@ import (
 var cliCfg, _ = NewTLSConfig(false)
 var srvCfg, _ = NewTLSConfig(true)
 
-type newSockFunc func() (mangos.Socket, error)
-
 // T is a structure that subtests can inherit from.
 type T struct {
 	t       *testing.T
@@ -656,34 +654,4 @@ func AddrTestTLS() string {
 
 func AddrTestInp() string {
 	return (fmt.Sprintf("inproc://test_%d", NextPort()))
-}
-
-// RunTestsTCP runs the TCP tests.
-func RunTestsTCP(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestTCP(), cases)
-}
-
-// RunTestsIPC runs the IPC tests.
-func RunTestsIPC(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestIPC(), cases)
-}
-
-// RunTestsInp runs the inproc tests.
-func RunTestsInp(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestInp(), cases)
-}
-
-// RunTestsTLS runs the TLS tests.
-func RunTestsTLS(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestTLS(), cases)
-}
-
-// RunTestsWS runs the websock tests.
-func RunTestsWS(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestWS(), cases)
-}
-
-// RunTestsWSS runs the websock tests.
-func RunTestsWSS(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestWSS(), cases)
 }

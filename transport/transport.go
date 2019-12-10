@@ -58,9 +58,7 @@ func StripScheme(t Transport, addr string) (string, error) {
 // wildcard used in nanomsg URLs, replacing it with an empty
 // string to indicate that all local interfaces be used.
 func ResolveTCPAddr(addr string) (*net.TCPAddr, error) {
-	if strings.HasPrefix(addr, "*") {
-		addr = addr[1:]
-	}
+	addr = strings.TrimPrefix(addr, "*")
 	return net.ResolveTCPAddr("tcp", addr)
 }
 

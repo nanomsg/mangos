@@ -65,8 +65,6 @@ type context struct {
 	bestEffort bool
 	backtrace  []byte
 	pipeID     uint32 // using ID keeps GC from holding the pipe
-
-	cond *sync.Cond
 }
 
 // closedQ represents a non-blocking time channel.

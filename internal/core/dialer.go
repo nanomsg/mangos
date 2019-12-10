@@ -227,5 +227,5 @@ func (d *dialer) dial(redial bool) error {
 }
 
 func (d *dialer) redial() {
-	d.dial(true)
+	_ = d.dial(true)
 }

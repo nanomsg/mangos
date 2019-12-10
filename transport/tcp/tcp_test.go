@@ -15,7 +15,6 @@
 package tcp
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -104,10 +103,6 @@ func TestTcpAcceptAbort(t *testing.T) {
 	l, e := tran.NewListener(addr, sock)
 	test.MustSucceed(t, e)
 	test.MustSucceed(t, l.Listen())
-	a2 := l.Address()
-	if strings.HasPrefix(a2, "tcp://") {
-		a2 = a2[len("tcp://"):]
-	}
 	_ = l.(*listener).l.Close()
 	// This will make the accept loop spin hard, but nothing much
 	// we can do about it.

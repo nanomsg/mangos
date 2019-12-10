@@ -279,7 +279,6 @@ func TestRespondentMultiContexts(t *testing.T) {
 	recv := make([]int, count)
 	send := make([]int, count)
 
-	contexts := make([]mangos.Context, 0, count)
 	var wg1 sync.WaitGroup
 	fn := func(c1, c2 mangos.Context, index int) {
 		defer wg1.Done()
@@ -308,12 +307,10 @@ func TestRespondentMultiContexts(t *testing.T) {
 		c1, e := s.OpenContext()
 		MustSucceed(t, e)
 		MustNotBeNil(t, c1)
-		contexts = append(contexts, c1)
 
 		c2, e := p.OpenContext()
 		MustSucceed(t, e)
 		MustNotBeNil(t, c2)
-		contexts = append(contexts, c2)
 
 		MustSucceed(t, c1.SetOption(mangos.OptionRecvDeadline, time.Minute/4))
 		MustSucceed(t, c1.SetOption(mangos.OptionSendDeadline, time.Minute/4))

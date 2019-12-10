@@ -375,10 +375,10 @@ func (s *socket) SetOption(name string, value interface{}) error {
 		return mangos.ErrBadOption
 	}
 	for _, d := range s.dialers {
-		d.SetOption(name, value)
+		_ = d.SetOption(name, value)
 	}
 	for _, l := range s.listeners {
-		l.SetOption(name, value)
+		_ = l.SetOption(name, value)
 	}
 	return nil
 }

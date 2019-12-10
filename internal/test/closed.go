@@ -114,6 +114,6 @@ func VerifyClosedContext(t *testing.T, f func() (mangos.Socket, error)) {
 	MustSucceed(t, s.Close())
 	MustBeError(t, c.Close(), mangos.ErrClosed)
 
-	c, e = s.OpenContext()
+	_, e = s.OpenContext()
 	MustBeError(t, e, mangos.ErrClosed)
 }

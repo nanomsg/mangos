@@ -147,7 +147,7 @@ func TestSubRecvQLen(t *testing.T) {
 	MustNotBeNil(t, m)
 	// this verifies we discarded the oldest first
 	MustBeTrue(t, string(m.Body) == "three")
-	m, e = s.RecvMsg()
+	_, e = s.RecvMsg()
 	MustFail(t, e)
 	MustBeTrue(t, e == mangos.ErrRecvTimeout)
 	MustSucceed(t, p.Close())
@@ -187,7 +187,7 @@ func TestSubRecvQLenResizeDiscard(t *testing.T) {
 	MustNotBeNil(t, m)
 	// this verifies we discarded the oldest first
 	MustBeTrue(t, string(m.Body) == "three")
-	m, e = s.RecvMsg()
+	_, e = s.RecvMsg()
 	MustFail(t, e)
 	MustBeTrue(t, e == mangos.ErrRecvTimeout)
 	MustSucceed(t, p.Close())

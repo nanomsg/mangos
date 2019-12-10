@@ -43,11 +43,7 @@ type inproc struct {
 type addr string
 
 func (a addr) String() string {
-	s := string(a)
-	if strings.HasPrefix(s, "inproc://") {
-		s = s[len("inproc://"):]
-	}
-	return s
+	return strings.TrimPrefix(string(a), "inproc://")
 }
 
 func (addr) Network() string {

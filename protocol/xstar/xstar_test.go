@@ -24,10 +24,7 @@ import (
 )
 
 func TestXStarIdentity(t *testing.T) {
-	s, err := NewSocket()
-	defer s.Close()
-	MustSucceed(t, err)
-	id := s.Info()
+	id := MustGetInfo(t, NewSocket)
 	MustBeTrue(t, id.Self == mangos.ProtoStar)
 	MustBeTrue(t, id.SelfName == "star")
 	MustBeTrue(t, id.Peer == mangos.ProtoStar)
@@ -69,7 +66,7 @@ func TestXStarRecvDeadline(t *testing.T) {
 func TestXStarNoHeader(t *testing.T) {
 	s, err := NewSocket()
 	MustSucceed(t, err)
-	defer s.Close()
+	defer MustClose(t, s)
 
 	m := mangos.NewMessage(0)
 

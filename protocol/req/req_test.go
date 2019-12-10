@@ -28,13 +28,11 @@ import (
 )
 
 func TestReqIdentity(t *testing.T) {
-	s := GetSocket(t, NewSocket)
-	id := s.Info()
+	id := MustGetInfo(t, NewSocket)
 	MustBeTrue(t, id.Self == mangos.ProtoReq)
 	MustBeTrue(t, id.SelfName == "req")
 	MustBeTrue(t, id.Peer == mangos.ProtoRep)
 	MustBeTrue(t, id.PeerName == "rep")
-	MustSucceed(t, s.Close())
 }
 
 func TestReqCooked(t *testing.T) {
@@ -96,7 +94,7 @@ func TestReqContextClosed(t *testing.T) {
 
 	MustBeError(t, c.Close(), mangos.ErrClosed)
 
-	c, e = s.OpenContext()
+	_, e = s.OpenContext()
 	MustBeError(t, e, mangos.ErrClosed)
 }
 
