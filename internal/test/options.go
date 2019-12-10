@@ -101,12 +101,12 @@ func VerifyOptionBool(t *testing.T, f func() (mangos.Socket, error), option stri
 	MustSucceed(t, s.SetOption(option, true))
 	val, err = s.GetOption(option)
 	MustSucceed(t, err)
-	MustBeTrue(t, val.(bool) == true)
+	MustBeTrue(t, val.(bool))
 
 	MustSucceed(t, s.SetOption(option, false))
 	val, err = s.GetOption(option)
 	MustSucceed(t, err)
-	MustBeTrue(t, val.(bool) == false)
+	MustBeFalse(t, val.(bool))
 
 	MustBeError(t, s.SetOption(option, time.Now()), mangos.ErrBadValue)
 	MustBeError(t, s.SetOption(option, "junk"), mangos.ErrBadValue)

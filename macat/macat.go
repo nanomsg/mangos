@@ -60,7 +60,6 @@ var sock mangos.Socket
 var tlscfg tls.Config
 var certFile string
 var keyFile string
-var caFile string
 var noVerifyTLS bool
 
 func setSocket(f func() (mangos.Socket, error)) error {
@@ -174,7 +173,6 @@ func setCaCert(path string) error {
 	if tlscfg.RootCAs != nil {
 		return errors.New("cacert already set")
 	}
-	caFile = path
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -193,7 +191,7 @@ func setCaCert(path string) error {
 }
 
 func fatalf(format string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, v...)
+	_, _ = fmt.Fprintf(os.Stderr, format, v...)
 	os.Exit(1)
 }
 
@@ -322,7 +320,7 @@ func init() {
 	goopt.ReqArg([]string{"--key"}, "FILE",
 		"Use private key in FILE for SSL/TLS", setKey)
 	goopt.ReqArg([]string{"--cacert"}, "FILE",
-		"Use CA certicate(s) in FILE for SSL/TLS", setCaCert)
+		"Use CA certificate(s) in FILE for SSL/TLS", setCaCert)
 	goopt.NoArg([]string{"--insecure", "-k"},
 		"Do not validate TLS/SSL peer certificate",
 		func() error {
@@ -351,37 +349,37 @@ func printMsg(msg *mangos.Message) {
 	bw := bufio.NewWriter(os.Stdout)
 	switch printFormat {
 	case "raw":
-		bw.Write(msg.Body)
+		_, _ = bw.Write(msg.Body)
 	case "ascii":
 		for i := 0; i < len(msg.Body); i++ {
 			if strconv.IsPrint(rune(msg.Body[i])) {
-				bw.WriteByte(msg.Body[i])
+				_ = bw.WriteByte(msg.Body[i])
 			} else {
-				bw.WriteByte('.')
+				_ = bw.WriteByte('.')
 			}
 		}
-		bw.WriteString("\n")
+		_, _ = bw.WriteString("\n")
 	case "quoted":
 		for i := 0; i < len(msg.Body); i++ {
 			switch msg.Body[i] {
 			case '\n':
-				bw.WriteString("\\n")
+				_, _ = bw.WriteString("\\n")
 			case '\r':
-				bw.WriteString("\\r")
+				_, _ = bw.WriteString("\\r")
 			case '\\':
-				bw.WriteString("\\\\")
+				_, _ = bw.WriteString("\\\\")
 			case '"':
-				bw.WriteString("\\\"")
+				_, _ = bw.WriteString("\\\"")
 			default:
 				if strconv.IsPrint(rune(msg.Body[i])) {
-					bw.WriteByte(msg.Body[i])
+					_ = bw.WriteByte(msg.Body[i])
 				} else {
-					bw.WriteString(fmt.Sprintf("\\x%02x",
+					_, _ = bw.WriteString(fmt.Sprintf("\\x%02x",
 						msg.Body[i]))
 				}
 			}
 		}
-		bw.WriteString("\n")
+		_, _ = bw.WriteString("\n")
 
 	case "msgpack":
 		enc := make([]byte, 5)
@@ -400,10 +398,10 @@ func printMsg(msg *mangos.Message) {
 			enc[0] = 0xc6
 			binary.BigEndian.PutUint32(enc[1:], uint32(len(msg.Body)))
 		}
-		bw.Write(enc)
-		bw.Write(msg.Body)
+		_, _ = bw.Write(enc)
+		_, _ = bw.Write(msg.Body)
 	}
-	bw.Flush()
+	_ = bw.Flush()
 }
 
 func recvLoop(sock mangos.Socket) {
@@ -465,7 +463,7 @@ func sendRecvLoop(sock mangos.Socket) {
 		// sendInterval
 
 		if recvTimeout < 0 || recvTimeout > sendInterval {
-			sock.SetOption(mangos.OptionRecvDeadline,
+			_ = sock.SetOption(mangos.OptionRecvDeadline,
 				time.Second*time.Duration(sendInterval))
 		}
 		msg, err = sock.RecvMsg()
@@ -510,7 +508,7 @@ func replyLoop(sock mangos.Socket) {
 
 func cleanup() {
 	if sock != nil {
-		sock.Close()
+		_ = sock.Close()
 	}
 }
 
@@ -604,6 +602,15 @@ func main() {
 	// XXX: fugly hack - work around TCP slow start
 	time.Sleep(time.Millisecond * 20)
 	time.Sleep(time.Second * time.Duration(sendDelay))
+
+	if recvTimeout >= 0 {
+		_ = sock.SetOption(mangos.OptionRecvDeadline,
+			time.Second*time.Duration(recvTimeout))
+	}
+	if sendTimeout >= 0 {
+		_ = sock.SetOption(mangos.OptionSendDeadline,
+			time.Second*time.Duration(sendTimeout))
+	}
 
 	// Start main processing
 	switch sock.Info().Self {

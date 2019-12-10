@@ -42,7 +42,6 @@ type Message struct {
 	bbuf  []byte
 	hbuf  []byte
 	bsize int
-	pool  *sync.Pool
 }
 
 type msgCacheInfo struct {

@@ -482,7 +482,7 @@ func TranVerifyPipeOptions(t *testing.T, tran transport.Transport, dOpts, lOpts 
 		locaddr = append(locaddr, addr1)
 		remaddr = append(remaddr, addr2)
 
-		a, e = p.GetOption("NO-SUCH-OPTION")
+		_, e = p.GetOption("NO-SUCH-OPTION")
 		MustFail(t, e)
 	}
 	MustBeTrue(t, remaddr[0].String() == locaddr[1].String())

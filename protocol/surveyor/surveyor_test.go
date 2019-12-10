@@ -324,7 +324,7 @@ func TestSurveyorContextClosed(t *testing.T) {
 
 	MustBeError(t, c.Close(), mangos.ErrClosed)
 
-	c, e = s.OpenContext()
+	_, e = s.OpenContext()
 	MustBeError(t, e, mangos.ErrClosed)
 }
 

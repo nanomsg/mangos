@@ -130,11 +130,9 @@ func TestXSubRecvQLen(t *testing.T) {
 	MustNotBeNil(t, m)
 	// this verifies we discarded the oldest first
 	MustBeTrue(t, string(m.Body) == "three")
-	m, e = s.RecvMsg()
-	MustFail(t, e)
-	MustBeTrue(t, e == mangos.ErrRecvTimeout)
-	_ = p.Close()
-	_ = s.Close()
+	MustNotRecv(t, s, mangos.ErrRecvTimeout)
+	MustClose(t, p)
+	MustClose(t, s)
 }
 
 func TestXSubRecvQLenResize(t *testing.T) {

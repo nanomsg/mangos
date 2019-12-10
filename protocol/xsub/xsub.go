@@ -32,9 +32,8 @@ const (
 )
 
 type pipe struct {
-	p      protocol.Pipe
-	s      *socket
-	closeQ chan struct{}
+	p protocol.Pipe
+	s *socket
 }
 
 type socket struct {

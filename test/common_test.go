@@ -53,8 +53,6 @@ type T struct {
 	sdone   bool
 	sdoneq  chan struct{}
 	readyq  chan struct{}
-	dialer  mangos.Dialer
-	listen  mangos.Listener
 	Server  bool
 	sync.Mutex
 }

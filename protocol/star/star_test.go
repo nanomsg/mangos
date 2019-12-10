@@ -38,16 +38,13 @@ func starTestSender(t *testing.T, bt *starTester, cnt int) {
 		// Maximum is 10 msec.
 		d := time.Duration(rand.Uint32() % 10000)
 		time.Sleep(d * time.Microsecond)
-		start := time.Now()
-		tstr := start.Format(time.StampMilli)
 		msg := mangos.NewMessage(2)
 		msg.Body = append(msg.Body, byte(bt.id), byte(i))
 		if err := bt.sock.SendMsg(msg); err != nil {
-			tstr = time.Now().Format(time.StampMilli)
+			tstr := time.Now().Format(time.StampMilli)
 			t.Errorf("%s: Peer %d send %d fail: %v", tstr, bt.id, i, err)
 			return
 		}
-		tstr = time.Now().Format(time.StampMilli)
 	}
 }
 

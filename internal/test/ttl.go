@@ -195,6 +195,6 @@ func TTLDropTest(t *testing.T,
 
 	MustSucceed(t, rq.Send([]byte("DROP")))
 
-	v, err = rp.Recv()
+	_, err = rp.Recv()
 	MustBeError(t, err, mangos.ErrRecvTimeout)
 }
