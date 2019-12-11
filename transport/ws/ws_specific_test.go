@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 	"nanomsg.org/go/mangos/v2/protocol/rep"
 	"nanomsg.org/go/mangos/v2/protocol/req"
-	//"nanomsg.org/go-mangos/test"
+	// "nanomsg.org/go-mangos/test"
 )
 
 func TestWebsockPath(t *testing.T) {
@@ -45,11 +45,14 @@ func TestWebsockPath(t *testing.T) {
 		t.Errorf("Listen failed")
 		return
 	}
-	defer l.Close()
-
+	defer func() {
+		_ = l.Close()
+	}()
 	p, e := d.Dial()
 	if p != nil {
-		defer p.Close()
+		defer func() {
+			_ = p.Close()
+		}()
 	}
 	if e == nil {
 		t.Errorf("Dial passed, when should not have!")
@@ -59,7 +62,7 @@ func TestWebsockPath(t *testing.T) {
 
 var bogusstr = "THIS IS BOGUS"
 
-func bogusHandler(w http.ResponseWriter, r *http.Request) {
+func bogusHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = fmt.Fprint(w, bogusstr)
 }
 
@@ -88,11 +91,15 @@ func TestWebsockMux(t *testing.T) {
 		t.Errorf("Listen failed")
 		return
 	}
-	defer l.Close()
+	defer func() {
+		_ = l.Close()
+	}()
 
 	p, e := d.Dial()
 	if p != nil {
-		defer p.Close()
+		defer func() {
+			_ = p.Close()
+		}()
 	}
 	if e == nil {
 		t.Errorf("Dial passed, when should not have!")
@@ -146,7 +153,9 @@ func TestWebsockHandler(t *testing.T) {
 	// Note that we are *counting* on this to die gracefully when our
 	// program exits. There appears to be no way to shutdown http
 	// instances gracefully.
-	go http.ListenAndServe("127.0.0.1:3337", mux)
+	go func() {
+		_ = http.ListenAndServe("127.0.0.1:3337", mux)
+	}()
 
 	// Give the server a chance to startup, as we are running it asynch
 	time.Sleep(time.Second / 10)
@@ -157,11 +166,15 @@ func TestWebsockHandler(t *testing.T) {
 		return
 	}
 
-	defer l.Close()
+	defer func() {
+		_ = l.Close()
+	}()
 
 	p, e := d.Dial()
 	if p != nil {
-		defer p.Close()
+		defer func() {
+			_ = p.Close()
+		}()
 	}
 	if e == nil {
 		t.Errorf("Dial passed, when should not have!")

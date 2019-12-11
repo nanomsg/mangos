@@ -34,16 +34,13 @@ func ReqRepLatencyServer(addr string, msgSize int, roundTrips int) {
 	if err != nil {
 		log.Fatalf("Failed to make new pair socket: %v", err)
 	}
-	defer func() { time.Sleep(10 * time.Microsecond); s.Close() }()
+	defer func() { time.Sleep(10 * time.Microsecond); _ = s.Close() }()
 
 	all.AddTransports(s)
 	l, err := s.NewListener(addr, nil)
 	if err != nil {
 		log.Fatalf("Failed to make new listener: %v", err)
 	}
-
-	// TCP no delay, please!
-	l.SetOption(mangos.OptionNoDelay, true)
 
 	err = l.Listen()
 	if err != nil {
@@ -70,16 +67,15 @@ func ReqRepLatencyClient(addr string, msgSize int, roundTrips int) {
 	if err != nil {
 		log.Fatalf("Failed to make new pair socket: %v", err)
 	}
-	defer s.Close()
+	defer func() {
+		_ = s.Close()
+	}()
 
 	all.AddTransports(s)
 	d, err := s.NewDialer(addr, nil)
 	if err != nil {
 		log.Fatalf("Failed to make new dialer: %v", err)
 	}
-
-	// TCP no delay, please!
-	d.SetOption(mangos.OptionNoDelay, true)
 
 	err = d.Dial()
 	if err != nil {

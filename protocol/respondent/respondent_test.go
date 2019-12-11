@@ -60,6 +60,7 @@ func TestRespondentClosed(t *testing.T) {
 	VerifyClosedClose(t, NewSocket)
 	VerifyClosedDial(t, NewSocket)
 	VerifyClosedListen(t, NewSocket)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
 func TestRespondentTTLZero(t *testing.T) {
@@ -118,6 +119,20 @@ func TestRespondentCloseSocketRecv(t *testing.T) {
 		MustSucceed(t, p.Send([]byte("")))
 	}
 	MustSucceed(t, s.Close())
+}
+
+func TestRepRespondentJunk(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mock, _ := MockConnect(t, self)
+
+	// Absent header...
+	MockMustSendStr(t, mock, "", time.Second)
+
+	// Absent request id... (must have bit 31 set)
+	MockMustSend(t, mock, []byte{1, 2, 3, 4}, time.Second)
+
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, self.Close())
 }
 
 // This test fills our receive queue, then truncates it.

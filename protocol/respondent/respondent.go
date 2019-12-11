@@ -65,7 +65,6 @@ type context struct {
 	bestEffort bool
 	recvPipe   *pipe
 	backtrace  []byte
-	recvQ      chan *protocol.Message
 	closeQ     chan struct{}
 }
 
@@ -394,7 +393,6 @@ func (s *socket) SetOption(name string, v interface{}) error {
 
 			newQ := make(chan msg, qLen)
 			s.Lock()
-			oldQ := s.recvQ
 			sizeQ := s.sizeQ
 			s.sizeQ = make(chan struct{})
 			s.recvQ = newQ
@@ -404,32 +402,6 @@ func (s *socket) SetOption(name string, v interface{}) error {
 			// Close the sizeQ to let anyone watching know that
 			// they should re-examine the recvQ.
 			close(sizeQ)
-		loop:
-			for {
-				var m msg
-				select {
-				case m = <-oldQ:
-				default:
-					break loop
-				}
-				select {
-				case newQ <- m:
-				default:
-					// Eat an old message to make room
-					select {
-					case m2 := <-newQ:
-						m2.m.Free()
-					default:
-					}
-					// And try to inject the new.  This
-					// can fail due to concurrency.
-					select {
-					case newQ <- m:
-					default:
-						m.m.Free()
-					}
-				}
-			}
 			return nil
 		}
 		return protocol.ErrBadValue
