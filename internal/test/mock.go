@@ -30,7 +30,6 @@ import (
 type mockCreator struct {
 	pipeQ      chan MockPipe
 	closeQ     chan struct{}
-	peerCloseQ chan struct{}
 	errorQ     chan error
 	proto      uint16
 	deferClose bool // sometimes we don't want close to really work yet
@@ -48,7 +47,6 @@ type mockPipe struct {
 	sendQ      chan *mangos.Message
 	recvErrQ   chan error
 	sendErrQ   chan error
-	addr       string
 	deferClose bool
 	closed     bool
 	lock       sync.Mutex
@@ -170,6 +168,7 @@ func (mp *mockPipe) MockSendMsg(m *protocol.Message, d time.Duration) error {
 	}
 }
 
+// NewMockPipe creates a mocked transport pipe.
 func NewMockPipe(lProto, rProto uint16) MockPipe {
 	mp := &mockPipe{
 		lProto: lProto,
@@ -179,6 +178,7 @@ func NewMockPipe(lProto, rProto uint16) MockPipe {
 	return mp
 }
 
+// MockPipe is a mocked transport pipe.
 type MockPipe interface {
 	// SendQ obtains the send queue.  Test code can read from this
 	// to get messages sent by the socket.
@@ -208,6 +208,8 @@ type MockPipe interface {
 	transport.Pipe
 }
 
+// MockCreator is an abstraction of both dialers and listeners, which
+// allows us to test various transport failure conditions.
 type MockCreator interface {
 	// NewPipe creates a Pipe, but does not add it.  The pipe will
 	// use the assigned peer protocol.
@@ -365,10 +367,12 @@ func (mt mockTransport) NewDialer(addr string, sock mangos.Socket) (transport.Di
 	return mt.newCreator(addr, sock)
 }
 
+// AddMockTransport registers the mock transport.
 func AddMockTransport() {
 	transport.RegisterTransport(mockTransport{})
 }
 
+// GetMockListener returns a listener that creates mock pipes.
 func GetMockListener(t *testing.T, s mangos.Socket) (mangos.Listener, MockCreator) {
 	AddMockTransport()
 	l, e := s.NewListener("mock://mock", nil)
@@ -380,6 +384,7 @@ func GetMockListener(t *testing.T, s mangos.Socket) (mangos.Listener, MockCreato
 	return l, ml
 }
 
+// GetMockDialer returns a dialer that creates mock pipes.
 func GetMockDialer(t *testing.T, s mangos.Socket) (mangos.Dialer, MockCreator) {
 	AddMockTransport()
 	d, e := s.NewDialer("mock://mock", nil)
@@ -391,6 +396,7 @@ func GetMockDialer(t *testing.T, s mangos.Socket) (mangos.Dialer, MockCreator) {
 	return d, ml
 }
 
+// MockAddPipe simulates adding a pipe.
 func MockAddPipe(t *testing.T, s mangos.Socket, c MockCreator, p MockPipe) mangos.Pipe {
 	var rv mangos.Pipe
 	wg := sync.WaitGroup{}
@@ -408,6 +414,7 @@ func MockAddPipe(t *testing.T, s mangos.Socket, c MockCreator, p MockPipe) mango
 	return rv
 }
 
+// MockConnect simulates connecting a pipe.
 func MockConnect(t *testing.T, s mangos.Socket) (MockPipe, mangos.Pipe) {
 	var pipe mangos.Pipe
 	wg := sync.WaitGroup{}
@@ -431,22 +438,28 @@ func MockConnect(t *testing.T, s mangos.Socket) (MockPipe, mangos.Pipe) {
 	return mp, pipe
 }
 
+// MockMustSendMsg ensures that the pipe sends a message.
 func MockMustSendMsg(t *testing.T, p MockPipe, m *mangos.Message, d time.Duration) {
 	MustSucceed(t, p.MockSendMsg(m, d))
 }
 
+// MockMustSend ensures that the pipe sends a message with the body given.
 func MockMustSend(t *testing.T, p MockPipe, data []byte, d time.Duration) {
 	msg := mangos.NewMessage(0)
 	msg.Body = append(msg.Body, data...)
 	MockMustSendMsg(t, p, msg, d)
 }
 
+// MockMustSendStr ensures that the pipe sends a message with a payload
+// containing the given string.
 func MockMustSendStr(t *testing.T, p MockPipe, str string, d time.Duration) {
 	msg := mangos.NewMessage(0)
 	msg.Body = []byte(str)
 	MockMustSendMsg(t, p, msg, d)
 }
 
+// MockMustRecvStr ensures that the pipe receives a message with the payload
+// equal to the string.
 func MockMustRecvStr(t *testing.T, p MockPipe, str string, d time.Duration) {
 	m := mangos.NewMessage(0)
 	m.Body = append(m.Body, []byte(str)...)
@@ -455,6 +468,7 @@ func MockMustRecvStr(t *testing.T, p MockPipe, str string, d time.Duration) {
 	MustBeTrue(t, string(msg.Body) == str)
 }
 
+// AddrMock returns a generic address for mock sockets.
 func AddrMock() string {
 	return "mock://mock"
 }

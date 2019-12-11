@@ -37,10 +37,16 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic("Failed to create directory")
 	}
-	os.Chdir(dir)
+	if err = os.Chdir(dir); err != nil {
+		panic("Failed to chdir: " + err.Error())
+	}
 	v := m.Run()
-	os.Chdir(cwd)
-	os.RemoveAll(dir)
+	if err = os.Chdir(cwd); err != nil {
+		panic("Failed to chdir: " + err.Error())
+	}
+	if err = os.RemoveAll(dir); err != nil {
+		panic("Failed to clean up directory: " + err.Error())
+	}
 	os.Exit(v)
 }
 

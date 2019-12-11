@@ -44,7 +44,6 @@ type recvQEntry struct {
 }
 
 type socket struct {
-	sock     protocol.Socket
 	closed   bool
 	ttl      int
 	sendQLen int
@@ -64,7 +63,6 @@ type context struct {
 	sendExpire time.Duration
 	bestEffort bool
 	backtrace  []byte
-	pipeID     uint32 // using ID keeps GC from holding the pipe
 }
 
 // closedQ represents a non-blocking time channel.

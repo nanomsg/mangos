@@ -132,7 +132,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			recvQ := make(chan *protocol.Message, v)
 			sizeQ := make(chan struct{})
 			s.Lock()
-			recvQ, s.recvQ = s.recvQ, recvQ
+			s.recvQ = recvQ
 			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.recvQLen = v
 			s.Unlock()

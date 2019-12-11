@@ -188,10 +188,6 @@ outer:
 		case recvQ <- m:
 			continue
 		case <-sizeQ:
-			s.Lock()
-			sizeQ = s.sizeQ
-			recvQ = s.recvQ
-			s.Unlock()
 			continue
 		case <-p.closeQ:
 			m.Free()

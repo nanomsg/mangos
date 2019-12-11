@@ -134,7 +134,7 @@ func TestXReqResizeSendDiscard(t *testing.T) {
 	MustBeError(t, self.Send([]byte{}), mangos.ErrSendTimeout)
 	MustSucceed(t, self.SetOption(mangos.OptionSendDeadline, time.Millisecond*50))
 	time.AfterFunc(time.Millisecond*5, func() {
-		self.SetOption(mangos.OptionWriteQLen, 1)
+		MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 1))
 	})
 	MustSucceed(t, self.Send([]byte{}))
 	MustSucceed(t, self.Close())

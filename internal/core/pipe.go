@@ -66,7 +66,6 @@ var pipeIDs pipeIDAllocator
 
 type pipeList struct {
 	pipes map[uint32]*pipe
-	next  uint32
 	lock  sync.Mutex
 }
 

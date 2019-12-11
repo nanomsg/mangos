@@ -39,13 +39,11 @@ type msg struct {
 type pipe struct {
 	s      *socket
 	p      protocol.Pipe
-	closed bool
 	sendQ  chan *protocol.Message
 	closeQ chan struct{}
 }
 
 type socket struct {
-	sock     protocol.Socket
 	closed   bool
 	ttl      int
 	sendQLen int
