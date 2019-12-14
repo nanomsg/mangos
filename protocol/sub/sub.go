@@ -51,10 +51,11 @@ type pipe struct {
 }
 
 type context struct {
-	recvq      chan *protocol.Message
 	recvQLen   int
+	recvQ      chan *protocol.Message
+	closeQ     chan struct{}
+	sizeQ      chan struct{}
 	recvExpire time.Duration
-	closeq     chan struct{}
 	closed     bool
 	subs       [][]byte
 	s          *socket
@@ -62,33 +63,36 @@ type context struct {
 
 const defaultQLen = 128
 
-func (*context) SendMsg(m *protocol.Message) error {
+func (*context) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
 func (c *context) RecvMsg() (*protocol.Message, error) {
 
 	s := c.s
-	var timeq <-chan time.Time
+	var timeQ <-chan time.Time
 	s.Lock()
+	recvQ := c.recvQ
+	sizeQ := c.sizeQ
+	closeQ := c.closeQ
 	if c.recvExpire > 0 {
-		timeq = time.After(c.recvExpire)
+		timeQ = time.After(c.recvExpire)
 	}
 	s.Unlock()
 
-Loop:
 	for {
 		select {
-		case <-timeq:
+		case <-timeQ:
 			return nil, protocol.ErrRecvTimeout
-		case <-c.closeq:
+		case <-closeQ:
 			return nil, protocol.ErrClosed
-		case m, ok := <-c.recvq:
-			// Assume c.recvq will only be closed after c.recvq is assigned with a new channel unsubscribe()
-			// Otherwise this becomes a busy wait until timeq trigger or context closed
-			if !ok {
-				continue Loop
-			}
+		case <-sizeQ:
+			s.Lock()
+			sizeQ = c.sizeQ
+			recvQ = c.recvQ
+			s.Unlock()
+			continue
+		case m := <-recvQ:
 			return m, nil
 		}
 	}
@@ -104,11 +108,11 @@ func (c *context) Close() error {
 	c.closed = true
 	delete(s.ctxs, c)
 	s.Unlock()
-	close(c.closeq)
+	close(c.closeQ)
 	return nil
 }
 
-func (*socket) SendMsg(m *protocol.Message) error {
+func (*socket) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
@@ -128,23 +132,22 @@ func (p *pipe) receiver() {
 				// may be modified.
 				dm := m.Dup()
 				select {
-				case c.recvq <- dm:
+				case c.recvQ <- dm:
 				default:
-					// We try to delete the oldest
-					// message.  However, note that
-					// new messages from other pipes
-					// might be coming in on this, and
-					// thus still contending.
 					select {
-					case m2 := <-c.recvq:
+					case m2 := <-c.recvQ:
 						m2.Free()
 					default:
 					}
-					select {
-					case c.recvq <- dm:
-					default:
-						dm.Free()
-					}
+					// We have made room, and as we are
+					// holding the lock, we are guaranteed
+					// to be able to enqueue another
+					// message. (No other pipe can
+					// get in right now.)
+					// NB: If we ever do work to break
+					// up the locking, we will need to
+					// revisit this.
+					c.recvQ <- dm
 				}
 			}
 		}
@@ -169,7 +172,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	return nil
 }
 
-func (s *socket) RemovePipe(pp protocol.Pipe) {
+func (s *socket) RemovePipe(protocol.Pipe) {
 }
 
 func (s *socket) Close() error {
@@ -225,22 +228,27 @@ func (c *context) unsubscribe(topic []byte) error {
 		// Because we have changed the subscription,
 		// we may have messages in the channel that
 		// we don't want any more.  Lets prune those.
-		newchan := make(chan *protocol.Message, c.recvQLen)
-		oldchan := c.recvq
-		c.recvq = newchan
-		close(oldchan)
-		for m := range oldchan {
-			if !c.matches(m) {
-				m.Free()
-				continue
-			}
+		recvQ := make(chan *protocol.Message, c.recvQLen)
+		sizeQ := make(chan struct{})
+		recvQ, c.recvQ = c.recvQ, recvQ
+		sizeQ, c.sizeQ = c.sizeQ, sizeQ
+		close(sizeQ)
+		for {
 			select {
-			case newchan <- m:
+			case m := <-recvQ:
+				if !c.matches(m) {
+					m.Free()
+					continue
+				}
+				// We're holding the lock, so nothing else
+				// can contend for this (pipes must be
+				// waiting) -- so this is guaranteed not to
+				// block.
+				c.recvQ <- m
 			default:
-				m.Free()
+				return nil
 			}
 		}
-		return nil
 	}
 	// Subscription not present
 	return protocol.ErrBadValue
@@ -254,31 +262,14 @@ func (c *context) SetOption(name string, value interface{}) error {
 	switch name {
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok {
-			newchan := make(chan *protocol.Message, v)
+			recvQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			c.s.Lock()
-			oldchan := c.recvq
-			c.recvq = newchan
+			c.recvQ = recvQ
+			sizeQ, c.sizeQ = c.sizeQ, sizeQ
+			c.recvQ = recvQ
 			c.recvQLen = v
-			close(oldchan)
-			for m := range oldchan {
-				select {
-				case c.recvq <- m:
-				default:
-					// Eat an old message to make room
-					select {
-					case m2 := <-c.recvq:
-						m2.Free()
-					default:
-					}
-					// And try to inject the new.  This
-					// can fail due to concurrency.
-					select {
-					case c.recvq <- m:
-					default:
-						m.Free()
-					}
-				}
-			}
+			close(sizeQ)
 			c.s.Unlock()
 			return nil
 		}
@@ -346,8 +337,9 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	}
 	c := &context{
 		s:          s,
-		closeq:     make(chan struct{}),
-		recvq:      make(chan *protocol.Message, s.master.recvQLen),
+		closeQ:     make(chan struct{}),
+		sizeQ:      make(chan struct{}),
+		recvQ:      make(chan *protocol.Message, s.master.recvQLen),
 		recvQLen:   s.master.recvQLen,
 		recvExpire: s.master.recvExpire,
 		subs:       [][]byte{},
@@ -385,8 +377,9 @@ func NewProtocol() protocol.Protocol {
 	}
 	s.master = &context{
 		s:        s,
-		recvq:    make(chan *protocol.Message, defaultQLen),
-		closeq:   make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
 		recvQLen: defaultQLen,
 	}
 	s.ctxs[s.master] = struct{}{}
