@@ -211,7 +211,7 @@ func TestSubRecvResizeContinue(t *testing.T) {
 	p := GetSocket(t, pub.NewSocket)
 	defer MustClose(t, p)
 
-	MustSucceed(t, s.SetOption(OptionRecvDeadline, time.Millisecond*100))
+	MustSucceed(t, s.SetOption(OptionRecvDeadline, time.Second*10))
 	MustSucceed(t, s.SetOption(OptionReadQLen, 10))
 	MustSucceed(t, s.SetOption(OptionSubscribe, []byte{}))
 
