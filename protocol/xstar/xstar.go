@@ -264,10 +264,6 @@ outer:
 			break
 		}
 
-		if len(m.Body) < 4 {
-			m.Free()
-			continue
-		}
 		if len(m.Body) < 4 ||
 			m.Body[0] != 0 || m.Body[1] != 0 || m.Body[2] != 0 ||
 			int(m.Body[3]) >= s.ttl {
