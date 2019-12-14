@@ -76,6 +76,7 @@ func TestSurveyorClosed(t *testing.T) {
 	VerifyClosedClose(t, NewSocket)
 	VerifyClosedDial(t, NewSocket)
 	VerifyClosedListen(t, NewSocket)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
 func TestSurveyorRecvState(t *testing.T) {
@@ -406,4 +407,35 @@ func TestSurveyorMultiContexts(t *testing.T) {
 	for i := 0; i < count; i++ {
 		MustBeTrue(t, recv[i] == repeat)
 	}
+}
+
+func TestSurveyorRecvGarbage(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	mock, _ := MockConnect(t, self)
+	expire := time.Millisecond * 20
+
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, expire))
+
+	MustSendString(t, self, "")
+	MockMustSendStr(t, mock, "abc", expire)
+	MustNotRecv(t, self, mangos.ErrRecvTimeout)
+
+	var msg []byte
+	// No header
+	MustSendString(t, self, "")
+	MockMustSend(t, mock, msg, expire)
+	MustNotRecv(t, self, mangos.ErrRecvTimeout)
+
+	// No request ID
+	MustSendString(t, self, "")
+	msg = append(msg, 0, 1, 2, 3)
+	MockMustSend(t, mock, msg, expire)
+	MustNotRecv(t, self, mangos.ErrRecvTimeout)
+
+	// Also send a bogus header -- no request ID
+	MustSendString(t, self, "")
+	MockMustSendStr(t, mock, "\001\002\003\004", time.Second)
+	MustNotRecv(t, self, mangos.ErrRecvTimeout)
+
+	MustSucceed(t, self.Close())
 }
