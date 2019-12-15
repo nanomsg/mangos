@@ -174,28 +174,32 @@ func TestXReqRecvNoHeader(t *testing.T) {
 
 func TestXReqRecvResizeDiscard(t *testing.T) {
 	self := GetSocket(t, NewSocket)
+	defer MustClose(t, self)
 	mock, _ := MockConnect(t, self)
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 1))
 
-	stopQ := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		time.Sleep(time.Millisecond * 10)
-		MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 2))
-		close(stopQ)
-	}()
-loop:
-	for {
-		select {
-		case <-stopQ:
-			break loop
-		default:
-			MockMustSend(t, mock, []byte{0x80, 0, 0, 1}, time.Second)
+		defer wg.Done()
+		for {
+			println(".")
+			m := mangos.NewMessage(0)
+			m.Body = append(m.Body, 0x80, 0, 0, 1)
+			e := mock.MockSendMsg(m, time.Second)
+			if e != nil {
+				MustBeError(t, e, mangos.ErrClosed)
+				break
+			}
+
 		}
-	}
-	MustSucceed(t, self.Close())
+	}()
+	time.Sleep(time.Millisecond * 50)
+	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 2))
+	time.Sleep(time.Millisecond * 50)
+	MustSucceed(t, mock.Close())
+	wg.Wait()
 }
 
 func TestXReqCloseRecv(t *testing.T) {
