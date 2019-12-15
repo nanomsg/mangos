@@ -170,6 +170,7 @@ func TestDialerPipe(t *testing.T) {
 
 	MustBeTrue(t, m.Pipe.Dialer() == d)
 	MustBeTrue(t, m.Pipe.Listener() == nil)
+	MustBeTrue(t, m.Pipe.Address() == addr)
 	m.Free()
 }
 

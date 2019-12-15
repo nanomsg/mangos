@@ -193,6 +193,7 @@ func TestListenerPipe(t *testing.T) {
 
 	MustBeTrue(t, m.Pipe.Dialer() == nil)
 	MustBeTrue(t, m.Pipe.Listener() == l)
+	MustBeTrue(t, m.Pipe.Address() == addr)
 	m.Free()
 }
 

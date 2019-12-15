@@ -15,11 +15,11 @@
 package core
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"encoding/binary"
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/transport"
 	"sync"
-	"time"
 )
 
 // This is an application-wide global ID allocator.  Unfortunately we need
@@ -36,8 +36,13 @@ func (p *pipeIDAllocator) Get() uint32 {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	if p.used == nil {
+		b := make([]byte, 4)
+		// The following could in theory fail, but in that case
+		// we will wind up with IDs starting at zero.  It should
+		// not happen unless the platform can't get good entropy.
+		_, _ = rand.Read(b)
 		p.used = make(map[uint32]struct{})
-		p.next = uint32(rand.NewSource(time.Now().UnixNano()).Int63())
+		p.next = binary.BigEndian.Uint32(b)
 	}
 	for {
 		id := p.next & 0x7fffffff
