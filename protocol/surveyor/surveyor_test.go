@@ -160,7 +160,7 @@ func TestSurveyorCloseRx(t *testing.T) {
 		MustBeNil(t, v)
 		pass = true
 	}()
-	time.Sleep(time.Millisecond * 10) // to allow go routine to run
+	time.Sleep(time.Millisecond * 50) // to allow go routine to run
 	MustSucceed(t, s.Close())
 	wg.Wait()
 	MustBeTrue(t, pass)
