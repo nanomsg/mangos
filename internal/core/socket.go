@@ -247,6 +247,7 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 		s:             s,
 		reconnMinTime: s.reconnMinTime,
 		reconnMaxTime: s.reconnMaxTime,
+		asynch:        s.dialAsynch,
 		addr:          addr,
 	}
 	for n, v := range options {

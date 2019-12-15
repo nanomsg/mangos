@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -156,31 +156,22 @@ func (d *dialer) pipeClosed() {
 
 func (d *dialer) dial(redial bool) error {
 	d.Lock()
+	if d.closed {
+		d.Unlock()
+		return errors.ErrClosed
+	}
 	if d.asynch {
 		redial = true
 	}
-	if d.dialing || d.closed {
-		// If we already have a dial in progress, then stop.
-		// This really should never occur (see comments below),
-		// but having multiple dialers create multiple pipes is
-		// probably bad.  So be paranoid -- I mean "defensive" --
-		// for now.
-		d.Unlock()
-		return errors.ErrAddrInUse
-	}
+
 	if d.redialer != nil {
 		d.redialer.Stop()
 	}
-	d.dialing = true
 	d.Unlock()
 
 	p, err := d.d.Dial()
 	if err == nil {
 		d.s.addPipe(p, d, nil)
-
-		d.Lock()
-		d.dialing = false
-		d.Unlock()
 		return nil
 	}
 
