@@ -56,7 +56,7 @@ func (p *connipc) Send(msg *Message) error {
 	buf = append(buf, msg.Header...)
 	buf = append(buf, msg.Body...)
 
-	if _, err = p.c.Write(buf[:]); err != nil {
+	if _, err = p.c.Write(buf); err != nil {
 		return err
 	}
 	msg.Free()

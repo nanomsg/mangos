@@ -25,7 +25,7 @@ import (
 var tran = Transport
 
 func TestTcpRecvMax(t *testing.T) {
-	test.TranVerifyMaxRecvSize(t, test.AddrTestTCP(), nil, nil)
+	test.TranVerifyMaxRecvSize(t, tran, nil, nil)
 }
 
 func TestTcpOptions(t *testing.T) {
@@ -109,6 +109,9 @@ func TestTcpAcceptAbort(t *testing.T) {
 	time.Sleep(time.Millisecond * 50)
 }
 
-func TestIcpMessageSize(t *testing.T) {
+func TestTcpMessageSize(t *testing.T) {
 	test.TranVerifyMessageSizes(t, tran, nil, nil)
+}
+func TestTcpMessageHeader(t *testing.T) {
+	test.TranVerifyMessageHeader(t, tran, nil, nil)
 }

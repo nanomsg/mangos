@@ -56,3 +56,6 @@ func TestInpPipeOptions(t *testing.T) {
 func TestInpMessageSize(t *testing.T) {
 	TranVerifyMessageSizes(t, tran, nil, nil)
 }
+func TestInpMessageHeader(t *testing.T) {
+	TranVerifyMessageHeader(t, tran, nil, nil)
+}

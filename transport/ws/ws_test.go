@@ -34,7 +34,7 @@ func TestWsScheme(t *testing.T) {
 	TranVerifyScheme(t, tran)
 }
 func TestWsRecvMax(t *testing.T) {
-	TranVerifyMaxRecvSize(t, AddrTestWS(), nil, nil)
+	TranVerifyMaxRecvSize(t, tran, nil, nil)
 }
 func TestWsAcceptWithoutListen(t *testing.T) {
 	TranVerifyAcceptWithoutListen(t, tran)
@@ -103,4 +103,8 @@ func TestWsPipeOptions(t *testing.T) {
 
 func TestWsMessageSize(t *testing.T) {
 	TranVerifyMessageSizes(t, tran, nil, nil)
+}
+
+func TestWsMessageHeader(t *testing.T) {
+	TranVerifyMessageHeader(t, tran, nil, nil)
 }

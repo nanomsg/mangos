@@ -36,7 +36,7 @@ func init() {
 }
 
 func TestTlsTcpRecvMax(t *testing.T) {
-	test.TranVerifyMaxRecvSize(t, test.AddrTestTLS(), dOpts, lOpts)
+	test.TranVerifyMaxRecvSize(t, tran, dOpts, lOpts)
 }
 
 func TestTlsTcpOptions(t *testing.T) {
@@ -154,4 +154,8 @@ func TestTlsDialInsecure(t *testing.T) {
 
 func TestTlsMessageSize(t *testing.T) {
 	test.TranVerifyMessageSizes(t, tran, dOpts, lOpts)
+}
+
+func TestTlsMessageHeader(t *testing.T) {
+	test.TranVerifyMessageHeader(t, tran, dOpts, lOpts)
 }

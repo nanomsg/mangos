@@ -51,7 +51,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestIpcRecvMax(t *testing.T) {
-	test.TranVerifyMaxRecvSize(t, test.AddrTestIPC(), nil, nil)
+	test.TranVerifyMaxRecvSize(t, tran, nil, nil)
 }
 
 func TestIpcOptions(t *testing.T) {
@@ -85,4 +85,7 @@ func TestIpcListenerClosed(t *testing.T) {
 }
 func TestIpcMessageSize(t *testing.T) {
 	test.TranVerifyMessageSizes(t, tran, nil, nil)
+}
+func TestIpcMessageHeader(t *testing.T) {
+	test.TranVerifyMessageHeader(t, tran, nil, nil)
 }

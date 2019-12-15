@@ -313,9 +313,10 @@ func TranVerifyAcceptWithoutListen(t *testing.T, tran transport.Transport) {
 }
 
 // TranVerifyMaxRecvSize verifies the transport handles maximum receive size properly.
-func TranVerifyMaxRecvSize(t *testing.T, addr string, dOpts, lOpts map[string]interface{}) {
+func TranVerifyMaxRecvSize(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
 	VerifyOptionMaxRecvSize(t, NewMockSocket)
 
+	addr := getScratchAddr(tran)
 	tx := GetMockSocket()
 	rx := GetMockSocket()
 	defer MustClose(t, tx)
@@ -526,6 +527,7 @@ func TranVerifyBadAddress(t *testing.T, addr string, dOpts, lOpts map[string]int
 // TranVerifyListenerClosed verifies that the listener behaves after closed.
 func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[string]interface{}) {
 	sock := GetMockSocket()
+	defer MustClose(t, sock)
 
 	l, e := tran.NewListener(getScratchAddr(tran), sock)
 	MustSucceed(t, e)
@@ -602,6 +604,8 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
 	addr := getScratchAddr(tran)
+	defer MustClose(t, sock1)
+	defer MustClose(t, sock2)
 
 	MustSucceed(t, sock1.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
@@ -639,4 +643,26 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 		}
 		m.Free()
 	}
+}
+
+// TranVerifyMessageHeader verifies that message headers are transmitted.
+func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+	sock1 := GetMockSocket()
+	sock2 := GetMockSocket()
+	addr := getScratchAddr(tran)
+	defer MustClose(t, sock1)
+	defer MustClose(t, sock2)
+
+	MustSucceed(t, sock1.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	MustSucceed(t, sock2.DialOptions(addr, dOpts))
+
+	m := mangos.NewMessage(0)
+	m.Header = append(m.Header, 'h', 'e', 'l', 'l', 'o', ',', ' ')
+	m.Body = append(m.Body, 'w', 'o', 'r', 'l', 'd')
+	MustSendMsg(t, sock1, m)
+	MustRecvString(t, sock2, "hello, world")
 }

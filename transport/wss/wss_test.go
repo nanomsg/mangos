@@ -46,7 +46,7 @@ func TestWssScheme(t *testing.T) {
 	TranVerifyScheme(t, tran)
 }
 func TestWssRecvMax(t *testing.T) {
-	TranVerifyMaxRecvSize(t, AddrTestWS(), dOpts, lOpts)
+	TranVerifyMaxRecvSize(t, tran, dOpts, lOpts)
 }
 func TestWssAcceptWithoutListen(t *testing.T) {
 	TranVerifyAcceptWithoutListen(t, tran)
@@ -86,4 +86,8 @@ func TestWssDialInsecure(t *testing.T) {
 
 func TestWssMessageSize(t *testing.T) {
 	TranVerifyMessageSizes(t, tran, dOpts, lOpts)
+}
+
+func TestWssMessageHeader(t *testing.T) {
+	TranVerifyMessageHeader(t, tran, dOpts, lOpts)
 }
