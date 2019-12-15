@@ -179,7 +179,6 @@ func (s *socket) Close() error {
 
 func (p *pipe) receiver() {
 	s := p.s
-outer:
 	for {
 		m := p.p.RecvMsg()
 		if m == nil {
@@ -188,34 +187,15 @@ outer:
 
 		s.Lock()
 		recvQ := s.recvQ
-		closeQ := s.closeQ
 		s.Unlock()
 
-		// No need to test for resizing here, because we never block
-		// anyway.
+		// No need to test for resizing or close here, because we
+		// never block anyway.
 
 		select {
 		case recvQ <- m:
-		case <-closeQ:
-			m.Free()
-			break outer
-
 		default:
-			// Yank the oldest message first, so we can
-			// inject new stuff.  We really prefer to have
-			// more recent data.
-			select {
-			case m2 := <-recvQ:
-				m2.Free()
-			default:
-			}
-			// We might be contending with other pipes; in that
-			// case we've done the best we can; give up.
-			select {
-			case recvQ <- m:
-			default:
-				m.Free()
-			}
+			m.Free()
 		}
 	}
 	p.close()

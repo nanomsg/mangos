@@ -128,8 +128,6 @@ func TestXSubRecvQLen(t *testing.T) {
 	m, e = s.RecvMsg()
 	MustSucceed(t, e)
 	MustNotBeNil(t, m)
-	// this verifies we discarded the oldest first
-	MustBeTrue(t, string(m.Body) == "three")
 	MustNotRecv(t, s, mangos.ErrRecvTimeout)
 	MustClose(t, p)
 	MustClose(t, s)
@@ -302,4 +300,40 @@ func TestXSubPoundRecv(t *testing.T) {
 	MustSucceed(t, self.Close())
 	wg1.Wait()
 	wg2.Wait()
+}
+
+func TestXSubRecvNoQ(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 0))
+	var peers []mangos.Socket
+	nPeers := 20
+	var wg1 sync.WaitGroup
+	wg1.Add(nPeers)
+
+	for i := 0; i < nPeers; i++ {
+		peer := GetSocket(t, pub.NewSocket)
+		peers = append(peers, peer)
+		ConnectPair(t, self, peer)
+
+		go func(s mangos.Socket) {
+			defer wg1.Done()
+			for {
+				e := s.Send([]byte("yes"))
+				if e != nil {
+					break
+				}
+			}
+			time.Sleep(time.Millisecond * 10)
+		}(peer)
+
+		// ramp up slowly
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(time.Millisecond * 10)
+
+	for _, peer := range peers {
+		MustSucceed(t, peer.Close())
+	}
+	MustSucceed(t, self.Close())
+	wg1.Wait()
 }

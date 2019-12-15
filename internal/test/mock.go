@@ -156,6 +156,8 @@ func (mp *mockPipe) MockRecvMsg(d time.Duration) (*protocol.Message, error) {
 		return nil, mangos.ErrRecvTimeout
 	case m := <-mp.sendQ:
 		return m, nil
+	case <-mp.closeQ:
+		return nil, mangos.ErrClosed
 	}
 }
 
@@ -165,6 +167,8 @@ func (mp *mockPipe) MockSendMsg(m *protocol.Message, d time.Duration) error {
 		return mangos.ErrSendTimeout
 	case mp.recvQ <- m:
 		return nil
+	case <-mp.closeQ:
+		return mangos.ErrClosed
 	}
 }
 
