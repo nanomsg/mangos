@@ -83,3 +83,7 @@ func TestWssDialNoCert(t *testing.T) {
 func TestWssDialInsecure(t *testing.T) {
 	TranVerifyDialInsecure(t, tran)
 }
+
+func TestWssMessageSize(t *testing.T) {
+	TranVerifyMessageSizes(t, tran, dOpts, lOpts)
+}

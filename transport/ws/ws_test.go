@@ -100,3 +100,7 @@ func TestWsResolverChange(t *testing.T) {
 func TestWsPipeOptions(t *testing.T) {
 	TranVerifyPipeOptions(t, tran, nil, nil)
 }
+
+func TestWsMessageSize(t *testing.T) {
+	TranVerifyMessageSizes(t, tran, nil, nil)
+}

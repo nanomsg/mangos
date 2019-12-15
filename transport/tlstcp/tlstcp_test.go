@@ -151,3 +151,7 @@ func TestTlsDialNoCert(t *testing.T) {
 func TestTlsDialInsecure(t *testing.T) {
 	test.TranVerifyDialInsecure(t, tran)
 }
+
+func TestTlsMessageSize(t *testing.T) {
+	test.TranVerifyMessageSizes(t, tran, dOpts, lOpts)
+}

@@ -596,3 +596,47 @@ func TranVerifyDialInsecure(t *testing.T, tran transport.Transport) {
 	}
 	MustSucceed(t, sock.DialOptions(addr, opts))
 }
+
+// TranVerifyMessageSizes verifies we can transport a variety of message sizes
+func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+	sock1 := GetMockSocket()
+	sock2 := GetMockSocket()
+	addr := getScratchAddr(tran)
+
+	MustSucceed(t, sock1.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	MustSucceed(t, sock2.DialOptions(addr, dOpts))
+
+	for i := 0; i < 20; i++ {
+		sz := 1 << i
+		m := mangos.NewMessage(sz)
+		for j := 0; j < sz; j++ {
+			m.Body = append(m.Body, byte(i))
+		}
+		MustSendMsg(t, sock1, m)
+		m = MustRecvMsg(t, sock2)
+		MustBeTrue(t, len(m.Body) == sz)
+		for j := 0; j < sz; j++ {
+			MustBeTrue(t, m.Body[j] == byte(i))
+		}
+		m.Free()
+	}
+	// And back down:
+	for i := 20; i >= 0; i-- {
+		sz := 1 << i
+		m := mangos.NewMessage(sz)
+		for j := 0; j < sz; j++ {
+			m.Body = append(m.Body, byte(i))
+		}
+		MustSendMsg(t, sock1, m)
+		m = MustRecvMsg(t, sock2)
+		MustBeTrue(t, len(m.Body) == sz)
+		for j := 0; j < sz; j++ {
+			MustBeTrue(t, m.Body[j] == byte(i))
+		}
+		m.Free()
+	}
+}

@@ -108,3 +108,7 @@ func TestTcpAcceptAbort(t *testing.T) {
 	// we can do about it.
 	time.Sleep(time.Millisecond * 50)
 }
+
+func TestIcpMessageSize(t *testing.T) {
+	test.TranVerifyMessageSizes(t, tran, nil, nil)
+}

@@ -83,3 +83,6 @@ func TestIpcSendRecv(t *testing.T) {
 func TestIpcListenerClosed(t *testing.T) {
 	test.TranVerifyListenerClosed(t, tran, nil)
 }
+func TestIpcMessageSize(t *testing.T) {
+	test.TranVerifyMessageSizes(t, tran, nil, nil)
+}

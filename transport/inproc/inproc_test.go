@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -52,4 +52,7 @@ func TestInpListenerClosed(t *testing.T) {
 }
 func TestInpPipeOptions(t *testing.T) {
 	TranVerifyPipeOptions(t, tran, nil, nil)
+}
+func TestInpMessageSize(t *testing.T) {
+	TranVerifyMessageSizes(t, tran, nil, nil)
 }
