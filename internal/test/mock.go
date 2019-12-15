@@ -28,14 +28,15 @@ import (
 // ListenerDialer does both Listen and Dial.  (That is, it is both
 // a dialer and a listener at once.)
 type mockCreator struct {
-	pipeQ      chan MockPipe
-	closeQ     chan struct{}
-	errorQ     chan error
-	proto      uint16
-	deferClose bool // sometimes we don't want close to really work yet
-	closed     bool
-	addr       string
-	lock       sync.Mutex
+	pipeQ       chan MockPipe
+	closeQ      chan struct{}
+	errorQ      chan error
+	proto       uint16
+	deferClose  bool // sometimes we don't want close to really work yet
+	closed      bool
+	addr        string
+	maxRecvSize int
+	lock        sync.Mutex
 }
 
 // mockPipe implements a mocked transport.Pipe
@@ -250,6 +251,16 @@ type MockCreator interface {
 
 	// Address returns the address.
 	Address() string
+
+	// InjectError is used to inject a single error.
+	InjectError(error)
+}
+
+func (mc *mockCreator) InjectError(e error) {
+	select {
+	case mc.errorQ <- e:
+	default:
+	}
 }
 
 func (mc *mockCreator) getPipe() (transport.Pipe, error) {
@@ -275,6 +286,8 @@ func (mc *mockCreator) Listen() error {
 	select {
 	case e := <-mc.errorQ:
 		return e
+	case <-mc.closeQ:
+		return mangos.ErrClosed
 	default:
 		return nil
 	}
@@ -284,6 +297,12 @@ func (mc *mockCreator) SetOption(name string, val interface{}) error {
 	switch name {
 	case "mockError":
 		return val.(error)
+	case mangos.OptionMaxRecvSize:
+		if v, ok := val.(int); ok && v >= 0 {
+			mc.maxRecvSize = v
+			return nil
+		}
+		return mangos.ErrBadValue
 	}
 	return mangos.ErrBadOption
 }
@@ -294,6 +313,8 @@ func (mc *mockCreator) GetOption(name string) (interface{}, error) {
 		return mc, nil
 	case "mockError":
 		return nil, mangos.ErrProtoState
+	case mangos.OptionMaxRecvSize:
+		return mc.maxRecvSize, nil
 	}
 	return nil, mangos.ErrBadOption
 }

@@ -79,7 +79,7 @@ func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 	if s.proto.AddPipe(p) != nil {
 		p.lock.Unlock()
 		s.pipes.Remove(p)
-		go p.Close()
+		go p.close()
 		return
 	}
 	p.added = true
@@ -276,7 +276,7 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 	s.Lock()
 	if s.closed {
 		s.Unlock()
-		d.Close()
+		_ = d.Close()
 		return nil, mangos.ErrClosed
 	}
 	s.dialers = append(s.dialers, d)
@@ -312,7 +312,7 @@ func (s *socket) NewListener(addr string, options map[string]interface{}) (mango
 	}
 	for n, v := range options {
 		if err = tl.SetOption(n, v); err != nil {
-			tl.Close()
+			_ = tl.Close()
 			return nil, err
 		}
 	}
@@ -330,7 +330,7 @@ func (s *socket) NewListener(addr string, options map[string]interface{}) (mango
 	s.Lock()
 	if s.closed {
 		s.Unlock()
-		l.Close()
+		_ = l.Close()
 		return nil, mangos.ErrClosed
 	}
 	s.listeners = append(s.listeners, l)
