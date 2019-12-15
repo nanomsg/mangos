@@ -69,6 +69,9 @@ func (d *dialer) Close() error {
 	if d.closed {
 		return mangos.ErrClosed
 	}
+	if d.redialer != nil {
+		d.redialer.Stop()
+	}
 	d.closed = true
 	return nil
 }
@@ -101,7 +104,7 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 func (d *dialer) SetOption(n string, v interface{}) error {
 	switch n {
 	case mangos.OptionReconnectTime:
-		if v, ok := v.(time.Duration); ok {
+		if v, ok := v.(time.Duration); ok && v >= 0 {
 			d.Lock()
 			d.reconnMinTime = v
 			d.Unlock()
@@ -109,7 +112,7 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 		}
 		return mangos.ErrBadValue
 	case mangos.OptionMaxReconnectTime:
-		if v, ok := v.(time.Duration); ok {
+		if v, ok := v.(time.Duration); ok && v >= 0 {
 			d.Lock()
 			d.reconnMaxTime = v
 			d.Unlock()
@@ -163,10 +166,6 @@ func (d *dialer) dial(redial bool) error {
 	if d.asynch {
 		redial = true
 	}
-
-	if d.redialer != nil {
-		d.redialer.Stop()
-	}
 	d.Unlock()
 
 	p, err := d.d.Dial()
@@ -185,11 +184,6 @@ func (d *dialer) dial(redial bool) error {
 	// 1. Initial dialing (via Dial())
 	// 2. After a previously created pipe fails and is closed due to error.
 	// 3. After timing out from a failed connection attempt.
-	//
-	// The above cases should be mutually exclusive.  But paranoia.
-	// Consider removing the d.dialing logic later if we can prove
-	// that this never occurs.
-	d.dialing = false
 
 	if !redial {
 		return err

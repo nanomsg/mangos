@@ -399,6 +399,8 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 		return s.reconnMinTime, nil
 	case mangos.OptionMaxReconnectTime:
 		return s.reconnMaxTime, nil
+	case mangos.OptionDialAsynch:
+		return s.dialAsynch, nil
 	}
 	return nil, mangos.ErrBadOption
 }

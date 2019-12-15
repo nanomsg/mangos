@@ -280,7 +280,11 @@ func (mc *mockCreator) Listen() error {
 	}
 }
 
-func (mc *mockCreator) SetOption(string, interface{}) error {
+func (mc *mockCreator) SetOption(name string, val interface{}) error {
+	switch name {
+	case "mockError":
+		return val.(error)
+	}
 	return mangos.ErrBadOption
 }
 
@@ -288,6 +292,8 @@ func (mc *mockCreator) GetOption(name string) (interface{}, error) {
 	switch name {
 	case "mock":
 		return mc, nil
+	case "mockError":
+		return nil, mangos.ErrProtoState
 	}
 	return nil, mangos.ErrBadOption
 }
