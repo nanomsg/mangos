@@ -223,7 +223,6 @@ outer:
 			s.Lock()
 			rq := s.recvQ
 			zq := s.sizeQ
-			cq := s.closeQ
 			s.Unlock()
 
 			select {
@@ -232,9 +231,6 @@ outer:
 			case <-zq:
 				continue inner
 			case <-p.closeQ:
-				m.Free()
-				break outer
-			case <-cq:
 				m.Free()
 				break outer
 			}
