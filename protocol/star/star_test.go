@@ -15,170 +15,56 @@
 package star
 
 import (
-	"math/rand"
+	"nanomsg.org/go/mangos/v2/protocol/xstar"
 	"testing"
-	"time"
 
 	"nanomsg.org/go/mangos/v2"
 	. "nanomsg.org/go/mangos/v2/internal/test"
+	. "nanomsg.org/go/mangos/v2/protocol"
 	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 )
 
-type starTester struct {
-	id     int
-	sock   mangos.Socket
-	rdoneq chan bool
-	sdoneq chan bool
+func TestStarIdentity(t *testing.T) {
+	id := GetSocket(t, NewSocket).Info()
+	MustBeTrue(t, id.Self == ProtoStar)
+	MustBeTrue(t, id.Peer == ProtoStar)
+	MustBeTrue(t, id.SelfName == "star")
+	MustBeTrue(t, id.PeerName == "star")
 }
 
-func starTestSender(t *testing.T, bt *starTester, cnt int) {
-	defer close(bt.sdoneq)
-	for i := 0; i < cnt; i++ {
-		// Inject a small delay to give receivers a chance to catch up
-		// Maximum is 10 msec.
-		d := time.Duration(rand.Uint32() % 10000)
-		time.Sleep(d * time.Microsecond)
-		msg := mangos.NewMessage(2)
-		msg.Body = append(msg.Body, byte(bt.id), byte(i))
-		if err := bt.sock.SendMsg(msg); err != nil {
-			tstr := time.Now().Format(time.StampMilli)
-			t.Errorf("%s: Peer %d send %d fail: %v", tstr, bt.id, i, err)
-			return
-		}
-	}
+func TestStarCooked(t *testing.T) {
+	VerifyCooked(t, NewSocket)
 }
 
-func starTestReceiver(t *testing.T, bt *starTester, cnt int, numID int) {
-	var rcpt = make([]int, numID)
-	defer close(bt.rdoneq)
-
-	for tot := 0; tot < (numID-1)*cnt; {
-		msg, err := bt.sock.RecvMsg()
-		now := time.Now().Format(time.StampMilli)
-		if err != nil {
-			t.Errorf("%s: Peer %d: Recv fail: %v", now, bt.id, err)
-			return
-		}
-
-		if len(msg.Body) != 2 {
-			t.Errorf("%s: Peer %d: Received wrong length", now, bt.id)
-			return
-		}
-		peer := int(msg.Body[0])
-		if peer == bt.id {
-			t.Errorf("%s: Peer %d: Got its own message!", now, bt.id)
-			return
-		}
-		if int(msg.Body[1]) != rcpt[peer] {
-			t.Errorf("%s: Peer %d: Bad message from peer %d: %d s/b %d",
-				now, bt.id, peer, msg.Body[1], rcpt[peer])
-			return
-		}
-		if int(msg.Body[1]) >= cnt {
-			t.Errorf("%s: Peer %d: Too many from peer %d", now, bt.id,
-				peer)
-			return
-		}
-		rcpt[peer]++
-		tot++
-		msg.Free()
-	}
+func TestStarClosed(t *testing.T) {
+	VerifyClosedRecv(t, NewSocket)
+	VerifyClosedSend(t, NewSocket)
+	VerifyClosedClose(t, NewSocket)
+	VerifyClosedDial(t, NewSocket)
+	VerifyClosedListen(t, NewSocket)
+	VerifyClosedAddPipe(t, NewSocket)
 }
 
-func starTestNewServer(t *testing.T, addr string, id int) *starTester {
-	var err error
-	bt := &starTester{id: id, rdoneq: make(chan bool), sdoneq: make(chan bool)}
+func TestStarDiscardHeader(t *testing.T) {
+	s1 := GetSocket(t, NewSocket)
+	s2 := GetSocket(t, NewSocket)
+	ConnectPair(t, s1, s2)
 
-	if bt.sock, err = NewSocket(); err != nil {
-		t.Errorf("Failed getting server %d socket: %v", id, err)
-		return nil
-	}
-	if err = bt.sock.Listen(addr); err != nil {
-		t.Errorf("Failed server %d listening: %v", id, err)
-		bt.sock.Close()
-		return nil
-	}
-	return bt
+	m := mangos.NewMessage(0)
+	m.Header = append(m.Header, 0, 1, 2, 3)
+	m.Body = append(m.Body, 'a', 'b', 'c')
+
+	MustSendMsg(t, s1, m)
+	m = MustRecvMsg(t, s2)
+	MustBeTrue(t, len(m.Header) == 0)
+	MustBeTrue(t, string(m.Body) == "abc")
 }
 
-func starTestNewClient(t *testing.T, addr string, id int) *starTester {
-	var err error
-	bt := &starTester{id: id, rdoneq: make(chan bool), sdoneq: make(chan bool)}
-
-	if bt.sock, err = NewSocket(); err != nil {
-		t.Errorf("Failed getting client %d socket: %v", id, err)
-		return nil
-	}
-	if err = bt.sock.Dial(addr); err != nil {
-		t.Errorf("Failed client %d dialing: %v", id, err)
-		bt.sock.Close()
-		return nil
-	}
-	return bt
-}
-
-func starTestCleanup(t *testing.T, bts []*starTester) {
-	time.Sleep(time.Second / 2)
-	for id := 0; id < len(bts); id++ {
-		if bts[id].sock != nil {
-			bts[id].sock.Close()
-		}
-	}
-}
-
-func TestStar(t *testing.T) {
-	addr := AddrTestInp()
-	num := 5
-	pkts := 7
-	bts := make([]*starTester, num)
-	defer starTestCleanup(t, bts)
-
-	for id := 0; id < num; id++ {
-		if id == 0 {
-			bts[id] = starTestNewServer(t, addr, id)
-		} else {
-			bts[id] = starTestNewClient(t, addr, id)
-		}
-		if bts[id] == nil {
-			t.Errorf("Failed creating %d", id)
-			return
-		}
-	}
-
-	// start receivers first... avoids first missed dropped packet
-	for id := 0; id < num; id++ {
-		go starTestReceiver(t, bts[id], pkts, num)
-	}
-
-	// wait a little just to be sure go routines are all running
-	time.Sleep(time.Second / 7)
-
-	// then start senders
-	for id := 0; id < num; id++ {
-		go starTestSender(t, bts[id], pkts)
-	}
-
-	tmout := time.After(5 * time.Second)
-
-	for id := 0; id < num; id++ {
-		select {
-		case <-bts[id].sdoneq:
-			continue
-		case <-tmout:
-			t.Errorf("%s: Timeout waiting for sender id %d",
-				time.Now().Format(time.StampMilli), id)
-			return
-		}
-	}
-
-	for id := 0; id < num; id++ {
-		select {
-		case <-bts[id].rdoneq:
-			continue
-		case <-tmout:
-			t.Errorf("%s: Timeout waiting for receiver id %d",
-				time.Now().Format(time.StampMilli), id)
-			return
-		}
-	}
+func TestStarTTL(t *testing.T) {
+	SetTTLZero(t, NewSocket)
+	SetTTLNegative(t, NewSocket)
+	SetTTLTooBig(t, NewSocket)
+	SetTTLNotInt(t, NewSocket)
+	SetTTL(t, NewSocket)
+	TTLDropTest(t, NewSocket, NewSocket, xstar.NewSocket, xstar.NewSocket)
 }
