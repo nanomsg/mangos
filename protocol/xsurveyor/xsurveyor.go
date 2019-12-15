@@ -266,15 +266,11 @@ outer:
 		s.Lock()
 		recvQ := s.recvQ
 		sizeQ := s.sizeQ
-		closeQ := s.closeQ
 		s.Unlock()
 
 		select {
 		case recvQ <- m:
 		case <-p.closeQ:
-			m.Free()
-			break outer
-		case <-closeQ:
 			m.Free()
 			break outer
 		case <-sizeQ:
