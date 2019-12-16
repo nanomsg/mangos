@@ -204,6 +204,8 @@ func GetMockSocket() protocol.Socket {
 	})
 }
 
+// GetMockSocketRaw is an extended form to get a mocked socket, with particular
+// properties set (including the response to GetOption() for Raw.)
 func GetMockSocketRaw(proto, peer uint16, name, peerName string, raw interface{}, err error) protocol.Socket {
 	return protocol.MakeSocket(&mockSock{
 		recvQ:    make(chan *protocol.Message, 1),
