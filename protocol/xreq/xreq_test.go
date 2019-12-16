@@ -167,7 +167,7 @@ func TestXReqRecvNoHeader(t *testing.T) {
 
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 2))
 	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond*50))
-	MockMustSend(t, mock, []byte{}, time.Millisecond*5)
+	MockMustSend(t, mock, []byte{}, time.Second)
 	MustNotRecv(t, self, mangos.ErrRecvTimeout)
 	MustSucceed(t, self.Close())
 }
@@ -184,7 +184,6 @@ func TestXReqRecvResizeDiscard(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for {
-			println(".")
 			m := mangos.NewMessage(0)
 			m.Body = append(m.Body, 0x80, 0, 0, 1)
 			e := mock.MockSendMsg(m, time.Second)

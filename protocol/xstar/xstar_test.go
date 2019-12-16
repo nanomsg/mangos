@@ -117,7 +117,7 @@ func TestXStarRecvNoHeader(t *testing.T) {
 
 	MustSucceed(t, self.SetOption(OptionReadQLen, 2))
 	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond*50))
-	MockMustSend(t, mock, []byte{}, time.Millisecond*5)
+	MockMustSend(t, mock, []byte{}, time.Second)
 	MustNotRecv(t, self, ErrRecvTimeout)
 	MustSucceed(t, self.Close())
 }
