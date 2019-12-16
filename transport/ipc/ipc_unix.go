@@ -1,4 +1,4 @@
-// +build !windows,!nacl,!plan9
+// +build !windows,!plan9,!js
 
 // Copyright 2019 The Mangos Authors
 //
@@ -102,14 +102,14 @@ func (l *listener) Listen() error {
 		return mangos.ErrClosed
 	default:
 	}
-	if l.listener != nil {
-		return mangos.ErrAddrInUse
-	}
 	listener, err := net.ListenUnix("unix", l.addr)
 
 	if err != nil && (isSyscallError(err, syscall.EADDRINUSE) || isSyscallError(err, syscall.EEXIST)) {
 		l.removeStaleIPC()
 		listener, err = net.ListenUnix("unix", l.addr)
+		if isSyscallError(err, syscall.EADDRINUSE) || isSyscallError(err, syscall.EEXIST) {
+			err = mangos.ErrAddrInUse
+		}
 	}
 	if err != nil {
 		return err
@@ -187,6 +187,11 @@ func (l *listener) GetOption(n string) (interface{}, error) {
 }
 
 func (l *listener) removeStaleIPC() {
+	addr := l.addr.String()
+	// if it's not a socket, then leave it alone!
+	if st, err := os.Stat(addr); err != nil || st.Mode()&os.ModeType != os.ModeSocket {
+		return
+	}
 	conn, err := net.DialTimeout("unix", l.addr.String(), 100*time.Millisecond)
 	if err != nil && isSyscallError(err, syscall.ECONNREFUSED) {
 		os.Remove(l.addr.String())
@@ -216,9 +221,9 @@ func (t ipcTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, e
 		return nil, err
 	}
 
-	if d.addr, err = net.ResolveUnixAddr("unix", addr); err != nil {
-		return nil, err
-	}
+	// ignoring the errors, because this cannot fail on POSIX systems;
+	// the only error conditions are if the network is not "unix"
+	d.addr, _ = net.ResolveUnixAddr("unix", addr)
 	return d, nil
 }
 
@@ -235,10 +240,8 @@ func (t ipcTran) NewListener(addr string, sock mangos.Socket) (transport.Listene
 		return nil, err
 	}
 
-	if l.addr, err = net.ResolveUnixAddr("unix", addr); err != nil {
-		return nil, err
-	}
-
+	// ignoring the errors, as it cannot fail.
+	l.addr, _ = net.ResolveUnixAddr("unix", addr)
 	return l, nil
 }
 
