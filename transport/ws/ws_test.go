@@ -15,7 +15,11 @@
 package ws
 
 import (
+	"github.com/gorilla/websocket"
+	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"nanomsg.org/go/mangos/v2"
 	. "nanomsg.org/go/mangos/v2/internal/test"
@@ -107,4 +111,133 @@ func TestWsMessageSize(t *testing.T) {
 
 func TestWsMessageHeader(t *testing.T) {
 	TranVerifyMessageHeader(t, tran, nil, nil)
+}
+func TestWsSendAbort(t *testing.T) {
+	wd := &websocket.Dialer{}
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestWS()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+
+	wd.Subprotocols = []string{sock.Info().PeerName + ".sp.nanomsg.org"}
+	ws, _, e := wd.Dial(addr, nil)
+	MustSucceed(t, e)
+	MustSend(t, sock, make([]byte, 2*1024*1024)) // TCP window size is 64k
+	time.Sleep(time.Millisecond * 100)
+	MustSucceed(t, ws.Close())
+	MustSend(t, sock, make([]byte, 2*1024*1024)) // TCP window size is 64k
+}
+
+func TestWsCheckOriginDefault(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	l, e := sock.NewListener(AddrTestWS(), nil)
+	MustSucceed(t, e)
+	v, e := l.GetOption(OptionWebSocketCheckOrigin)
+	MustSucceed(t, e)
+	b, ok := v.(bool)
+	MustBeTrue(t, ok)
+	MustBeTrue(t, b)
+
+	MustSucceed(t, l.SetOption(OptionWebSocketCheckOrigin, false))
+	MustSucceed(t, l.SetOption(OptionWebSocketCheckOrigin, true))
+}
+
+func TestWsCheckOriginDisabled(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	peer := GetMockSocket()
+	defer MustClose(t, peer)
+	addr := AddrTestWS()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, l.SetOption(OptionWebSocketCheckOrigin, false))
+	MustSucceed(t, l.Listen())
+	MustSucceed(t, peer.Dial(addr))
+	MustSucceed(t, e)
+}
+
+func TestWsBadWsVersion(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestWS()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+
+	url := "http://" + addr[len("ws://"):]
+	req, e := http.NewRequest("GET", url, strings.NewReader(""))
+	MustSucceed(t, e)
+	req.Header.Set("Sec-WebSocket-Version", "10")
+	req.Header.Set("Sec-WebSocket-Protocol", sock.Info().PeerName+".sp.nanomsg.org")
+
+	client := &http.Client{}
+	res, e := client.Do(req)
+	MustSucceed(t, e)
+	MustBeTrue(t, res.StatusCode == http.StatusBadRequest)
+}
+
+func TestWsCloseOneOfTwo(t *testing.T) {
+	sock1 := GetMockSocket()
+	defer MustClose(t, sock1)
+	sock2 := GetMockSocket()
+	defer MustClose(t, sock2)
+	peer := GetMockSocket()
+	defer MustClose(t, peer)
+
+	addr := AddrTestWS()
+	addr1 := addr + "redline"
+	l1, e := sock1.NewListener(addr1, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l1.Listen())
+
+	muxi, e := l1.GetOption(OptionWebSocketMux)
+	if e != nil {
+		t.Errorf("Failed get mux: %v", e)
+	}
+
+	addr2 := addr + "blueline"
+	l2, e := sock2.NewListener(addr2, nil)
+	MustSucceed(t, e)
+	i2, e := l2.GetOption(OptionWebSocketHandler)
+	MustSucceed(t, e)
+	h2, ok := i2.(http.Handler)
+	MustBeTrue(t, ok)
+
+	mux := muxi.(*http.ServeMux)
+	mux.Handle("/blueline", h2)
+
+	e = l2.Listen()
+	MustSucceed(t, e)
+
+	MustSucceed(t, l2.Close())
+
+	MustBeError(t, peer.Dial(addr2), mangos.ErrBadProto)
+	MustSucceed(t, peer.Dial(addr1))
+	// Nothing here, so that's a 404... which we treat as proto error.
+	MustBeError(t, peer.Dial(addr+"nobody"), mangos.ErrBadProto)
+}
+
+func TestWsClosePending(t *testing.T) {
+	addr := AddrTestWS()
+	sock1 := GetMockSocket()
+	defer MustClose(t, sock1)
+	sock2 := GetMockSocket()
+	defer MustClose(t, sock2)
+	sock3 := GetMockSocket()
+	defer MustClose(t, sock3)
+
+	l, e := Transport.NewListener(addr, sock1)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+
+	// We don't *accept* them.
+
+	MustSucceed(t, sock2.Dial(addr))
+	MustSucceed(t, sock3.Dial(addr))
+
+	time.Sleep(time.Millisecond * 100)
+	MustSucceed(t, l.Close())
+	time.Sleep(time.Millisecond * 100)
 }

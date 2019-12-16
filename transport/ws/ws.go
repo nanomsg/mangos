@@ -270,6 +270,8 @@ func (l *listener) SetOption(n string, v interface{}) error {
 		if v, ok := v.(bool); ok {
 			if !v {
 				l.ug.CheckOrigin = func(r *http.Request) bool { return true }
+			} else {
+				l.ug.CheckOrigin = nil
 			}
 		}
 	}
@@ -380,12 +382,6 @@ func (l *listener) Accept() (transport.Pipe, error) {
 func (l *listener) handler(ws *websocket.Conn, req *http.Request) {
 	l.lock.Lock()
 
-	if !l.running {
-		_ = ws.Close()
-		l.lock.Unlock()
-		return
-	}
-
 	w := &wsPipe{
 		ws:      ws,
 		addr:    l.addr,
@@ -450,6 +446,13 @@ func (l *listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SP protocol mis-match", http.StatusBadRequest)
 		return
 	}
+	l.lock.Lock()
+	if !l.running {
+		l.lock.Unlock()
+		http.Error(w, "No handler at that address", http.StatusNotFound)
+		return
+	}
+	l.lock.Unlock()
 	ws, err := l.ug.Upgrade(w, r, nil)
 	if err != nil {
 		return
