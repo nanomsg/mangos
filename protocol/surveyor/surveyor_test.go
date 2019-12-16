@@ -329,6 +329,29 @@ func TestSurveyorContextClosed(t *testing.T) {
 	MustBeError(t, e, mangos.ErrClosed)
 }
 
+func TestSurveyorContextCloseAbort(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	defer MustClose(t, s)
+
+	c, e := s.OpenContext()
+	MustSucceed(t, e)
+	MustNotBeNil(t, c)
+	MustSucceed(t, c.SetOption(mangos.OptionRecvDeadline, time.Second))
+
+	// To get us an id.
+	MustSucceed(t, c.Send([]byte{}))
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond * 50)
+		MustSucceed(t, c.Close())
+	}()
+
+	_, e = c.Recv()
+	MustBeError(t, e, mangos.ErrClosed)
+}
+
 // This sets up a bunch of contexts to run in parallel, and verifies that
 // they all seem to run with no mis-deliveries.
 func TestSurveyorMultiContexts(t *testing.T) {
