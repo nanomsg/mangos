@@ -299,6 +299,13 @@ func (mc *mockCreator) SetOption(name string, val interface{}) error {
 		return val.(error)
 	case mangos.OptionMaxRecvSize:
 		if v, ok := val.(int); ok && v >= 0 {
+			// These are magical values used for test validation.
+			switch v {
+			case 1001:
+				return mangos.ErrBadValue
+			case 1002:
+				return mangos.ErrBadOption
+			}
 			mc.maxRecvSize = v
 			return nil
 		}

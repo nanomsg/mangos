@@ -29,6 +29,11 @@ func TestListenerBadScheme(t *testing.T) {
 	l, e := self.NewListener("bad://nothere", nil)
 	MustBeError(t, e, mangos.ErrBadTran)
 	MustBeTrue(t, l == nil)
+
+	// Malformed, needs :// bit
+	l, e = self.NewListener("inproc:nothere", nil)
+	MustBeError(t, e, mangos.ErrBadTran)
+	MustBeTrue(t, l == nil)
 }
 
 func TestListenerAddress(t *testing.T) {
@@ -120,6 +125,28 @@ func TestListenerOptionsMap(t *testing.T) {
 	MustBeTrue(t, ok)
 	MustBeTrue(t, sz == 3172)
 
+}
+
+func TestListenerOptionsInherit(t *testing.T) {
+	AddMockTransport()
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrMock()
+
+	// This should force listener not to alloc (bad option value)
+	MustSucceed(t, sock.SetOption(mangos.OptionMaxRecvSize, 1001))
+	l, e := sock.NewListener(addr, nil)
+	MustBeError(t, e, mangos.ErrBadValue)
+	MustBeTrue(t, l == nil)
+	MustSucceed(t, sock.SetOption(mangos.OptionMaxRecvSize, 1002))
+	l, e = sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustBeTrue(t, l != nil)
+
+	MustSucceed(t, sock.SetOption(mangos.OptionMaxRecvSize, 500))
+	v, e := l.GetOption(mangos.OptionMaxRecvSize)
+	MustSucceed(t, e)
+	MustBeTrue(t, v.(int) == 500)
 }
 
 func TestListenerClosed(t *testing.T) {

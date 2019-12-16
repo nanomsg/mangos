@@ -294,9 +294,9 @@ func TestRespondentMultiContexts(t *testing.T) {
 			peer := binary.BigEndian.Uint32(m.Body)
 			recv[int(peer)]++
 			MustSucceed(t, c1.Send([]byte("answer")))
-			m, e = c2.RecvMsg()
+			b, e := c2.Recv()
 			MustSucceed(t, e)
-			MustBeTrue(t, string(m.Body) == "answer")
+			MustBeTrue(t, string(b) == "answer")
 			send[index]++
 		}
 	}

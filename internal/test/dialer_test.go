@@ -31,6 +31,11 @@ func TestDialerBadScheme(t *testing.T) {
 	d, e := self.NewDialer("bad://nothere", nil)
 	MustBeError(t, e, mangos.ErrBadTran)
 	MustBeTrue(t, d == nil)
+
+	// Malformed, needs :// bit
+	d, e = self.NewDialer("inproc:nothere", nil)
+	MustBeError(t, e, mangos.ErrBadTran)
+	MustBeTrue(t, d == nil)
 }
 
 func TestDialerAddress(t *testing.T) {
@@ -116,7 +121,27 @@ func TestDialerOptionsMap(t *testing.T) {
 	d, e := sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, d == nil)
+
+	opts = make(map[string]interface{})
 	opts[mangos.OptionMaxRecvSize] = -1
+	d, e = sock.NewDialer(addr, opts)
+	MustBeError(t, e, mangos.ErrBadValue)
+	MustBeTrue(t, d == nil)
+
+	opts = make(map[string]interface{})
+	opts[mangos.OptionMaxRecvSize] = 1001
+	d, e = sock.NewDialer(addr, opts)
+	MustBeError(t, e, mangos.ErrBadValue)
+	MustBeTrue(t, d == nil)
+
+	opts = make(map[string]interface{})
+	opts[mangos.OptionMaxRecvSize] = 1002
+	d, e = sock.NewDialer(addr, opts)
+	MustBeError(t, e, mangos.ErrBadOption)
+	MustBeTrue(t, d == nil)
+
+	opts = make(map[string]interface{})
+	opts[mangos.OptionDialAsynch] = -1
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, d == nil)
@@ -147,6 +172,29 @@ func TestDialerOptionsMap(t *testing.T) {
 	sz, ok := v.(int)
 	MustBeTrue(t, ok)
 	MustBeTrue(t, sz == 3172)
+
+}
+
+func TestDialerOptionsInherit(t *testing.T) {
+	AddMockTransport()
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrMock()
+
+	// This should force listener not to alloc (bad option value)
+	MustSucceed(t, sock.SetOption(mangos.OptionMaxRecvSize, 1001))
+	d, e := sock.NewDialer(addr, nil)
+	MustBeError(t, e, mangos.ErrBadValue)
+	MustBeTrue(t, d == nil)
+	MustSucceed(t, sock.SetOption(mangos.OptionMaxRecvSize, 1002))
+	d, e = sock.NewDialer(addr, nil)
+	MustSucceed(t, e)
+	MustBeTrue(t, d != nil)
+
+	MustSucceed(t, sock.SetOption(mangos.OptionMaxRecvSize, 500))
+	v, e := d.GetOption(mangos.OptionMaxRecvSize)
+	MustSucceed(t, e)
+	MustBeTrue(t, v.(int) == 500)
 
 }
 

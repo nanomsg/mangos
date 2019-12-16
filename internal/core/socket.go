@@ -15,7 +15,6 @@
 package core
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -200,13 +199,6 @@ func (s *socket) Recv() ([]byte, error) {
 	b = append(b, msg.Body...)
 	msg.Free()
 	return b, nil
-}
-
-// String just emits a very high level debug.  This avoids
-// triggering race conditions from trying to print %v without
-// holding locks on structure members.
-func (s *socket) String() string {
-	return fmt.Sprintf("SOCKET[%s](%p)", s.proto.Info().SelfName, s)
 }
 
 func (s *socket) getTransport(addr string) transport.Transport {
