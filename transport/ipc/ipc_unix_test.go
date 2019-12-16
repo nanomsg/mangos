@@ -23,6 +23,7 @@ import (
 	"os"
 	"syscall"
 	"testing"
+	"time"
 
 	. "nanomsg.org/go/mangos/v2/internal/test"
 )
@@ -129,4 +130,57 @@ func TestIpcFileConflictListen(t *testing.T) {
 
 	MustBeError(t, self.Listen(addr1), mangos.ErrAddrInUse)
 	defer MustClose(t, self)
+}
+
+type testAddr string
+
+func (a testAddr) testDial() (net.Conn, error) {
+	return net.Dial("unix", string(a)[len("ipc://"):])
+}
+
+func TestIpcAbortHandshake(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	c, e := testAddr(addr).testDial()
+	MustSucceed(t, e)
+	MustSucceed(t, c.Close())
+}
+
+func TestIpcBadHandshake(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	TranSendConnBadHandshakes(t, testAddr(addr).testDial)
+}
+
+func TestIpcBadRecv(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	TranSendBadMessages(t, sock.Info().Peer, true, testAddr(addr).testDial)
+}
+
+func TestIpcSendAbort(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	c, e := testAddr(addr).testDial()
+	MustSucceed(t, e)
+	TranConnHandshake(t, c, sock.Info().Peer)
+	MustSend(t, sock, make([]byte, 1024*1024)) // TCP window size is 64k
+	time.Sleep(time.Millisecond * 100)
+	MustSucceed(t, c.Close())
 }

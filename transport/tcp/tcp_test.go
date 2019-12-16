@@ -15,94 +15,94 @@
 package tcp
 
 import (
+	"net"
 	"testing"
 	"time"
 
 	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/internal/test"
+	. "nanomsg.org/go/mangos/v2/internal/test"
 )
 
 var tran = Transport
 
 func TestTcpRecvMax(t *testing.T) {
-	test.TranVerifyMaxRecvSize(t, tran, nil, nil)
+	TranVerifyMaxRecvSize(t, tran, nil, nil)
 }
 
 func TestTcpOptions(t *testing.T) {
-	test.TranVerifyInvalidOption(t, tran)
-	test.TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
-	test.TranVerifyNoDelayOption(t, tran)
-	test.TranVerifyKeepAliveOption(t, tran)
+	TranVerifyInvalidOption(t, tran)
+	TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
+	TranVerifyNoDelayOption(t, tran)
+	TranVerifyKeepAliveOption(t, tran)
 }
 
 func TestTcpScheme(t *testing.T) {
-	test.TranVerifyScheme(t, tran)
+	TranVerifyScheme(t, tran)
 }
 func TestTcpAcceptWithoutListen(t *testing.T) {
-	test.TranVerifyAcceptWithoutListen(t, tran)
+	TranVerifyAcceptWithoutListen(t, tran)
 }
 func TestTcpListenAndAccept(t *testing.T) {
-	test.TranVerifyListenAndAccept(t, tran, nil, nil)
+	TranVerifyListenAndAccept(t, tran, nil, nil)
 }
 func TestTcpDuplicateListen(t *testing.T) {
-	test.TranVerifyDuplicateListen(t, tran, nil)
+	TranVerifyDuplicateListen(t, tran, nil)
 }
 func TestTcpConnectionRefused(t *testing.T) {
-	test.TranVerifyConnectionRefused(t, tran, nil)
+	TranVerifyConnectionRefused(t, tran, nil)
 }
 func TestTcpHandshake(t *testing.T) {
-	test.TranVerifyHandshakeFail(t, tran, nil, nil)
+	TranVerifyHandshakeFail(t, tran, nil, nil)
 }
 func TestTcpSendRecv(t *testing.T) {
-	test.TranVerifySendRecv(t, tran, nil, nil)
+	TranVerifySendRecv(t, tran, nil, nil)
 }
 func TestTcpAnonymousPort(t *testing.T) {
-	test.TranVerifyAnonymousPort(t, "tcp://127.0.0.1:0", nil, nil)
+	TranVerifyAnonymousPort(t, "tcp://127.0.0.1:0", nil, nil)
 }
 func TestTcpInvalidDomain(t *testing.T) {
-	test.TranVerifyBadAddress(t, "tcp://invalid.invalid", nil, nil)
+	TranVerifyBadAddress(t, "tcp://invalid.invalid", nil, nil)
 }
 func TestTcpInvalidLocalIP(t *testing.T) {
-	test.TranVerifyBadLocalAddress(t, "tcp://1.1.1.1:80", nil)
+	TranVerifyBadLocalAddress(t, "tcp://1.1.1.1:80", nil)
 }
 func TestTcpBroadcastIP(t *testing.T) {
-	test.TranVerifyBadAddress(t, "tcp://255.255.255.255:80", nil, nil)
+	TranVerifyBadAddress(t, "tcp://255.255.255.255:80", nil, nil)
 }
-
 func TestTcpListenerClosed(t *testing.T) {
-	test.TranVerifyListenerClosed(t, tran, nil)
+	TranVerifyListenerClosed(t, tran, nil)
 }
 
 func TestTcpResolverChange(t *testing.T) {
-	sock := test.GetMockSocket()
-	defer test.MustClose(t, sock)
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
 
-	addr := test.AddrTestTCP()
-	test.MustSucceed(t, sock.Listen(addr))
+	addr := AddrTestTCP()
+	MustSucceed(t, sock.Listen(addr))
 
 	d, e := tran.NewDialer(addr, sock)
-	test.MustSucceed(t, e)
+	MustSucceed(t, e)
 	td := d.(*dialer)
 	addr = td.addr
 	td.addr = "tcp://invalid.invalid:80"
 	p, e := d.Dial()
-	test.MustFail(t, e)
-	test.MustBeTrue(t, p == nil)
+	MustFail(t, e)
+	MustBeTrue(t, p == nil)
 
 	td.addr = addr
 	p, e = d.Dial()
-	test.MustSucceed(t, e)
-	test.MustSucceed(t, p.Close())
+	MustSucceed(t, e)
+	MustSucceed(t, p.Close())
 }
 
 func TestTcpAcceptAbort(t *testing.T) {
-	sock := test.GetMockSocket()
-	defer test.MustClose(t, sock)
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
 
-	addr := test.AddrTestTCP()
+	addr := AddrTestTCP()
 	l, e := tran.NewListener(addr, sock)
-	test.MustSucceed(t, e)
-	test.MustSucceed(t, l.Listen())
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
 	_ = l.(*listener).l.Close()
 	// This will make the accept loop spin hard, but nothing much
 	// we can do about it.
@@ -110,8 +110,68 @@ func TestTcpAcceptAbort(t *testing.T) {
 }
 
 func TestTcpMessageSize(t *testing.T) {
-	test.TranVerifyMessageSizes(t, tran, nil, nil)
+	TranVerifyMessageSizes(t, tran, nil, nil)
 }
 func TestTcpMessageHeader(t *testing.T) {
-	test.TranVerifyMessageHeader(t, tran, nil, nil)
+	TranVerifyMessageHeader(t, tran, nil, nil)
+}
+func TestTcpVerifyPipeAddresses(t *testing.T) {
+	TranVerifyPipeAddresses(t, tran, nil, nil)
+}
+func TestTcpVerifyPipeOptions(t *testing.T) {
+	TranVerifyPipeOptions2(t, tran, nil, nil)
+}
+
+type testAddr string
+
+func (a testAddr) testDial() (net.Conn, error) {
+	return net.Dial("tcp", string(a)[len("tcp://"):])
+}
+
+func TestTcpAbortHandshake(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestTCP()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	c, e := testAddr(addr).testDial()
+	MustSucceed(t, e)
+	MustSucceed(t, c.Close())
+}
+
+func TestTcpBadHandshake(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestTCP()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	TranSendConnBadHandshakes(t, testAddr(addr).testDial)
+}
+
+func TestTcpBadRecv(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestTCP()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	TranSendBadMessages(t, sock.Info().Peer, false, testAddr(addr).testDial)
+}
+
+func TestTcpSendAbort(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestTCP()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	c, e := testAddr(addr).testDial()
+	MustSucceed(t, e)
+	TranConnHandshake(t, c, sock.Info().Peer)
+	MustSend(t, sock, make([]byte, 2*1024*1024)) // TCP window size is 64k
+	time.Sleep(time.Millisecond * 100)
+	MustSend(t, sock, make([]byte, 2*1024*1024)) // TCP window size is 64k
+	MustSucceed(t, c.Close())
 }

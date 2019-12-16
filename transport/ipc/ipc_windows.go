@@ -104,7 +104,7 @@ type listener struct {
 	proto            transport.ProtocolInfo
 	listener         net.Listener
 	hs               transport.Handshaker
-	closeQ           chan struct{}
+	closed           bool
 	recvMaxSize      int32
 	outputBufferSize int32
 	inputBufferSize  int32
@@ -123,13 +123,12 @@ func (l *listener) Listen() error {
 		SecurityDescriptor: l.securityDesc,
 		MessageMode:        false,
 	}
+	if l.closed {
+		l.lock.Unlock()
+		return mangos.ErrClosed
+	}
 	l.lock.Unlock()
 
-	select {
-	case <-l.closeQ:
-		return mangos.ErrClosed
-	default:
-	}
 	listener, err := winio.ListenPipe("\\\\.\\pipe\\"+l.path, config)
 	if err != nil {
 		return err
@@ -137,14 +136,16 @@ func (l *listener) Listen() error {
 	l.listener = listener
 	go func() {
 		for {
+			l.lock.Lock()
+			if l.closed {
+				l.lock.Unlock()
+				return
+			}
+			l.lock.Unlock()
 			conn, err := listener.Accept()
 			if err != nil {
-				select {
-				case <-l.closeQ:
-					return
-				default:
-					continue
-				}
+				// Generally this will be ErrClosed
+				continue
 			}
 			p := transport.NewConnPipeIPC(conn, l.proto)
 			p.SetMaxRecvSize(int(atomic.LoadInt32(&l.recvMaxSize)))
@@ -170,11 +171,13 @@ func (l *listener) Accept() (mangos.TranPipe, error) {
 // Close implements the PipeListener Close method.
 func (l *listener) Close() error {
 	l.once.Do(func() {
+		l.lock.Lock()
+		l.closed = true
+		l.lock.Unlock()
 		if l.listener != nil {
 			_ = l.listener.Close()
 		}
 		l.hs.Close()
-		close(l.closeQ)
 	})
 	return nil
 }
@@ -261,10 +264,9 @@ func (t ipcTran) NewListener(address string, sock mangos.Socket) (transport.List
 	}
 
 	l := &listener{
-		proto:  sock.Info(),
-		path:   address,
-		hs:     transport.NewConnHandshaker(),
-		closeQ: make(chan struct{}),
+		proto: sock.Info(),
+		path:  address,
+		hs:    transport.NewConnHandshaker(),
 	}
 
 	l.inputBufferSize = 4096

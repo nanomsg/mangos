@@ -34,6 +34,9 @@ func NewConnPipeIPC(c net.Conn, proto ProtocolInfo) ConnPipe {
 			maxrx:   0,
 		},
 	}
+	p.options[mangos.OptionMaxRecvSize] = 0
+	p.options[mangos.OptionLocalAddr] = c.LocalAddr()
+	p.options[mangos.OptionRemoteAddr] = c.RemoteAddr()
 
 	return p
 }
@@ -78,7 +81,7 @@ func (p *connipc) Recv() (*Message, error) {
 	}
 
 	// Limit messages to the maximum receive value, if not
-	// unlimited.  This avoids a potential denaial of service.
+	// unlimited.  This avoids a potential denial of service.
 	if sz < 0 || (p.maxrx > 0 && sz > int64(p.maxrx)) {
 		return nil, mangos.ErrTooLong
 	}

@@ -89,3 +89,9 @@ func TestIpcMessageSize(t *testing.T) {
 func TestIpcMessageHeader(t *testing.T) {
 	test.TranVerifyMessageHeader(t, tran, nil, nil)
 }
+func TestIpcVerifyPipeAddresses(t *testing.T) {
+	test.TranVerifyPipeAddresses(t, tran, nil, nil)
+}
+func TestIpcVerifyPipeOptions(t *testing.T) {
+	test.TranVerifyPipeOptions2(t, tran, nil, nil)
+}

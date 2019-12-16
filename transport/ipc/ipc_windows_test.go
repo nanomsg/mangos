@@ -17,10 +17,12 @@
 package ipc
 
 import (
+	"github.com/Microsoft/go-winio"
 	"nanomsg.org/go/mangos/v2"
-	"testing"
-
 	. "nanomsg.org/go/mangos/v2/internal/test"
+	"net"
+	"testing"
+	"time"
 )
 
 func TestIpcListenerOptions(t *testing.T) {
@@ -49,4 +51,61 @@ func TestIpcListenerOptions(t *testing.T) {
 		MustBeTrue(t, ok)
 		MustBeTrue(t, v2 == 16384)
 	}
+}
+
+type testAddr string
+
+func (a testAddr) testDial() (net.Conn, error) {
+	path := "\\\\.\\pipe\\" + a[len("ipc://"):]
+	return winio.DialPipe(string(path), nil)
+}
+
+func TestIpcAbortHandshake(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	// Small buffer size so we can see the effect of early close
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.SetOption(OptionOutputBufferSize, int32(2)))
+	MustSucceed(t, l.Listen())
+	c, e := testAddr(addr).testDial()
+	MustSucceed(t, e)
+	MustSucceed(t, c.Close())
+}
+
+func TestIpcBadHandshake(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	TranSendConnBadHandshakes(t, testAddr(addr).testDial)
+}
+
+func TestIpcBadRecv(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	TranSendBadMessages(t, sock.Info().Peer, true, testAddr(addr).testDial)
+}
+
+func TestIpcSendAbort(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := sock.NewListener(addr, nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.SetOption(OptionOutputBufferSize, int32(128)))
+	MustSucceed(t, l.Listen())
+	c, e := testAddr(addr).testDial()
+	MustSucceed(t, e)
+	TranConnHandshake(t, c, sock.Info().Peer)
+	MustSend(t, sock, make([]byte, 65536))
+	time.Sleep(time.Millisecond * 100)
+	MustSucceed(t, c.Close())
 }

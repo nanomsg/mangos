@@ -17,6 +17,7 @@ package test
 import (
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync"
@@ -665,4 +666,173 @@ func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpt
 	m.Body = append(m.Body, 'w', 'o', 'r', 'l', 'd')
 	MustSendMsg(t, sock1, m)
 	MustRecvString(t, sock2, "hello, world")
+}
+
+// TranVerifyPipeAddresses performs basic validation of pipe address options.
+func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+	sock1 := GetMockSocket()
+	sock2 := GetMockSocket()
+	addr := getScratchAddr(tran)
+	defer MustClose(t, sock1)
+	defer MustClose(t, sock2)
+
+	MustSucceed(t, sock1.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	MustSucceed(t, sock2.DialOptions(addr, dOpts))
+
+	m := mangos.NewMessage(0)
+	MustSendMsg(t, sock1, m)
+	m = MustRecvMsg(t, sock2)
+	p1 := m.Pipe
+
+	// Now Send it back the other way.
+	MustSendMsg(t, sock2, m)
+	m = MustRecvMsg(t, sock1)
+	p2 := m.Pipe
+
+	v, e := m.Pipe.GetOption("JUNK")
+	MustBeError(t, e, mangos.ErrBadProperty)
+	MustBeTrue(t, v == nil)
+
+	v, e = p1.GetOption(mangos.OptionLocalAddr)
+	MustSucceed(t, e)
+	la1, ok := v.(net.Addr)
+	MustBeTrue(t, ok)
+	v, e = p1.GetOption(mangos.OptionRemoteAddr)
+	MustSucceed(t, e)
+	ra1, ok := v.(net.Addr)
+	MustBeTrue(t, ok)
+
+	v, e = p2.GetOption(mangos.OptionLocalAddr)
+	MustSucceed(t, e)
+	la2, ok := v.(net.Addr)
+	MustBeTrue(t, ok)
+	v, e = p2.GetOption(mangos.OptionRemoteAddr)
+	MustSucceed(t, e)
+	ra2, ok := v.(net.Addr)
+	MustBeTrue(t, ok)
+
+	MustBeTrue(t, la1.Network() == la2.Network())
+	MustBeTrue(t, ra1.Network() == ra2.Network())
+	MustBeTrue(t, ra2.Network() == ra1.Network())
+
+	MustBeTrue(t, la1.String() == ra2.String())
+	MustBeTrue(t, la2.String() == ra1.String())
+
+}
+
+// TranVerifyPipeOptions2 verifies standard pipe Options.
+func TranVerifyPipeOptions2(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+	sock1 := GetMockSocket()
+	sock2 := GetMockSocket()
+	addr := getScratchAddr(tran)
+	defer MustClose(t, sock1)
+	defer MustClose(t, sock2)
+
+	MustSucceed(t, sock1.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
+	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
+	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	MustSucceed(t, sock2.DialOptions(addr, dOpts))
+
+	m := mangos.NewMessage(0)
+	MustSendMsg(t, sock1, m)
+	m = MustRecvMsg(t, sock2)
+	v, e := m.Pipe.GetOption("JUNK")
+	MustBeError(t, e, mangos.ErrBadProperty)
+	MustBeTrue(t, v == nil)
+
+	v, e = m.Pipe.GetOption(mangos.OptionMaxRecvSize)
+	MustSucceed(t, e)
+	_, ok := v.(int)
+	MustBeTrue(t, ok)
+}
+
+// type connHeader struct {
+// 	Zero     byte // must be zero
+// 	S        byte // 'S'
+// 	P        byte // 'P'
+// 	Version  byte // only zero at present
+// 	Proto    uint16
+// 	Reserved uint16 // always zero at present
+// }
+
+// TranSendConnBadHandshakes just sends garbage handshakes.
+func TranSendConnBadHandshakes(t *testing.T, dial func() (net.Conn, error)) {
+
+	tries := [][]byte{
+		{},
+		{0},
+		{0, 'S'},
+		{0, 'S', 'P'},
+		{0, 'S', 'P', 0},
+		{0, 'S', 'P', 0, 0},
+		{0, 'S', 'P', 0, 0, 0},
+		{0, 'S', 'P', 0, 0, 1, 0},
+		{0, 'S', 'P', 0, 0, 1, 0, 0},
+		{1, 'S', 'P', 0, 0, 0, 0, 0},
+		{0, 'x', 'P', 0, 0, 0, 0, 0},
+		{0, 'S', 'x', 0, 0, 0, 0, 0},
+		{0, 'S', 'P', 2, 0, 0, 0, 0},
+		{0, 'S', 'P', 0, 0, 0, 0, 1},
+	}
+
+	for _, b := range tries {
+		c, e := dial()
+		MustSucceed(t, e)
+		_, e = c.Write(b)
+		MustSucceed(t, e)
+		time.Sleep(time.Millisecond * 10)
+		MustSucceed(t, c.Close())
+	}
+}
+
+// TranConnHandshake just performs the handshake, the conn should be connected.
+func TranConnHandshake(t *testing.T, c net.Conn, proto uint16) {
+	hs := []byte{
+		0,                 // Zero
+		'S',               // S
+		'P',               // P
+		0,                 // Version
+		byte(proto / 256), // Proto Hi byte
+		byte(proto % 256), // Proto Lo byte
+		0,                 // Reserved Hi
+		0,                 // Reserved Lo
+	}
+	peer := make([]byte, 8)
+	_, e := c.Write(hs)
+	MustSucceed(t, e)
+	_, e = io.ReadFull(c, peer)
+	MustSucceed(t, e)
+}
+
+// TranSendBadMessages opens new connections and sends garbage to them.
+func TranSendBadMessages(t *testing.T, proto uint16, isipc bool, dial func() (net.Conn, error)) {
+
+	bad := [][]byte{
+		{},
+		{0x80},
+		{0, 0, 0, 1},
+		{0, 0, 0, 0, 0, 0, 0, 10, 1, 2},
+		{0x80, 0, 0, 0, 1, 1, 2, 3, 4, 5, 6},
+	}
+	for _, b := range bad {
+		c, e := dial()
+		MustSucceed(t, e)
+		TranConnHandshake(t, c, proto)
+		var x []byte
+		if isipc {
+			x = append([]byte{1}, b...)
+		} else {
+			x = b
+		}
+		_, e = c.Write(x)
+		MustSucceed(t, e)
+		time.Sleep(time.Millisecond * 10)
+		MustSucceed(t, c.Close())
+	}
 }
