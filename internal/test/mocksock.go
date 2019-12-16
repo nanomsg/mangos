@@ -29,11 +29,15 @@ type mockSock struct {
 	sendQ      chan *protocol.Message
 	closeQ     chan struct{}
 	proto      uint16
+	peer       uint16
 	name       string
+	peerName   string
 	sendExpire time.Duration
 	recvExpire time.Duration
 	once       sync.Once
 	lock       sync.Mutex
+	raw        interface{}
+	rawError   error
 }
 
 func (s *mockSock) Close() error {
@@ -90,6 +94,8 @@ func (s *mockSock) GetOption(name string) (interface{}, error) {
 		return s.recvExpire, nil
 	case protocol.OptionSendDeadline:
 		return s.sendExpire, nil
+	case protocol.OptionRaw:
+		return s.raw, s.rawError
 	}
 	return nil, protocol.ErrBadOption
 }
@@ -117,9 +123,9 @@ func (s *mockSock) SetOption(name string, val interface{}) error {
 func (s *mockSock) Info() protocol.Info {
 	return protocol.Info{
 		Self:     s.proto,
-		Peer:     s.proto,
+		Peer:     s.peer,
 		SelfName: s.name,
-		PeerName: s.name,
+		PeerName: s.peerName,
 	}
 }
 
@@ -188,11 +194,27 @@ func (*mockSock) OpenContext() (protocol.Context, error) {
 // GetMockSocket returns a mock socket.
 func GetMockSocket() protocol.Socket {
 	return protocol.MakeSocket(&mockSock{
-		recvQ:  make(chan *protocol.Message, 1),
-		sendQ:  make(chan *protocol.Message, 1),
-		closeQ: make(chan struct{}),
-		proto:  1,
-		name:   "mockSock",
+		recvQ:    make(chan *protocol.Message, 1),
+		sendQ:    make(chan *protocol.Message, 1),
+		closeQ:   make(chan struct{}),
+		proto:    1,
+		peer:     1,
+		name:     "mockSock",
+		peerName: "mockSock",
+	})
+}
+
+func GetMockSocketRaw(proto, peer uint16, name, peerName string, raw interface{}, err error) protocol.Socket {
+	return protocol.MakeSocket(&mockSock{
+		recvQ:    make(chan *protocol.Message, 1),
+		sendQ:    make(chan *protocol.Message, 1),
+		closeQ:   make(chan struct{}),
+		proto:    proto,
+		peer:     peer,
+		name:     name,
+		peerName: peerName,
+		raw:      raw,
+		rawError: err,
 	})
 }
 
@@ -204,10 +226,12 @@ func NewMockSocket() (protocol.Socket, error) {
 // GetMockSocketEx returns a socket for a specific protocol.
 func GetMockSocketEx(proto uint16, name string) protocol.Socket {
 	return protocol.MakeSocket(&mockSock{
-		recvQ:  make(chan *protocol.Message, 1),
-		sendQ:  make(chan *protocol.Message, 1),
-		closeQ: make(chan struct{}),
-		proto:  proto,
-		name:   name,
+		recvQ:    make(chan *protocol.Message, 1),
+		sendQ:    make(chan *protocol.Message, 1),
+		closeQ:   make(chan struct{}),
+		proto:    proto,
+		peer:     proto,
+		name:     name,
+		peerName: name,
 	})
 }
