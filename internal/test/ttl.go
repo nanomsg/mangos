@@ -122,7 +122,7 @@ func SetTTL(t *testing.T, f func() (mangos.Socket, error)) {
 }
 
 // TTLDropTest is a generic test for dropping based on TTL expiration.
-// F1 makes the client socket, f2 makes the server socket.
+// F1 makes the Client socket, f2 makes the Server socket.
 func TTLDropTest(t *testing.T,
 	cli func() (mangos.Socket, error),
 	srv func() (mangos.Socket, error),

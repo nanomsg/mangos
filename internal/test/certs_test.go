@@ -23,17 +23,18 @@ func TestNewKeys(t *testing.T) {
 	MustSucceed(t, err)
 	MustNotBeNil(t, keys)
 
-	MustSucceed(t, keys.root.cert.CheckSignatureFrom(keys.root.cert))
-	MustSucceed(t, keys.server.cert.CheckSignatureFrom(keys.root.cert))
-	MustSucceed(t, keys.client.cert.CheckSignatureFrom(keys.root.cert))
-	MustFail(t, keys.root.cert.CheckSignatureFrom(keys.client.cert))
+	MustSucceed(t, keys.Root.cert.CheckSignatureFrom(keys.Root.cert))
+	MustSucceed(t, keys.Server.cert.CheckSignatureFrom(keys.Root.cert))
+	MustSucceed(t, keys.Client.cert.CheckSignatureFrom(keys.Root.cert))
+	MustFail(t, keys.Root.cert.CheckSignatureFrom(keys.Client.cert))
 }
 
 func TestNewTLSConfig(t *testing.T) {
-	s, c, err := NewTLSConfig()
+	s, c, k, err := NewTLSConfig()
 	MustSucceed(t, err)
 	MustNotBeNil(t, s)
 	MustNotBeNil(t, c)
+	MustNotBeNil(t, k)
 	MustBeTrue(t, len(c.RootCAs.Subjects()) != 0)
 	MustBeFalse(t, c.InsecureSkipVerify)
 	MustBeFalse(t, s.InsecureSkipVerify)

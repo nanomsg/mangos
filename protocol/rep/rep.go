@@ -228,7 +228,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionSendDeadline:
-		if val, ok := v.(time.Duration); ok && val.Nanoseconds() > 0 {
+		if val, ok := v.(time.Duration); ok && val > 0 {
 			c.s.Lock()
 			c.sendExpire = val
 			c.s.Unlock()
@@ -237,7 +237,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionRecvDeadline:
-		if val, ok := v.(time.Duration); ok && val.Nanoseconds() > 0 {
+		if val, ok := v.(time.Duration); ok && val > 0 {
 			c.s.Lock()
 			c.recvExpire = val
 			c.s.Unlock()
@@ -370,7 +370,7 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 func (s *socket) SetOption(name string, v interface{}) error {
 	switch name {
 	case protocol.OptionWriteQLen:
-		if qlen, ok := v.(int); ok && qlen > 0 {
+		if qlen, ok := v.(int); ok && qlen >= 0 {
 			s.Lock()
 			s.sendQLen = qlen
 			s.Unlock()

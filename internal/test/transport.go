@@ -565,7 +565,7 @@ func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[s
 	MustBeError(t, e, mangos.ErrClosed)
 }
 
-// TranVerifyDialNoCert verifies that we fail to dial if we lack a server cert.
+// TranVerifyDialNoCert verifies that we fail to dial if we lack a Server cert.
 func TranVerifyDialNoCert(t *testing.T, tran transport.Transport) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
