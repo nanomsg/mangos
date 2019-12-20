@@ -17,18 +17,18 @@
 //
 // The server listens, and offers three paths:
 //
-//  - sub/    - SUB socket, publishes a message "BING!" once per second
-//  - req/    - REQ socket, responds with a reply "REPLY"
+//  - sub/    - SUB socket, publishes a message "PUB <count> <time>" each second
+//  - req/    - REQ socket, responds with a reply "REPLY <count> <time>"
 //  - static/ - static content, provided as ASCII "STATIC"
 //
 // To use:
 //
 //   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ ./websocket server $url & pid=$! && sleep 1
-//   $ ./websocket req $url
-//   $ ./websocket sub $url
-//   $ ./websocket static $url
+//   $ port=40899
+//   $ ./websocket server port & pid=$! && sleep 1
+//   $ ./websocket req $port
+//   $ ./websocket sub $port
+//   $ ./websocket static $port
 //   $ kill $pid
 //
 package main
