@@ -386,7 +386,7 @@ func NewProtocol() protocol.Protocol {
 	return s
 }
 
-// NewSocket allocates a new Socket using the RESPONDENT protocol.
+// NewSocket allocates a new Socket using the SUB protocol.
 func NewSocket() (protocol.Socket, error) {
 	return protocol.MakeSocket(NewProtocol()), nil
 }
