@@ -72,15 +72,14 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		return nil
 	}
 
-	// This could benefit from optimization to avoid useless duplicates.
 	for _, p := range s.pipes {
 
-		pm := m.Dup()
+		m.Clone()
 		select {
-		case p.sendq <- pm:
+		case p.sendq <- m:
 		default:
-			// backpressure, but we do not exert
-			pm.Free()
+			// back-pressure, but we do not exert
+			m.Free()
 		}
 	}
 	s.Unlock()

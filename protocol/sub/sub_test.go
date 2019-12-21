@@ -274,6 +274,8 @@ func TestSubMultiContexts(t *testing.T) {
 
 	MustSucceed(t, c1.SetOption(mangos.OptionSubscribe, "1"))
 	MustSucceed(t, c2.SetOption(mangos.OptionSubscribe, "2"))
+	MustSucceed(t, c1.SetOption(mangos.OptionSubscribe, "*"))
+	MustSucceed(t, c2.SetOption(mangos.OptionSubscribe, "*"))
 
 	p, e := pub.NewSocket()
 	MustSucceed(t, e)
@@ -289,6 +291,8 @@ func TestSubMultiContexts(t *testing.T) {
 
 	sent := []int{0, 0}
 	recv := []int{0, 0}
+	wildrecv := []int{0, 0}
+	wildsent := 0
 	mesg := []string{"1", "2"}
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -296,8 +300,14 @@ func TestSubMultiContexts(t *testing.T) {
 		for {
 			m, e := c.RecvMsg()
 			if e == nil {
-				MustBeTrue(t, string(m.Body) == mesg[index])
-				recv[index]++
+				switch string(m.Body) {
+				case mesg[index]:
+					recv[index]++
+				case "*":
+					wildrecv[index]++
+				default:
+					MustBeTrue(t, false)
+				}
 				continue
 			}
 			MustBeError(t, e, mangos.ErrClosed)
@@ -316,8 +326,13 @@ func TestSubMultiContexts(t *testing.T) {
 	// fixed seed above, it works out to 41 & 60.
 	for i := 0; i < 101; i++ {
 		index := int(rng.Int63() & 1)
-		MustSucceed(t, p.Send([]byte(mesg[index])))
-		sent[index]++
+		if rng.Int63()&128 < 8 {
+			MustSucceed(t, p.Send([]byte{'*'}))
+			wildsent++
+		} else {
+			MustSucceed(t, p.Send([]byte(mesg[index])))
+			sent[index]++
+		}
 	}
 
 	// Give time for everything to be delivered.
@@ -326,9 +341,10 @@ func TestSubMultiContexts(t *testing.T) {
 	MustSucceed(t, c2.Close())
 	wg.Wait()
 
-	MustBeTrue(t, sent[0] != sent[1])
 	MustBeTrue(t, sent[0] == recv[0])
 	MustBeTrue(t, sent[1] == recv[1])
+	MustBeTrue(t, wildsent == wildrecv[0])
+	MustBeTrue(t, wildsent == wildrecv[1])
 
 	MustSucceed(t, s.Close())
 	MustSucceed(t, p.Close())

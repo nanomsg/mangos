@@ -65,11 +65,11 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 
 	// This could benefit from optimization to avoid useless duplicates.
 	for _, p := range s.pipes {
-		pm := m.Dup()
+		m.Clone()
 		select {
-		case p.sendQ <- pm:
+		case p.sendQ <- m:
 		default:
-			pm.Free()
+			m.Free()
 		}
 	}
 	s.Unlock()

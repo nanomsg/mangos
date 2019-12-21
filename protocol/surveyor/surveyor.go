@@ -125,6 +125,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		sock:   s,
 	}
 
+	m.MakeUnique()
 	m.Header = make([]byte, 4)
 	binary.BigEndian.PutUint32(m.Header, newsurv.id)
 
@@ -144,30 +145,16 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	}
 	s.Unlock()
 
-	var last *pipe
-	reused := false
-	if len(pipes) > 0 {
-		last = pipes[len(pipes)-1]
-	}
-
 	// Best-effort broadcast on all pipes
 	for _, p := range pipes {
-		var dm *protocol.Message
-		if p == last {
-			dm = m
-			reused = true
-		} else {
-			dm = m.Dup()
-		}
+		m.Clone()
 		select {
-		case p.sendQ <- dm:
+		case p.sendQ <- m:
 		default:
-			dm.Free()
+			m.Free()
 		}
 	}
-	if !reused {
-		m.Free()
-	}
+	m.Free()
 	return nil
 }
 

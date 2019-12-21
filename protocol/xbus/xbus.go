@@ -68,6 +68,7 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	var id uint32
 
 	if len(m.Header) == 4 {
+		m = m.MakeUnique()
 		// This is coming back to us - its a forwarded message
 		// from an earlier pipe.  Note that we could also have
 		// used the m.Pipe but this is how mangos v1 and nanomsg
@@ -76,7 +77,6 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		m.Header = m.Header[:0]
 	}
 
-	// This could benefit from optimization to avoid useless duplicates.
 	for _, p := range s.pipes {
 
 		// Don't deliver the message back up to the same pipe it
@@ -84,12 +84,12 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		if p.p.ID() == id {
 			continue
 		}
-		pm := m.Dup()
+		m.Clone()
 		select {
-		case p.sendQ <- pm:
+		case p.sendQ <- m:
 		default:
 			// back-pressure, but we do not exert
-			pm.Free()
+			m.Free()
 		}
 	}
 	s.Unlock()

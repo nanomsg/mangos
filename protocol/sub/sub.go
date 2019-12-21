@@ -93,6 +93,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 			s.Unlock()
 			continue
 		case m := <-recvQ:
+			m = m.MakeUnique()
 			return m, nil
 		}
 	}
@@ -130,9 +131,9 @@ func (p *pipe) receiver() {
 				// As we are passing this to the user,
 				// we need to ensure that the message
 				// may be modified.
-				dm := m.Dup()
+				m.Clone()
 				select {
-				case c.recvQ <- dm:
+				case c.recvQ <- m:
 				default:
 					select {
 					case m2 := <-c.recvQ:
@@ -147,7 +148,7 @@ func (p *pipe) receiver() {
 					// NB: If we ever do work to break
 					// up the locking, we will need to
 					// revisit this.
-					c.recvQ <- dm
+					c.recvQ <- m
 				}
 			}
 		}
