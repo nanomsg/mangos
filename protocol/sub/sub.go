@@ -215,6 +215,8 @@ func (c *context) subscribe(topic []byte) error {
 			return nil
 		}
 	}
+	// We need a full data copy of our own.
+	topic = append(make([]byte, 0, len(topic)), topic...)
 	c.subs = append(c.subs, topic)
 	return nil
 }
