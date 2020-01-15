@@ -45,13 +45,13 @@ Surveyor/Respondent patterns are supported.
 This project also supports an experimental protocol called Star.
 
 Supported transports include TCP, inproc, IPC, WebSocket, WebSocket/TLS and TLS.
-Forcing the local TCP port in Dial is not supported yet (this
-is rarely useful).
 
 Basic interoperability with nanomsg and NNG has been verified (you can do
 so yourself with `nanocat` and `macat`) for all protocols and transports
-that _NNG_ and _nanomsg_ support.
-Additionally there are a number of projects that use the two products together.
+that _NNG_ and _nanomsg_ support, except for the _ZeroTier_ transport and the PAIRv1
+protocol, which are only supported in _NNG_ at this time.
+
+There are a number of projects that use these products together.
 
 // There is a third party experimental QUIC transport available at
 // [quic-mangos](https://github.com/lthibault/quic-mangos).
@@ -98,6 +98,6 @@ to run each example program.
 Enjoy!
 
 '''
-Copyright 2019 The Mangos Authors
+Copyright 2020 The Mangos Authors
 
 mangos&trade;, Nanomsg&trade; and NNG&trade; are http://nanomsg.org/trademarks.html[trademarks] of Garrett D'Amore.
