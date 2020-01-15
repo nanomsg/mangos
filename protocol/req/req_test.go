@@ -188,6 +188,39 @@ func TestReqRetry(t *testing.T) {
 	MustSucceed(t, peer.Close())
 }
 
+// This test repeats he retry at very frequent intervals.  The idea here is
+// to demonstrate that there are multiple resend entries in the queue.
+// This case covers github issue #179.
+func TestReqRetryFast(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	peer := GetSocket(t, rep.NewSocket)
+	ConnectPair(t, self, peer)
+
+	mp, p := MockConnect(t, self)
+	MustSucceed(t, self.SetOption(mangos.OptionRetryTime, time.Nanosecond))
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, peer.SetOption(mangos.OptionRecvDeadline, time.Millisecond*200))
+
+	start := time.Now()
+
+	MustSendString(t, self, "query")
+	MockMustRecvStr(t, mp, "query", time.Second)
+	MockMustRecvStr(t, mp, "query", time.Second)
+	time.Sleep(time.Millisecond * 10)
+	MustSucceed(t, p.Close())
+
+	ConnectPair(t, self, peer)
+	MustRecvString(t, peer, "query")
+	MustRecvString(t, peer, "query")
+	MustSendString(t, peer, "reply")
+
+	MustBeTrue(t, time.Since(start) < time.Second)
+	MustBeTrue(t, time.Since(start) < time.Second)
+
+	MustSucceed(t, self.Close())
+	MustSucceed(t, peer.Close())
+}
+
 func TestReqRetryLateConnect(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	peer := GetSocket(t, rep.NewSocket)

@@ -57,7 +57,7 @@ type context struct {
 	recvID     uint32            // recv id (set after first send)
 	recvWait   bool              // true if a thread is blocked in RecvMsg
 	bestEffort bool              // if true, don't block waiting in send
-	wantw      bool              // true if we need to send a message
+	queued     bool              // true if we need to send a message
 	closed     bool              // true if we are closed
 }
 
@@ -76,10 +76,7 @@ func (s *socket) send() {
 	for len(s.sendq) != 0 && len(s.readyq) != 0 {
 		c := s.sendq[0]
 		s.sendq = s.sendq[1:]
-		c.wantw = false
-
-		p := s.readyq[0]
-		s.readyq = s.readyq[1:]
+		c.queued = false
 
 		if c.sendID != 0 {
 			c.reqMsg = c.sendMsg
@@ -90,6 +87,8 @@ func (s *socket) send() {
 			c.cond.Broadcast()
 		}
 		m := c.reqMsg.Dup()
+		p := s.readyq[0]
+		s.readyq = s.readyq[1:]
 
 		// Schedule a retransmit for the future.
 		c.lastPipe = p
@@ -167,15 +166,17 @@ func (c *context) resendMessage() {
 	s := c.s
 	s.Lock()
 	defer s.Unlock()
-	c.wantw = true
-	s.sendq = append(s.sendq, c)
-	s.send()
+	if !c.queued {
+		c.queued = true
+		s.sendq = append(s.sendq, c)
+		s.send()
+	}
 }
 
 func (c *context) unscheduleSend() {
 	s := c.s
-	if c.wantw {
-		c.wantw = false
+	if c.queued {
+		c.queued = false
 		for i, c2 := range s.sendq {
 			if c2 == c {
 				s.sendq = append(s.sendq[:i],
@@ -239,7 +240,8 @@ func (c *context) SendMsg(m *protocol.Message) error {
 
 	c.reqID = id
 	s.ctxByID[id] = c
-	c.wantw = true
+	c.unscheduleSend()
+	c.queued = true
 	s.sendq = append(s.sendq, c)
 
 	if c.bestEffort {
