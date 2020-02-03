@@ -19,12 +19,14 @@
 package ipc
 
 import (
-	"github.com/Microsoft/go-winio"
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/transport"
 	"net"
 	"sync"
 	"sync/atomic"
+
+	"github.com/Microsoft/go-winio"
+
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/transport"
 )
 
 const Transport = ipcTran(0)

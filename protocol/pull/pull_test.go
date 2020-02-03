@@ -15,10 +15,10 @@
 package pull
 
 import (
-	"nanomsg.org/go/mangos/v2"
 	"testing"
 
-	. "nanomsg.org/go/mangos/v2/internal/test"
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
 )
 
 func TestPullIdentity(t *testing.T) {

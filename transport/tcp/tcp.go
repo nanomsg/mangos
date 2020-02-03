@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/transport"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/transport"
 )
 
 const (

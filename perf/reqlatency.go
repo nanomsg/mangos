@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package perf provides utilities to measure mangos peformance against
-// libnanomsg' perf tools.
-
 package main
 
 import (
@@ -22,10 +19,10 @@ import (
 	"log"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/rep"
-	"nanomsg.org/go/mangos/v2/protocol/req"
-	"nanomsg.org/go/mangos/v2/transport/all"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol/rep"
+	"go.nanomsg.org/mangos/v3/protocol/req"
+	"go.nanomsg.org/mangos/v3/transport/all"
 )
 
 // ReqRepLatencyServer is the server side for REQ/REP latency testing.

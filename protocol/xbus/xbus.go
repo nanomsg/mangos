@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"nanomsg.org/go/mangos/v2/protocol"
+	"go.nanomsg.org/mangos/v3/protocol"
 )
 
 type pipe struct {

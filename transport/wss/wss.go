@@ -17,9 +17,9 @@
 package wss
 
 import (
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/transport"
-	"nanomsg.org/go/mangos/v2/transport/ws"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/transport"
+	"go.nanomsg.org/mangos/v3/transport/ws"
 )
 
 type wssTran int

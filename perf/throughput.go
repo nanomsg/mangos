@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package perf provides utilities to measure mangos peformance against
-// libnanomsg' perf tools.
-
 package main
 
 import (
@@ -22,8 +19,8 @@ import (
 	"log"
 	"time"
 
-	"nanomsg.org/go/mangos/v2/protocol/pair"
-	"nanomsg.org/go/mangos/v2/transport/all"
+	"go.nanomsg.org/mangos/v3/protocol/pair"
+	"go.nanomsg.org/mangos/v3/transport/all"
 )
 
 // ThroughputServer is the server side -- very much equivalent to local_thr in

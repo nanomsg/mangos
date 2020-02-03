@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"nanomsg.org/go/mangos/v2/protocol"
+	"go.nanomsg.org/mangos/v3/protocol"
 )
 
 // This file implements a mock socket, useful for testing.

@@ -15,13 +15,14 @@
 package test
 
 import (
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/pair"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
+
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol/pair"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestDialerBadScheme(t *testing.T) {

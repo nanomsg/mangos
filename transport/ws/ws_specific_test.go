@@ -21,9 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2/protocol/rep"
-	"nanomsg.org/go/mangos/v2/protocol/req"
-	// "nanomsg.org/go-mangos/test"
+	"go.nanomsg.org/mangos/v3/protocol/rep"
+	"go.nanomsg.org/mangos/v3/protocol/req"
 )
 
 func TestWebsockPath(t *testing.T) {

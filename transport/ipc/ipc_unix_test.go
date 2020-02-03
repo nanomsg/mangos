@@ -18,14 +18,14 @@ package ipc
 
 import (
 	"errors"
-	"nanomsg.org/go/mangos/v2"
 	"net"
 	"os"
 	"syscall"
 	"testing"
 	"time"
 
-	. "nanomsg.org/go/mangos/v2/internal/test"
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
 )
 
 func TestIsSyscallError(t *testing.T) {

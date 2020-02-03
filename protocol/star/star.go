@@ -22,8 +22,8 @@
 package star
 
 import (
-	"nanomsg.org/go/mangos/v2/protocol"
-	"nanomsg.org/go/mangos/v2/protocol/xstar"
+	"go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/protocol/xstar"
 )
 
 // Protocol identity information.

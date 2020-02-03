@@ -4,5 +4,8 @@ github.com/gdamore/optopia v0.2.0 h1:2t3+oyTrJ9e0jxmXqeacws1SFKu4eIrg+U87GjtlA8M
 github.com/gdamore/optopia v0.2.0/go.mod h1:YKYEwo5C1Pa617H7NlPcmQXl+vG6YnSSNB44n8dNL0Q=
 github.com/gorilla/websocket v1.4.1 h1:q7AeDBpnBk8AogcD4DSag/Ukw/KV+YhzLj2bP5HvKCM=
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
+go.nanomsg.org/mangos v2.0.0+incompatible h1:Ll6GIzeGGld6/bFrVgBB8CjwibhHXZtF5jon+GoH1bE=
 golang.org/x/sys v0.0.0-20181128092732-4ed8d59d0b35 h1:YAFjXN64LMvktoUZH9zgY4lGc/msGN7HQfoSuKCgaDU=
 golang.org/x/sys v0.0.0-20181128092732-4ed8d59d0b35/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+nanomsg.org/go/mangos/v2 v2.0.8 h1:Nnc5gCNPd8sSyxgfMTdlKK020p4nxLAxcQrhLVnjGQ8=
+nanomsg.org/go/mangos/v2 v2.0.8/go.mod h1:gngxudWUZkxqHN+8n/2y9gWZPcwmSbliFYJsYG8mbKs=

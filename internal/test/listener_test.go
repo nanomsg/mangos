@@ -15,11 +15,12 @@
 package test
 
 import (
-	"nanomsg.org/go/mangos/v2"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
 	"reflect"
 	"testing"
 	"time"
+
+	"go.nanomsg.org/mangos/v3"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestListenerBadScheme(t *testing.T) {

@@ -16,15 +16,15 @@ package sub
 
 import (
 	"math/rand"
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/pub"
 	"sync"
 	"testing"
 	"time"
 
-	. "nanomsg.org/go/mangos/v2/internal/test"
-	. "nanomsg.org/go/mangos/v2/protocol"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
+	. "go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/protocol/pub"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestSubIdentity(t *testing.T) {

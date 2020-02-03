@@ -15,16 +15,16 @@
 package xreq
 
 import (
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/rep"
-	"nanomsg.org/go/mangos/v2/protocol/req"
-	"nanomsg.org/go/mangos/v2/protocol/xrep"
 	"sync"
 	"testing"
 	"time"
 
-	. "nanomsg.org/go/mangos/v2/internal/test"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
+	"go.nanomsg.org/mangos/v3/protocol/rep"
+	"go.nanomsg.org/mangos/v3/protocol/req"
+	"go.nanomsg.org/mangos/v3/protocol/xrep"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestXReqIdentity(t *testing.T) {

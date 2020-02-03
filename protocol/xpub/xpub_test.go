@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
-	. "nanomsg.org/go/mangos/v2/internal/test"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestXPubRaw(t *testing.T) {
@@ -91,7 +91,7 @@ func TestXPubSendClose(t *testing.T) {
 		}
 	}
 	time.Sleep(time.Millisecond * 40)
-	//MustSucceed(t, self.Close())
+	// MustSucceed(t, self.Close())
 }
 
 func TestXPubSendClose2(t *testing.T) {

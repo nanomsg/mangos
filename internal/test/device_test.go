@@ -15,14 +15,14 @@
 package test
 
 import (
-	"nanomsg.org/go/mangos/v2/protocol/pair"
-	"nanomsg.org/go/mangos/v2/protocol/xpair"
 	"sync"
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
-	_ "nanomsg.org/go/mangos/v2/transport/all"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol/pair"
+	"go.nanomsg.org/mangos/v3/protocol/xpair"
+	_ "go.nanomsg.org/mangos/v3/transport/all"
 )
 
 func TestDeviceBadPair(t *testing.T) {

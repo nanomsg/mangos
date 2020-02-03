@@ -15,12 +15,12 @@
 package test
 
 import (
-	"nanomsg.org/go/mangos/v2/protocol"
 	"sync"
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol"
 )
 
 // VerifyClosedSend verifies that Send on the socket created returns protocol.ErrClosed if it is closed.

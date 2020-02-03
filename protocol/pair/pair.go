@@ -17,8 +17,8 @@
 package pair
 
 import (
-	"nanomsg.org/go/mangos/v2/protocol"
-	"nanomsg.org/go/mangos/v2/protocol/xpair"
+	"go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/protocol/xpair"
 )
 
 // Protocol identity information.

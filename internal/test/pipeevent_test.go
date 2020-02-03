@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol/pair"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol/pair"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestPipeHook(t *testing.T) {

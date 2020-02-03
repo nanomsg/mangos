@@ -17,9 +17,10 @@ package core
 import (
 	"crypto/rand"
 	"encoding/binary"
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/transport"
 	"sync"
+
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/transport"
 )
 
 // This is an application-wide global ID allocator.  Unfortunately we need

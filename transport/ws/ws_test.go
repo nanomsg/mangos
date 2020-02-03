@@ -15,14 +15,15 @@
 package ws
 
 import (
-	"github.com/gorilla/websocket"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
-	. "nanomsg.org/go/mangos/v2/internal/test"
+	"github.com/gorilla/websocket"
+
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
 )
 
 var tran = Transport

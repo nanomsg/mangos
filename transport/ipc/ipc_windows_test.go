@@ -17,12 +17,14 @@
 package ipc
 
 import (
-	"github.com/Microsoft/go-winio"
-	"nanomsg.org/go/mangos/v2"
-	. "nanomsg.org/go/mangos/v2/internal/test"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/Microsoft/go-winio"
+
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
 )
 
 func TestIpcListenerOptions(t *testing.T) {

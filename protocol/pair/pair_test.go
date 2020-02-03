@@ -20,10 +20,10 @@ package pair
 import (
 	"testing"
 
-	"nanomsg.org/go/mangos/v2"
+	"go.nanomsg.org/mangos/v3"
 
-	. "nanomsg.org/go/mangos/v2/internal/test"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
+	. "go.nanomsg.org/mangos/v3/internal/test"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestPairIdentity(t *testing.T) {

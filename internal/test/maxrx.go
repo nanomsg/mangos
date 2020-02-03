@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"nanomsg.org/go/mangos/v2"
+	"go.nanomsg.org/mangos/v3"
 )
 
 // VerifyMaxRx is used to test that the transport enforces the maximum

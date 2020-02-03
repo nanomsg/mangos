@@ -18,8 +18,8 @@
 package pub
 
 import (
-	"nanomsg.org/go/mangos/v2/protocol"
-	"nanomsg.org/go/mangos/v2/protocol/xpub"
+	"go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/protocol/xpub"
 )
 
 type socket struct {

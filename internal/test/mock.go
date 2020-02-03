@@ -15,12 +15,13 @@
 package test
 
 import (
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol"
-	"nanomsg.org/go/mangos/v2/transport"
 	"sync"
 	"testing"
 	"time"
+
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/transport"
 )
 
 // This file implements a mock transport, useful for testing.

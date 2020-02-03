@@ -15,10 +15,10 @@
 package test
 
 import (
-	"nanomsg.org/go/mangos/v2/protocol"
 	"testing"
 
-	"nanomsg.org/go/mangos/v2"
+	"go.nanomsg.org/mangos/v3"
+	"go.nanomsg.org/mangos/v3/protocol"
 )
 
 // VerifyRaw verifies that the socket created is raw, and cannot be changed to cooked.

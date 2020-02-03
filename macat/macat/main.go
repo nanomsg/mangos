@@ -23,7 +23,7 @@ import (
 
 	"github.com/gdamore/optopia"
 
-	"nanomsg.org/go/mangos/v2/macat"
+	"go.nanomsg.org/mangos/v3/macat"
 )
 
 var args []string

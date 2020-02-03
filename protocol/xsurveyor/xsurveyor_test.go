@@ -16,15 +16,15 @@ package xsurveyor
 
 import (
 	"encoding/binary"
-	"nanomsg.org/go/mangos/v2"
-	"nanomsg.org/go/mangos/v2/protocol"
-	"nanomsg.org/go/mangos/v2/protocol/respondent"
 	"sync"
 	"testing"
 	"time"
 
-	. "nanomsg.org/go/mangos/v2/internal/test"
-	_ "nanomsg.org/go/mangos/v2/transport/inproc"
+	"go.nanomsg.org/mangos/v3"
+	. "go.nanomsg.org/mangos/v3/internal/test"
+	"go.nanomsg.org/mangos/v3/protocol"
+	"go.nanomsg.org/mangos/v3/protocol/respondent"
+	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
 func TestXSurveyorIdentity(t *testing.T) {
