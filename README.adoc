@@ -99,7 +99,7 @@ Some examples are posted in the directories under `examples/` in this project.
 These examples are rewrites (in Go) of Tim Dysinger's
 http://nanomsg.org/gettingstarted/index.html[Getting Started with Nanomsg].
 
-Running `godoc` in the example directories will yield information about how
+Running `go doc` in the example directories will yield information about how
 to run each example program.
 
 Enjoy!
