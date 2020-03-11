@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path"
 	"strconv"
 	"time"
 )
@@ -152,6 +151,25 @@ func doInprocLat(args []string) {
 	os.Exit(0)
 }
 
+func doInprocReqRepLatency(args []string) {
+	if len(args) < 2 {
+		log.Fatalf("Usage: inproc_lat <msg-size> <roundtrip-count>")
+	}
+
+	size, err := strconv.Atoi(args[0])
+	if err != nil {
+		log.Fatalf("Bad msg-size: %v", err)
+	}
+	count, err := strconv.Atoi(args[1])
+	if err != nil {
+		log.Fatalf("Bad roundtrip-count: %v", err)
+	}
+	go ReqRepLatencyServer("inproc://inproc_lat", size, count)
+	time.Sleep(10 * time.Millisecond)
+	ReqRepLatencyClient("inproc://inproc_lat", size, count)
+	os.Exit(0)
+}
+
 func doInprocThr(args []string) {
 	if len(args) < 2 {
 		log.Fatalf("Usage: inproc_thr <msg-size> <msg-count>")
@@ -175,7 +193,7 @@ func main() {
 
 	tries := 0
 	for tries = 0; tries < 2; tries++ {
-		switch path.Base(args[0]) {
+		switch args[0] {
 		case "remote_reqlat":
 			doRemoteReqRepLatency(args[1:])
 
@@ -207,6 +225,9 @@ func main() {
 
 		case "inproc_lat":
 			doInprocLat(args[1:])
+
+		case "inproc_reqlat":
+			doInprocReqRepLatency(args[1:])
 
 		default:
 			args = args[1:]

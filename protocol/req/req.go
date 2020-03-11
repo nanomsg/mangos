@@ -86,7 +86,8 @@ func (s *socket) send() {
 			c.sendID = 0
 			c.cond.Broadcast()
 		}
-		m := c.reqMsg.Dup()
+		m := c.reqMsg
+		m.Clone()
 		p := s.readyq[0]
 		s.readyq = s.readyq[1:]
 
