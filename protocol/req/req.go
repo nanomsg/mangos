@@ -137,6 +137,16 @@ func (p *pipe) receiver() {
 		id := binary.BigEndian.Uint32(m.Header)
 
 		s.Lock()
+		// Since we just received a reply, stick our send at the
+		// head of the list, since that's a good indication that
+		// we're ready for another request.
+		for i, rp := range s.readyq {
+			if p == rp {
+				s.readyq[0], s.readyq[i] = s.readyq[i], s.readyq[0]
+				break
+			}
+		}
+
 		if c, ok := s.ctxByID[id]; ok {
 			c.unscheduleSend()
 			c.reqMsg.Free()
