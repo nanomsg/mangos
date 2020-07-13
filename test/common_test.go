@@ -549,6 +549,7 @@ func slowStart(_ *testing.T, cases []TestCase) bool {
 	}
 
 	timeout := time.After(time.Second * 5)
+Loop:
 	for numexit < needrdy {
 		select {
 		case <-timeout:
@@ -556,7 +557,7 @@ func slowStart(_ *testing.T, cases []TestCase) bool {
 				close(exitq)
 				exitqclosed = true
 			}
-			break
+			break Loop
 		case <-wakeq:
 			numexit++
 		}
