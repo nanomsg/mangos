@@ -89,6 +89,9 @@ func server(url string) {
 				die("can't create context on rep socket: %s", err)
 			}
 			msg, err = ctx.Recv()
+			if err != nil {
+				die("can't receive from context: %s", err)
+			}
 			fmt.Printf("Worker %d: Received request '%s'\n", id, string(msg))
 
 			// Sleep for a random amount of time to simulate "work"

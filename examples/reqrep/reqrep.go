@@ -60,6 +60,9 @@ func node0(url string) {
 	for {
 		// Could also use sock.RecvMsg to get header
 		msg, err = sock.Recv()
+		if err != nil {
+			die("cannot receive on rep socket: %s", err.Error())
+		}
 		if string(msg) == "DATE" { // no need to terminate
 			fmt.Println("NODE0: RECEIVED DATE REQUEST")
 			d := date()
