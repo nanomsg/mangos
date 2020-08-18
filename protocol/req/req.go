@@ -544,6 +544,7 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 				// immediately reschedule it.
 				c.lastPipe = nil
 				if m := c.reqMsg; m != nil {
+					c.unscheduleSend()
 					go c.resendMessage(m)
 				}
 			}
