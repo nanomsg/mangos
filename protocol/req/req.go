@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -57,7 +57,7 @@ type context struct {
 	recvID     uint32            // recv id (set after first send)
 	recvWait   bool              // true if a thread is blocked in RecvMsg
 	bestEffort bool              // if true, don't block waiting in send
-	wantw      bool              // true if we need to send a message
+	queued     bool              // true if we need to send a message
 	closed     bool              // true if we are closed
 }
 
@@ -70,17 +70,13 @@ type socket struct {
 	closed  bool                  // true if we are closed
 	sendq   []*context            // contexts waiting to send
 	readyq  []*pipe               // pipes available for sending
-	pipes   map[uint32]*pipe      // all pipes for the socket (by pipe ID)
 }
 
 func (s *socket) send() {
 	for len(s.sendq) != 0 && len(s.readyq) != 0 {
 		c := s.sendq[0]
 		s.sendq = s.sendq[1:]
-		c.wantw = false
-
-		p := s.readyq[0]
-		s.readyq = s.readyq[1:]
+		c.queued = false
 
 		if c.sendID != 0 {
 			c.reqMsg = c.sendMsg
@@ -91,12 +87,14 @@ func (s *socket) send() {
 			c.cond.Broadcast()
 		}
 		m := c.reqMsg.Dup()
+		p := s.readyq[0]
+		s.readyq = s.readyq[1:]
 
 		// Schedule a retransmit for the future.
 		c.lastPipe = p
 		if c.resendTime > 0 {
 			c.resender = time.AfterFunc(c.resendTime, func() {
-				c.resendMessage(m)
+				c.resendMessage()
 			})
 		}
 		go p.sendCtx(c, m)
@@ -160,51 +158,25 @@ func (p *pipe) receiver() {
 	go p.Close()
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(s.pipes, p.p.ID())
-
-	for c := range s.ctxs {
-		if c.lastPipe == p {
-			// We are closing this pipe, so we need to
-			// immediately reschedule it.
-			c.lastPipe = nil
-			if m := c.reqMsg; m != nil {
-				go c.resendMessage(m)
-			}
-		}
-	}
-
-	s.Unlock()
-	p.p.Close()
-	return nil
+func (p *pipe) Close() {
+	_ = p.p.Close()
 }
 
-func (c *context) resendMessage(m *protocol.Message) {
+func (c *context) resendMessage() {
 	s := c.s
 	s.Lock()
 	defer s.Unlock()
-	if c.reqMsg != m {
-		return
+	if !c.queued {
+		c.queued = true
+		s.sendq = append(s.sendq, c)
+		s.send()
 	}
-	if c.wantw {
-		return // already scheduled for some reason?
-	}
-	c.wantw = true
-	s.sendq = append(s.sendq, c)
-	s.send()
 }
 
 func (c *context) unscheduleSend() {
 	s := c.s
-	if c.wantw {
-		c.wantw = false
+	if c.queued {
+		c.queued = false
 		for i, c2 := range s.sendq {
 			if c2 == c {
 				s.sendq = append(s.sendq[:i],
@@ -213,8 +185,8 @@ func (c *context) unscheduleSend() {
 			}
 		}
 	}
-
 }
+
 func (c *context) cancel() {
 	s := c.s
 	c.unscheduleSend()
@@ -268,7 +240,8 @@ func (c *context) SendMsg(m *protocol.Message) error {
 
 	c.reqID = id
 	s.ctxByID[id] = c
-	c.wantw = true
+	c.unscheduleSend()
+	c.queued = true
 	s.sendq = append(s.sendq, c)
 
 	if c.bestEffort {
@@ -300,7 +273,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 
 	// This sleeps until someone picks us up for scheduling.
 	// It is responsible for providing the blocking semantic and
-	// ultimately backpressure.  Note that we will "continue" if
+	// ultimately back-pressure.  Note that we will "continue" if
 	// the send is canceled by a subsequent send.
 	for c.sendID == id {
 		c.cond.Wait()
@@ -313,7 +286,6 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		if c.closed {
 			return protocol.ErrClosed
 		}
-		return protocol.ErrCanceled
 	}
 	return nil
 }
@@ -322,6 +294,9 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	s := c.s
 	s.Lock()
 	defer s.Unlock()
+	if s.closed || c.closed {
+		return nil, protocol.ErrClosed
+	}
 	if c.recvWait || c.recvID == 0 {
 		return nil, protocol.ErrProtoState
 	}
@@ -477,16 +452,7 @@ func (s *socket) Close() error {
 		c.cancel()
 		delete(s.ctxs, c)
 	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
 }
 
@@ -513,12 +479,12 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 		p: pp,
 		s: s,
 	}
+	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
 		return protocol.ErrClosed
 	}
-	s.pipes[pp.ID()] = p
 	s.readyq = append(s.readyq, p)
 	s.send()
 	go p.receiver()
@@ -526,34 +492,23 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
 	s.Lock()
-	var pipes []*pipe
-	p := s.pipes[pp.ID()]
-	if p != nil && p.p == pp {
-		p.closed = true
-		pipes = append(pipes, p)
-		delete(s.pipes, pp.ID())
-		for i, rp := range s.readyq {
-			if p == rp {
-				s.readyq = append(s.readyq[:i], s.readyq[i+1:]...)
-			}
+	p.closed = true
+	for i, rp := range s.readyq {
+		if p == rp {
+			s.readyq = append(s.readyq[:i], s.readyq[i+1:]...)
 		}
-		for c := range s.ctxs {
-			if c.lastPipe == p {
-				// We are closing this pipe, so we need to
-				// immediately reschedule it.
-				c.lastPipe = nil
-				if m := c.reqMsg; m != nil {
-					c.unscheduleSend()
-					go c.resendMessage(m)
-				}
-			}
+	}
+	for c := range s.ctxs {
+		if c.lastPipe == p {
+			// We are closing this pipe, so we need to
+			// immediately reschedule it.
+			c.lastPipe = nil
+			go c.resendMessage()
 		}
 	}
 	s.Unlock()
-	for _, p := range pipes {
-		p.Close()
-	}
 }
 
 func (*socket) Info() protocol.Info {
@@ -568,7 +523,6 @@ func (*socket) Info() protocol.Info {
 // NewProtocol allocates a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		pipes:   make(map[uint32]*pipe),
 		nextID:  uint32(time.Now().UnixNano()), // quasi-random
 		ctxs:    make(map[*context]struct{}),
 		ctxByID: make(map[uint32]*context),

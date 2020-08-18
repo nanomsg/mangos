@@ -104,8 +104,6 @@ func (tt *TranTest) TestListenAndAccept(t *testing.T) {
 			addr := v.(net.Addr)
 			t.Logf("Dialed remote peer %s addr %s", addr.Network(), addr.String())
 		}
-		t.Logf("Connected client: %d (server %d)",
-			client.LocalProtocol(), client.RemoteProtocol())
 	}()
 
 	server, err := l.Accept()
@@ -123,8 +121,6 @@ func (tt *TranTest) TestListenAndAccept(t *testing.T) {
 	}
 	defer server.Close()
 
-	t.Logf("Connected server: %d (client %d)",
-		server.LocalProtocol(), server.RemoteProtocol())
 	wg.Wait()
 }
 
@@ -218,8 +214,13 @@ func (tt *TranTest) TestSendRecv(t *testing.T) {
 		return
 	}
 
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+
 	go func() {
 		defer close(ch)
+		defer wg.Done()
 
 		// Client side
 		t.Logf("Connecting REQ on %s", tt.addr)
@@ -328,6 +329,8 @@ func (tt *TranTest) TestSendRecv(t *testing.T) {
 		t.Error("Client timeout?")
 		return
 	}
+
+	wg.Wait()
 }
 
 // TestScheme tests the Scheme() entry point on the transport.

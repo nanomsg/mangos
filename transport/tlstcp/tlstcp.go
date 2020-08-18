@@ -17,15 +17,15 @@
 package tlstcp
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
+	"sync"
 	"time"
 
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/transport"
 )
-
-type options map[string]interface{}
 
 // Transport is a transport.Transport for TLS over TCP.
 const Transport = tlsTran(0)
@@ -34,204 +34,163 @@ func init() {
 	transport.RegisterTransport(Transport)
 }
 
-func (o options) get(name string) (interface{}, error) {
-	if v, ok := o[name]; ok {
-		return v, nil
+type dialer struct {
+	addr        string
+	proto       transport.ProtocolInfo
+	hs          transport.Handshaker
+	d           *net.Dialer
+	config      *tls.Config
+	maxRecvSize int
+	lock        sync.Mutex
+}
+
+func (d *dialer) Dial() (transport.Pipe, error) {
+
+	d.lock.Lock()
+	config := d.config
+	maxRecvSize := d.maxRecvSize
+	d.lock.Unlock()
+
+	conn, err := tls.DialWithDialer(d.d, "tcp", d.addr, config)
+	if err != nil {
+		return nil, err
+	}
+	opts := make(map[string]interface{})
+	opts[mangos.OptionTLSConnState] = conn.ConnectionState()
+	p := transport.NewConnPipe(conn, d.proto, opts)
+	p.SetMaxRecvSize(maxRecvSize)
+	d.hs.Start(p)
+	return d.hs.Wait()
+}
+
+func (d *dialer) SetOption(n string, v interface{}) error {
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		if b, ok := v.(int); ok {
+			d.maxRecvSize = b
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionTLSConfig:
+		if b, ok := v.(*tls.Config); ok {
+			d.config = b
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionKeepAliveTime:
+		if b, ok := v.(time.Duration); ok {
+			d.d.KeepAlive = b
+			return nil
+		}
+		return mangos.ErrBadValue
+
+	// The following options exist *only* for compatibility reasons.
+	// Remove them from new code.
+
+	// We don't support disabling Nagle anymore.
+	case mangos.OptionNoDelay:
+		if _, ok := v.(bool); ok {
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionKeepAlive:
+		if b, ok := v.(bool); ok {
+			if b {
+				d.d.KeepAlive = 0 // Enable (default time)
+			} else {
+				d.d.KeepAlive = -1 // Disable
+			}
+			return nil
+		}
+		return mangos.ErrBadValue
+	}
+	return mangos.ErrBadOption
+}
+
+func (d *dialer) GetOption(n string) (interface{}, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		return d.maxRecvSize, nil
+	case mangos.OptionNoDelay:
+		return true, nil // Compatibility only, always true
+	case mangos.OptionTLSConfig:
+		return d.config, nil
+	case mangos.OptionKeepAlive:
+		if d.d.KeepAlive >= 0 {
+			return true, nil
+		}
+		return false, nil
+	case mangos.OptionKeepAliveTime:
+		return d.d.KeepAlive, nil
 	}
 	return nil, mangos.ErrBadOption
 }
 
-func (o options) set(name string, val interface{}) error {
-	switch name {
-	case mangos.OptionTLSConfig:
-		if v, ok := val.(*tls.Config); ok {
-			o[name] = v
-			return nil
-		}
-		return mangos.ErrBadValue
-	case mangos.OptionMaxRecvSize:
-		if v, ok := val.(int); ok {
-			o[name] = v
-			return nil
-		}
-		return mangos.ErrBadValue
-	case mangos.OptionNoDelay:
-		fallthrough
-	case mangos.OptionKeepAlive:
-		if v, ok := val.(bool); ok {
-			o[name] = v
-			return nil
-		}
-		return mangos.ErrBadValue
-
-	case mangos.OptionKeepAliveTime:
-		if v, ok := val.(time.Duration); ok && v.Nanoseconds() > 0 {
-			o[name] = v
-			return nil
-		}
-		return mangos.ErrBadValue
-	}
-
-	return mangos.ErrBadOption
-}
-
-func (o options) configTCP(conn *net.TCPConn) error {
-	if v, ok := o[mangos.OptionNoDelay]; ok {
-		if err := conn.SetNoDelay(v.(bool)); err != nil {
-			return err
-		}
-	}
-	if v, ok := o[mangos.OptionKeepAlive]; ok {
-		if err := conn.SetKeepAlive(v.(bool)); err != nil {
-			return err
-		}
-	}
-	if v, ok := o[mangos.OptionKeepAliveTime]; ok {
-		if err := conn.SetKeepAlivePeriod(v.(time.Duration)); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func newOptions(t tlsTran) options {
-	o := make(map[string]interface{})
-	o[mangos.OptionTLSConfig] = nil
-	o[mangos.OptionKeepAlive] = true
-	o[mangos.OptionNoDelay] = true
-	o[mangos.OptionMaxRecvSize] = 0
-	return options(o)
-}
-
-type dialer struct {
-	addr       string
-	proto      transport.ProtocolInfo
-	opts       options
-	handshaker transport.Handshaker
-}
-
-func (d *dialer) Dial() (transport.Pipe, error) {
-	var (
-		addr   *net.TCPAddr
-		config *tls.Config
-		err    error
-	)
-
-	if addr, err = transport.ResolveTCPAddr(d.addr); err != nil {
-		return nil, err
-	}
-
-	tconn, err := net.DialTCP("tcp", nil, addr)
-	if err != nil {
-		return nil, err
-	}
-	if err = d.opts.configTCP(tconn); err != nil {
-		tconn.Close()
-		return nil, err
-	}
-	if v, ok := d.opts[mangos.OptionTLSConfig]; ok {
-		config = v.(*tls.Config)
-	}
-	conn := tls.Client(tconn, config)
-	if err = conn.Handshake(); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	opts := make(map[string]interface{})
-	for n, v := range d.opts {
-		opts[n] = v
-	}
-	opts[mangos.OptionTLSConnState] = conn.ConnectionState()
-	p, err := transport.NewConnPipe(conn, d.proto, opts)
-	if err != nil {
-		conn.Close()
-		return nil, err
-	}
-	if err = d.handshaker.Start(p); err != nil {
-		conn.Close()
-		return nil, err
-	}
-	return d.handshaker.Wait()
-}
-
-func (d *dialer) SetOption(n string, v interface{}) error {
-	return d.opts.set(n, v)
-}
-
-func (d *dialer) GetOption(n string) (interface{}, error) {
-	return d.opts.get(n)
-}
-
 type listener struct {
-	addr       *net.TCPAddr
-	bound      net.Addr
-	listener   *net.TCPListener
-	proto      transport.ProtocolInfo
-	opts       options
-	config     *tls.Config
-	handshaker transport.Handshaker
-	closeq     chan struct{}
+	addr        string
+	bound       net.Addr
+	lc          net.ListenConfig
+	l           net.Listener
+	maxRecvSize int
+	proto       transport.ProtocolInfo
+	config      *tls.Config
+	hs          transport.Handshaker
+	closeQ      chan struct{}
+	once        sync.Once
+	lock        sync.Mutex
 }
 
 func (l *listener) Listen() error {
 	var err error
-	v, ok := l.opts[mangos.OptionTLSConfig]
-	if !ok {
+	select {
+	case <-l.closeQ:
+		return mangos.ErrClosed
+	default:
+	}
+	l.lock.Lock()
+	config := l.config
+	if config == nil {
 		return mangos.ErrTLSNoConfig
 	}
-	l.config = v.(*tls.Config)
-	if l.config == nil {
-		return mangos.ErrTLSNoConfig
-	}
-	if l.config.Certificates == nil || len(l.config.Certificates) == 0 {
+	if config.Certificates == nil || len(config.Certificates) == 0 {
+		l.lock.Unlock()
 		return mangos.ErrTLSNoCert
 	}
 
-	closeq := make(chan struct{})
-	if l.listener, err = net.ListenTCP("tcp", l.addr); err != nil {
+	inner, err := l.lc.Listen(context.Background(), "tcp", l.addr)
+	if err != nil {
+		l.lock.Unlock()
 		return err
 	}
-	l.closeq = closeq
-	l.bound = l.listener.Addr()
+	l.l = tls.NewListener(inner, config)
+	l.bound = l.l.Addr()
+	l.lock.Unlock()
 
 	go func() {
 		for {
-			tconn, err := l.listener.AcceptTCP()
+			conn, err := l.l.Accept()
 			if err != nil {
 				select {
-				case <-closeq:
+				case <-l.closeQ:
 					return
 				default:
+					time.Sleep(time.Millisecond)
 					continue
 				}
 			}
 
-			if err = l.opts.configTCP(tconn); err != nil {
-				tconn.Close()
-				continue
-			}
-
-			conn := tls.Server(tconn, l.config)
-			if err = conn.Handshake(); err != nil {
-				conn.Close()
-				continue
-			}
+			tc := conn.(*tls.Conn)
 			opts := make(map[string]interface{})
-			for n, v := range l.opts {
-				opts[n] = v
-			}
-			opts[mangos.OptionTLSConnState] = conn.ConnectionState()
-			p, err := transport.NewConnPipe(conn, l.proto, opts)
-			if err != nil {
-				conn.Close()
-				continue
-			}
+			l.lock.Lock()
+			maxRecvSize := l.maxRecvSize
+			l.lock.Unlock()
+			opts[mangos.OptionTLSConnState] = tc.ConnectionState()
+			p := transport.NewConnPipe(conn, l.proto, opts)
+			p.SetMaxRecvSize(maxRecvSize)
 
-			if err = l.handshaker.Start(p); err != nil {
-				conn.Close()
-				continue
-			}
+			l.hs.Start(p)
 		}
 	}()
 
@@ -242,27 +201,90 @@ func (l *listener) Address() string {
 	if b := l.bound; b != nil {
 		return "tls+tcp://" + b.String()
 	}
-	return "tls+tcp://" + l.addr.String()
+	return "tls+tcp://" + l.addr
 }
 
 func (l *listener) Accept() (transport.Pipe, error) {
-	return l.handshaker.Wait()
+	if l.l == nil {
+		return nil, mangos.ErrClosed
+	}
+	return l.hs.Wait()
 }
 
 func (l *listener) Close() error {
-	if l.listener != nil {
-		l.listener.Close()
-	}
-	l.handshaker.Close()
+	l.once.Do(func() {
+		if l.l != nil {
+			_ = l.l.Close()
+		}
+		l.hs.Close()
+		close(l.closeQ)
+	})
 	return nil
 }
 
 func (l *listener) SetOption(n string, v interface{}) error {
-	return l.opts.set(n, v)
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		if b, ok := v.(int); ok {
+			l.maxRecvSize = b
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionTLSConfig:
+		if b, ok := v.(*tls.Config); ok {
+			l.config = b
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionKeepAliveTime:
+		if b, ok := v.(time.Duration); ok {
+			l.lc.KeepAlive = b
+			return nil
+		}
+		return mangos.ErrBadValue
+
+		// Legacy stuff follows
+	case mangos.OptionNoDelay:
+		if _, ok := v.(bool); ok {
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionKeepAlive:
+		if b, ok := v.(bool); ok {
+			if b {
+				l.lc.KeepAlive = 0
+			} else {
+				l.lc.KeepAlive = -1
+			}
+			return nil
+		}
+		return mangos.ErrBadValue
+
+	}
+	return mangos.ErrBadOption
 }
 
 func (l *listener) GetOption(n string) (interface{}, error) {
-	return l.opts.get(n)
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		return l.maxRecvSize, nil
+	case mangos.OptionTLSConfig:
+		return l.config, nil
+	case mangos.OptionKeepAliveTime:
+		return l.lc.KeepAlive, nil
+	case mangos.OptionNoDelay:
+		return true, nil
+	case mangos.OptionKeepAlive:
+		if l.lc.KeepAlive >= 0 {
+			return true, nil
+		}
+		return false, nil
+	}
+	return nil, mangos.ErrBadOption
 }
 
 type tlsTran int
@@ -284,29 +306,27 @@ func (t tlsTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, e
 	}
 
 	d := &dialer{
-		proto:      sock.Info(),
-		opts:       newOptions(t),
-		addr:       addr,
-		handshaker: transport.NewConnHandshaker(),
+		proto: sock.Info(),
+		addr:  addr,
+		hs:    transport.NewConnHandshaker(),
+		d:     &net.Dialer{},
 	}
 	return d, nil
 }
 
-// NewAccepter implements the Transport NewAccepter method.
+// NewListener implements the Transport NewListener method.
 func (t tlsTran) NewListener(addr string, sock mangos.Socket) (transport.Listener, error) {
 	l := &listener{
-		proto: sock.Info(),
-		opts:  newOptions(t),
+		proto:  sock.Info(),
+		closeQ: make(chan struct{}),
 	}
 
 	var err error
 	if addr, err = transport.StripScheme(t, addr); err != nil {
 		return nil, err
 	}
-	if l.addr, err = transport.ResolveTCPAddr(addr); err != nil {
-		return nil, err
-	}
-	l.handshaker = transport.NewConnHandshaker()
+	l.addr = addr
+	l.hs = transport.NewConnHandshaker()
 
 	return l, nil
 }

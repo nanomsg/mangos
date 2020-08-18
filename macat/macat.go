@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// macat implements a nanocat(1) workalike command.
-package main
+// Package macat implements a command-line interface to send and receive
+// data via the mangos implementation of the SP (nanomsg) protocols.  It is
+// designed to be suitable for use as a drop-in replacement for nanocat(1).`
+package macat
 
 import (
 	"bufio"
@@ -22,15 +24,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-)
 
-import (
-	"github.com/droundy/goopt"
+	"github.com/gdamore/optopia"
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/protocol/bus"
 	"nanomsg.org/go/mangos/v2/protocol/pair"
@@ -46,101 +47,123 @@ import (
 	"nanomsg.org/go/mangos/v2/transport/all"
 )
 
-var verbose int
-var protoSet bool
-var proto string
-var dialAddrs []string
-var listenAddrs []string
-var subscriptions []string
-var recvTimeout = -1
-var sendTimeout = -1
-var sendInterval = -1
-var sendDelay int
-var sendData []byte
-var printFormat string
-var sock mangos.Socket
-var tlscfg tls.Config
-var certFile string
-var keyFile string
-var caFile string
-var noVerifyTLS bool
+// Duration is our internal duration, which parses bare numbers as seconds.
+// Otherwise it's just a time.Duration.
+type Duration time.Duration
 
-func setSocket(f func() (mangos.Socket, error)) error {
+// UnmarshalText implements the encoding.TextUnmarshaller.  It parses
+// bare integers as strings for legacy reasons.
+func (d *Duration) UnmarshalText(b []byte) error {
+	if val, err := strconv.Atoi(string(b)); err == nil {
+		*d = Duration(val) * Duration(time.Second)
+		return nil
+	}
+	if dur, err := time.ParseDuration(string(b)); err == nil {
+		*d = Duration(dur)
+		return nil
+	}
+	return errors.New("value is not a duration")
+}
+
+// App is an instance of the macat application.
+type App struct {
+	verbose       int
+	dialAddr      []string
+	bindAddr      []string
+	subscriptions []string
+	recvTimeout   Duration
+	sendTimeout   Duration
+	sendInterval  Duration
+	sendDelay     Duration
+	sendData      []byte
+	printFormat   string
+	sock          mangos.Socket
+	tlsCfg        tls.Config
+	certFile      string
+	keyFile       string
+	noVerifyTLS   bool
+	options       *optopia.Options
+	count         int
+	countSet      bool
+	stdOut        io.Writer
+}
+
+func mustSucceed(e error) {
+	if e != nil {
+		panic(e.Error())
+	}
+}
+
+func (a *App) setSocket(f func() (mangos.Socket, error)) error {
 	var err error
-	if sock != nil {
+	if a.sock != nil {
 		return errors.New("protocol already selected")
 	}
-	sock, err = f()
-	if err != nil {
-		return err
-	}
-	all.AddTransports(sock)
+	a.sock, err = f()
+	mustSucceed(err)
+	all.AddTransports(a.sock)
 	return nil
 }
 
-func addDial(addr string) error {
+func (a *App) addDial(addr string) error {
 	if !strings.Contains(addr, "://") {
 		return errors.New("invalid address format")
 	}
-	dialAddrs = append(dialAddrs, addr)
+	a.dialAddr = append(a.dialAddr, addr)
 	return nil
 }
 
-func addListen(addr string) error {
+func (a *App) addBind(addr string) error {
 	if !strings.Contains(addr, "://") {
 		return errors.New("invalid address format")
 	}
-	listenAddrs = append(listenAddrs, addr)
+	a.bindAddr = append(a.bindAddr, addr)
 	return nil
 }
 
-func addListenIPC(path string) error {
-	return addListen("ipc://" + path)
+func (a *App) addBindIPC(path string) error {
+	return a.addBind("ipc://" + path)
 }
 
-func addDialIPC(path string) error {
-	return addDial("ipc://" + path)
+func (a *App) addDialIPC(path string) error {
+	return a.addDial("ipc://" + path)
 }
 
-func addListenLocal(port string) error {
-	return addListen("tcp://127.0.0.1:" + port)
+func (a *App) addBindLocal(port string) error {
+	return a.addBind("tcp://127.0.0.1:" + port)
 }
 
-func addDialLocal(port string) error {
-	return addDial("tcp://127.0.0.1:" + port)
+func (a *App) addDialLocal(port string) error {
+	return a.addDial("tcp://127.0.0.1:" + port)
 }
 
-func addSub(sub string) error {
-	subscriptions = append(subscriptions, sub)
+func (a *App) addSub(sub string) error {
+	a.subscriptions = append(a.subscriptions, sub)
 	return nil
 }
 
-func setSendData(data string) error {
-	if sendData != nil {
+func (a *App) setSendData(data string) error {
+	if a.sendData != nil {
 		return errors.New("data or file already set")
 	}
-	sendData = []byte(data)
+	a.sendData = []byte(data)
 	return nil
 }
 
-func setSendFile(path string) error {
-	if sendData != nil {
+func (a *App) setSendFile(path string) error {
+	if a.sendData != nil {
 		return errors.New("data or file already set")
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	sendData, err = ioutil.ReadAll(f)
+	var err error
+	a.sendData, err = ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func setFormat(f string) error {
-	if len(printFormat) > 0 {
+func (a *App) setFormat(f string) error {
+	if len(a.printFormat) > 0 {
 		return errors.New("output format already set")
 	}
 	switch f {
@@ -150,249 +173,393 @@ func setFormat(f string) error {
 	case "quoted":
 	case "msgpack":
 	default:
-		return errors.New("invalid format type")
+		return errors.New("invalid format type: " + f)
 	}
-	printFormat = f
+	a.printFormat = f
 	return nil
 }
 
-func setTLSVer(vmin uint16, vmax uint16) error {
-	if tlscfg.MinVersion != 0 || tlscfg.MaxVersion != 0 {
-		return errors.New("TLS/SSL version already set")
-	}
-	tlscfg.MinVersion = vmin
-	tlscfg.MaxVersion = vmax
-	return nil
-}
-
-func setCert(path string) error {
-	if len(certFile) != 0 {
+func (a *App) setCert(path string) error {
+	if len(a.certFile) != 0 {
 		return errors.New("certificate file already set")
 	}
-	certFile = path
+	a.certFile = path
 	return nil
 }
 
-func setKey(path string) error {
-	if len(keyFile) != 0 {
+func (a *App) setKey(path string) error {
+	if len(a.keyFile) != 0 {
 		return errors.New("key file already set")
 	}
-	keyFile = path
+	a.keyFile = path
 	return nil
 }
 
-func setCaCert(path string) error {
-	if tlscfg.RootCAs != nil {
+func (a *App) setCaCert(path string) error {
+	if a.tlsCfg.RootCAs != nil {
 		return errors.New("cacert already set")
 	}
-	caFile = path
 
-	f, err := os.Open(path)
+	pem, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	pem, err := ioutil.ReadAll(f)
-	if err != nil {
-		return err
-	}
-	tlscfg.RootCAs = x509.NewCertPool()
-	if !tlscfg.RootCAs.AppendCertsFromPEM(pem) {
+	a.tlsCfg.RootCAs = x509.NewCertPool()
+	if !a.tlsCfg.RootCAs.AppendCertsFromPEM(pem) {
 		return errors.New("unable to load CA certs")
 	}
-	tlscfg.ClientCAs = tlscfg.RootCAs
+	a.tlsCfg.ClientCAs = a.tlsCfg.RootCAs
 	return nil
 }
 
-func fatalf(format string, v ...interface{}) {
-	fmt.Fprintf(os.Stderr, format, v...)
-	os.Exit(1)
+func (a *App) getOptions() []*optopia.Option {
+	return []*optopia.Option{
+		{
+			Long:  "verbose",
+			Short: 'v',
+			Help:  "Increase verbosity",
+			Handle: func(string) error {
+				a.verbose++
+				return nil
+			},
+		},
+		{
+			Long:  "silent",
+			Short: 'q',
+			Help:  "Decrease verbosity",
+			Handle: func(string) error {
+				a.verbose--
+				return nil
+			},
+		},
+		{
+			Long: "push",
+			Help: "Use PUSH socket type",
+			Handle: func(string) error {
+				return a.setSocket(push.NewSocket)
+			},
+		},
+		{
+			Long: "pull",
+			Help: "Use PULL socket type",
+			Handle: func(string) error {
+				return a.setSocket(pull.NewSocket)
+			},
+		},
+		{
+			Long: "pub",
+			Help: "Use PUB socket type",
+			Handle: func(string) error {
+				return a.setSocket(pub.NewSocket)
+			},
+		},
+		{
+			Long: "sub",
+			Help: "Use SUB socket type",
+			Handle: func(string) error {
+				return a.setSocket(sub.NewSocket)
+			},
+		},
+		{
+			Long: "req",
+			Help: "Use REQ socket type",
+			Handle: func(string) error {
+				return a.setSocket(req.NewSocket)
+			},
+		},
+		{
+			Long: "rep",
+			Help: "Use REP socket type",
+			Handle: func(string) error {
+				return a.setSocket(rep.NewSocket)
+			},
+		},
+		{
+			Long: "surveyor",
+			Help: "Use SURVEYOR socket type",
+			Handle: func(string) error {
+				return a.setSocket(surveyor.NewSocket)
+			},
+		},
+		{
+			Long: "respondent",
+			Help: "Use RESPONDENT socket type",
+			Handle: func(string) error {
+				return a.setSocket(respondent.NewSocket)
+			},
+		},
+		{
+			Long: "bus",
+			Help: "Use BUS socket type",
+			Handle: func(string) error {
+				return a.setSocket(bus.NewSocket)
+			},
+		},
+		{
+			Long: "pair",
+			Help: "Use PAIR socket type",
+			Handle: func(string) error {
+				return a.setSocket(pair.NewSocket)
+			},
+		},
+		{
+			Long: "star",
+			Help: "Use STAR socket type",
+			Handle: func(string) error {
+				return a.setSocket(star.NewSocket)
+			},
+		},
+		{
+			Long:    "bind",
+			Help:    "Bind socket to ADDR",
+			ArgName: "ADDR",
+			HasArg:  true,
+			Handle:  a.addBind,
+		},
+		{
+			Long:    "connect",
+			Help:    "Connect socket to ADDR",
+			ArgName: "ADDR",
+			HasArg:  true,
+			Handle:  a.addDial,
+		},
+		{
+			Long:    "bind-ipc",
+			Short:   'X',
+			Help:    "Bind socket to IPC PATH",
+			ArgName: "PATH",
+			HasArg:  true,
+			Handle:  a.addBindIPC,
+		},
+		{
+			Long:    "connect-ipc",
+			Short:   'x',
+			Help:    "Connect socket to IPC PATH",
+			ArgName: "PATH",
+			HasArg:  true,
+			Handle:  a.addDialIPC,
+		},
+		{
+			Long:    "bind-local",
+			Short:   'L',
+			Help:    "Bind socket to localhost PORT",
+			ArgName: "PORT",
+			HasArg:  true,
+			Handle:  a.addBindLocal,
+		},
+		{
+			Long:    "connect-local",
+			Short:   'l',
+			Help:    "Connect socket to localhost PATH",
+			ArgName: "PORT",
+			HasArg:  true,
+			Handle:  a.addDialLocal,
+		},
+		{
+			Long:    "subscribe",
+			Help:    "Subscribe to PREFIX (default is wildcard)",
+			ArgName: "PREFIX",
+			HasArg:  true,
+			Handle:  a.addSub,
+		},
+		{
+			Long:    "count",
+			ArgName: "COUNT",
+			HasArg:  true,
+			ArgP:    &a.count,
+			Help:    "Repeat COUNT times",
+			Handle: func(string) error {
+				a.countSet = true
+				return nil
+			},
+		},
+		{
+			Long:    "recv-timeout",
+			Help:    "Set receive timeout",
+			ArgName: "DUR",
+			HasArg:  true,
+			ArgP:    &a.recvTimeout,
+		},
+		{
+			Long:    "send-timeout",
+			Help:    "Set send timeout",
+			ArgName: "DUR",
+			HasArg:  true,
+			ArgP:    &a.sendTimeout,
+		},
+		{
+			Long:    "send-delay",
+			Short:   'd',
+			Help:    "Set send delay",
+			ArgName: "DUR",
+			HasArg:  true,
+			ArgP:    &a.sendDelay,
+		},
+		{
+			Long:    "send-interval",
+			Short:   'i',
+			Help:    "Set send interval",
+			ArgName: "DUR",
+			HasArg:  true,
+			ArgP:    &a.sendInterval,
+			Handle: func(string) error {
+				if !a.countSet {
+					a.count = -1
+				}
+				return nil
+			},
+		},
+		{
+			Long: "raw",
+			Help: "Raw output, no delimiters",
+			Handle: func(string) error {
+				return a.setFormat("raw")
+			},
+		},
+		{
+			Long:  "ascii",
+			Short: 'A',
+			Help:  "ASCII output, one per line",
+			Handle: func(string) error {
+				return a.setFormat("ascii")
+			},
+		},
+		{
+			Long:  "quoted",
+			Short: 'Q',
+			Help:  "quoted output, one per line",
+			Handle: func(string) error {
+				return a.setFormat("quoted")
+			},
+		},
+		{
+			Long: "msgpack",
+			Help: "MsgPack binary output (see msgpack.org)",
+			Handle: func(string) error {
+				return a.setFormat("msgpack")
+			},
+		},
+		{
+			Long:   "format",
+			Help:   "Set output format to FORMAT",
+			Handle: a.setFormat,
+			HasArg: true,
+		},
+		{
+			Long:    "data",
+			Short:   'D',
+			Help:    "Data to send",
+			ArgName: "DATA",
+			HasArg:  true,
+			Handle:  a.setSendData,
+		},
+		{
+			Long:    "file",
+			Short:   'F',
+			Help:    "Send contents of FILE",
+			ArgName: "FILE",
+			HasArg:  true,
+			Handle:  a.setSendFile,
+		},
+		{
+			Long:    "cert",
+			Short:   'E',
+			Help:    "Use self certificate in FILE for TLS",
+			ArgName: "FILE",
+			HasArg:  true,
+			Handle:  a.setCert,
+		},
+		{
+			Long:    "key",
+			Help:    "Use private key in FILE for TLS",
+			ArgName: "FILE",
+			HasArg:  true,
+			Handle:  a.setKey,
+		},
+		{
+			Long:    "cacert",
+			Help:    "Use CA certificate(s) in FILE for TLS",
+			ArgName: "FILE",
+			HasArg:  true,
+			Handle:  a.setCaCert,
+		},
+		{
+			Long:  "insecure",
+			Short: 'k',
+			Help:  "Do not validate TLS peer",
+			Handle: func(string) error {
+				a.noVerifyTLS = true
+				return nil
+			},
+		},
+	}
 }
 
-func init() {
-	goopt.NoArg([]string{"--verbose", "-v"}, "Increase verbosity",
-		func() error {
-			verbose++
-			return nil
-		})
-	goopt.NoArg([]string{"--silent", "-q"}, "Decrease verbosity",
-		func() error {
-			verbose--
-			return nil
-		})
+// Initialize initializes an instance of the app.
+func (a *App) Initialize() {
+	a.stdOut = os.Stdout
+	a.sock = nil
+	a.recvTimeout = Duration(-1)
+	a.sendTimeout = Duration(-1)
+	a.sendInterval = Duration(-1)
+	a.sendDelay = Duration(-1)
+	a.count = 1
+	a.options = &optopia.Options{}
+	opts := a.getOptions()
+	mustSucceed(a.options.Add(opts...))
+}
 
-	goopt.NoArg([]string{"--push"}, "Use PUSH socket type", func() error {
-		return setSocket(push.NewSocket)
-	})
-	goopt.NoArg([]string{"--pull"}, "Use PULL socket type", func() error {
-		return setSocket(pull.NewSocket)
-	})
-	goopt.NoArg([]string{"--pub"}, "Use PUB socket type", func() error {
-		return setSocket(pub.NewSocket)
-	})
-	goopt.NoArg([]string{"--sub"}, "Use SUB socket type", func() error {
-		return setSocket(sub.NewSocket)
-	})
-	goopt.NoArg([]string{"--req"}, "Use REQ socket type", func() error {
-		return setSocket(req.NewSocket)
-	})
-	goopt.NoArg([]string{"--rep"}, "Use REP socket type", func() error {
-		return setSocket(rep.NewSocket)
-	})
-	goopt.NoArg([]string{"--surveyor"}, "Use SURVEYOR socket type",
-		func() error {
-			return setSocket(surveyor.NewSocket)
-		})
-	goopt.NoArg([]string{"--respondent"}, "Use RESPONDENT socket type",
-		func() error {
-			return setSocket(respondent.NewSocket)
-		})
-	goopt.NoArg([]string{"--bus"}, "Use BUS socket type", func() error {
-		return setSocket(bus.NewSocket)
-	})
-	goopt.NoArg([]string{"--pair"}, "Use PAIR socket type", func() error {
-		return setSocket(pair.NewSocket)
-	})
-	goopt.NoArg([]string{"--star"}, "Use STAR socket type", func() error {
-		return setSocket(star.NewSocket)
-	})
-	goopt.ReqArg([]string{"--bind"}, "ADDR", "Bind socket to ADDR",
-		addListen)
-	goopt.ReqArg([]string{"--connect"}, "ADDR", "Connect socket to ADDR",
-		addDial)
-	goopt.ReqArg([]string{"--bind-ipc", "-X"}, "PATH",
-		"Bind socket to IPC PATH", addListenIPC)
-	goopt.ReqArg([]string{"--connect-ipc", "-x"}, "PATH",
-		"Connect socket to IPC PATH", addDialIPC)
-	goopt.ReqArg([]string{"--bind-local", "-L"}, "PORT",
-		"Bind socket to TCP localhost PORT", addListenLocal)
-	goopt.ReqArg([]string{"--connect-local", "-l"}, "PORT",
-		"Connect socket to TCP localhost PORT", addDialLocal)
-	goopt.ReqArg([]string{"--subscribe"}, "PREFIX",
-		"Subcribe to PREFIX (default is wildcard)", addSub)
-	goopt.ReqArg([]string{"--recv-timeout"}, "SEC", "Set receive timeout",
-		func(to string) error {
-			var err error
-			recvTimeout, err = strconv.Atoi(to)
-			if err != nil {
-				return errors.New("value not an integer")
-			}
-			return nil
-		})
-	goopt.ReqArg([]string{"--send-timeout"}, "SEC", "Set send timeout",
-		func(to string) error {
-			var err error
-			if sendTimeout, err = strconv.Atoi(to); err != nil {
-				return errors.New("value not an integer")
-			}
-			return nil
-		})
-	goopt.ReqArg([]string{"--send-delay", "-d"}, "SEC",
-		"Set initial send delay",
-		func(to string) error {
-			var err error
-			if sendDelay, err = strconv.Atoi(to); err != nil {
-				return errors.New("value not an integer")
-			}
-			return nil
-		})
-	goopt.NoArg([]string{"--raw"}, "Raw output, no delimiters",
-		func() error {
-			return setFormat("raw")
-		})
-	goopt.NoArg([]string{"--ascii", "-A"}, "ASCII output, one per line",
-		func() error {
-			return setFormat("ascii")
-		})
-	goopt.NoArg([]string{"--quoted", "-Q"}, "Quoted output, one per line",
-		func() error {
-			return setFormat("quoted")
-		})
-	goopt.NoArg([]string{"--msgpack"},
-		"Msgpacked binay output (see msgpack.org)",
-		func() error {
-			return setFormat("msgpack")
-		})
-
-	goopt.ReqArg([]string{"--interval", "-i"}, "SEC",
-		"Send DATA every SEC seconds",
-		func(to string) error {
-			var err error
-			if sendInterval, err = strconv.Atoi(to); err != nil {
-				return errors.New("value not an integer")
-			}
-			return nil
-		})
-
-	goopt.ReqArg([]string{"--data", "-D"}, "DATA", "Data to send",
-		setSendData)
-	goopt.ReqArg([]string{"--file", "-F"}, "FILE", "Send contents of FILE",
-		setSendFile)
-
-	goopt.ReqArg([]string{"--cert", "-E"}, "FILE",
-		"Use certificate in FILE for SSL/TLS", setCert)
-	goopt.ReqArg([]string{"--key"}, "FILE",
-		"Use private key in FILE for SSL/TLS", setKey)
-	goopt.ReqArg([]string{"--cacert"}, "FILE",
-		"Use CA certicate(s) in FILE for SSL/TLS", setCaCert)
-	goopt.NoArg([]string{"--insecure", "-k"},
-		"Do not validate TLS/SSL peer certificate",
-		func() error {
-			noVerifyTLS = true
-			return nil
-		})
-	goopt.Description = func() string {
-		return `The macat command is a command-line interface to
-send and receive
+/*
+The macat command is a command-line interface to send and receive
 data via the mangos implementation of the SP (nanomsg) protocols.  It is
 designed to be suitable for use as a drop-in replacement for nanocat(1).`
-	}
 
-	goopt.Author = "Garrett D'Amore"
+Summary = "command line interface to the mangos messaging library"
+*/
 
-	goopt.Suite = "mangos"
-
-	goopt.Summary = "command line interface to the mangos messaging library"
-
+// Help returns a help string.
+func (a *App) Help() string {
+	return a.options.Help()
 }
 
-func printMsg(msg *mangos.Message) {
-	if printFormat == "no" {
+func (a *App) printMsg(msg *mangos.Message) {
+	if a.printFormat == "no" {
 		return
 	}
-	bw := bufio.NewWriter(os.Stdout)
-	switch printFormat {
+	bw := bufio.NewWriter(a.stdOut)
+	switch a.printFormat {
 	case "raw":
-		bw.Write(msg.Body)
+		_, _ = bw.Write(msg.Body)
 	case "ascii":
 		for i := 0; i < len(msg.Body); i++ {
 			if strconv.IsPrint(rune(msg.Body[i])) {
-				bw.WriteByte(msg.Body[i])
+				_ = bw.WriteByte(msg.Body[i])
 			} else {
-				bw.WriteByte('.')
+				_ = bw.WriteByte('.')
 			}
 		}
-		bw.WriteString("\n")
+		_, _ = bw.WriteString("\n")
 	case "quoted":
 		for i := 0; i < len(msg.Body); i++ {
 			switch msg.Body[i] {
 			case '\n':
-				bw.WriteString("\\n")
+				_, _ = bw.WriteString("\\n")
 			case '\r':
-				bw.WriteString("\\r")
+				_, _ = bw.WriteString("\\r")
 			case '\\':
-				bw.WriteString("\\\\")
+				_, _ = bw.WriteString("\\\\")
 			case '"':
-				bw.WriteString("\\\"")
+				_, _ = bw.WriteString("\\\"")
 			default:
 				if strconv.IsPrint(rune(msg.Body[i])) {
-					bw.WriteByte(msg.Body[i])
+					_ = bw.WriteByte(msg.Body[i])
 				} else {
-					bw.WriteString(fmt.Sprintf("\\x%02x",
+					_, _ = bw.WriteString(fmt.Sprintf("\\x%02x",
 						msg.Body[i]))
 				}
 			}
 		}
-		bw.WriteString("\n")
+		_, _ = bw.WriteString("\n")
 
 	case "msgpack":
 		enc := make([]byte, 5)
@@ -411,63 +578,81 @@ func printMsg(msg *mangos.Message) {
 			enc[0] = 0xc6
 			binary.BigEndian.PutUint32(enc[1:], uint32(len(msg.Body)))
 		}
-		bw.Write(enc)
-		bw.Write(msg.Body)
+		_, _ = bw.Write(enc)
+		_, _ = bw.Write(msg.Body)
 	}
-	bw.Flush()
+	_ = bw.Flush()
 }
 
-func recvLoop(sock mangos.Socket) {
+func (a *App) recvLoop() error {
+	sock := a.sock
 	for {
 		msg, err := sock.RecvMsg()
 		switch err {
 		case mangos.ErrProtoState:
-			return
+			return nil // Survey completion
 		case mangos.ErrRecvTimeout:
-			return
+			return nil
 		case nil:
 		default:
-			fatalf("RecvMsg failed: %v", err)
+			return fmt.Errorf("recv: %v", err)
 		}
-		printMsg(msg)
+		a.printMsg(msg)
 		msg.Free()
 	}
 }
 
-func sendLoop(sock mangos.Socket) {
-	if sendData == nil {
-		fatalf("No data to send!")
+func (a *App) sendLoop() error {
+	sock := a.sock
+	count := a.count
+	if a.sendData == nil {
+		return errors.New("no data to send")
 	}
 	for {
-		msg := mangos.NewMessage(len(sendData))
-		msg.Body = append(msg.Body, sendData...)
+		switch count {
+		case -1:
+		case 0:
+			return nil
+		default:
+			count--
+		}
+		msg := mangos.NewMessage(len(a.sendData))
+		msg.Body = append(msg.Body, a.sendData...)
 		err := sock.SendMsg(msg)
 
 		if err != nil {
-			fatalf("SendMsg failed: %v", err)
+			return fmt.Errorf("send: %v", err)
 		}
 
-		if sendInterval >= 0 {
-			time.Sleep(time.Duration(sendInterval) * time.Second)
-		} else {
-			break
+		if a.sendInterval >= 0 && count != 0 {
+			time.Sleep(time.Duration(a.sendInterval))
 		}
 	}
 }
 
-func sendRecvLoop(sock mangos.Socket) {
+func (a *App) sendRecvLoop() error {
+	sock := a.sock
+	count := a.count
 	for {
-		msg := mangos.NewMessage(len(sendData))
-		msg.Body = append(msg.Body, sendData...)
+		switch count {
+		case -1:
+		case 0:
+			return nil
+		default:
+			count--
+		}
+
+		msg := mangos.NewMessage(len(a.sendData))
+		msg.Body = append(msg.Body, a.sendData...)
 		err := sock.SendMsg(msg)
 
 		if err != nil {
-			fatalf("SendMsg failed: %v", err)
+			return fmt.Errorf("send: %v", err)
 		}
 
-		if sendInterval < 0 {
-			recvLoop(sock)
-			return
+		if a.sendInterval < 0 {
+			a.count++
+			return a.recvLoop()
 		}
 
 		now := time.Now()
@@ -475,186 +660,195 @@ func sendRecvLoop(sock mangos.Socket) {
 		// maximum wait time is upper bound of recvTimeout and
 		// sendInterval
 
-		if recvTimeout < 0 || recvTimeout > sendInterval {
-			sock.SetOption(mangos.OptionRecvDeadline,
-				time.Second*time.Duration(sendInterval))
+		if a.recvTimeout < 0 || a.recvTimeout > a.sendInterval {
+			_ = sock.SetOption(mangos.OptionRecvDeadline,
+				time.Duration(a.sendInterval))
 		}
 		msg, err = sock.RecvMsg()
 		switch err {
+		case mangos.ErrProtoState:
 		case mangos.ErrRecvTimeout:
 		case nil:
-			printMsg(msg)
+			a.printMsg(msg)
 			msg.Free()
 		default:
-			fatalf("RecvMsg failed: %v", err)
+			return fmt.Errorf("recv: %v", err)
 		}
-		time.Sleep((time.Second * time.Duration(sendInterval)) -
-			time.Now().Sub(now))
+		if count != 0 {
+			time.Sleep(time.Duration(a.sendInterval) - time.Since(now))
+		}
 	}
 }
 
-func replyLoop(sock mangos.Socket) {
-	if sendData == nil {
-		fatalf("No data to send!")
+func (a *App) replyLoop() error {
+	sock := a.sock
+	if a.sendData == nil {
+		return a.recvLoop()
 	}
 	for {
 		msg, err := sock.RecvMsg()
 		switch err {
 		case mangos.ErrRecvTimeout:
-			return
+			return nil
 		case nil:
 		default:
-			fatalf("RecvMsg failed: %v", err)
+			return fmt.Errorf("recv: %v", err)
 		}
-		printMsg(msg)
+		a.printMsg(msg)
 		msg.Free()
 
-		msg = mangos.NewMessage(len(sendData))
-		msg.Body = append(msg.Body, sendData...)
+		msg = mangos.NewMessage(len(a.sendData))
+		msg.Body = append(msg.Body, a.sendData...)
 		err = sock.SendMsg(msg)
 
 		if err != nil {
-			fatalf("SendMsg failed: %v", err)
+			return fmt.Errorf("send: %v", err)
 		}
 	}
 }
 
-func cleanup() {
-	if sock != nil {
-		sock.Close()
+func (a *App) cleanup() {
+	if a.sock != nil {
+		time.Sleep(time.Millisecond * 20) // for draining
+		_ = a.sock.Close()
 	}
 }
 
-func main() {
-	defer cleanup()
+// Run runs the instance of the application.
+func (a *App) Run(args ...string) error {
 
-	goopt.Parse(nil)
+	defer a.cleanup()
 
-	if len(certFile) != 0 {
-		if len(keyFile) == 0 {
-			keyFile = certFile
+	args, e := a.options.Parse(args)
+	if e != nil {
+		return e
+	}
+	if len(args) > 0 {
+		return fmt.Errorf("usage: extra arguments")
+	}
+
+	if a.certFile != "" {
+		if a.keyFile == "" {
+			a.keyFile = a.certFile
 		}
-		c, e := tls.LoadX509KeyPair(certFile, keyFile)
+		c, e := tls.LoadX509KeyPair(a.certFile, a.keyFile)
 		if e != nil {
-			fatalf("Failed loading cert/key: %v", e)
+			return fmt.Errorf("failed loading cert/key: %v", e)
 		}
-		tlscfg.Certificates = make([]tls.Certificate, 0, 1)
-		tlscfg.Certificates = append(tlscfg.Certificates, c)
+		a.tlsCfg.Certificates = make([]tls.Certificate, 0, 1)
+		a.tlsCfg.Certificates = append(a.tlsCfg.Certificates, c)
 	}
-	if tlscfg.RootCAs != nil {
-		tlscfg.ClientAuth = tls.RequireAndVerifyClientCert
-		tlscfg.InsecureSkipVerify = false
+	if a.tlsCfg.RootCAs != nil {
+		a.tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+		a.tlsCfg.InsecureSkipVerify = false
 	} else {
-		tlscfg.ClientAuth = tls.NoClientCert
-		tlscfg.InsecureSkipVerify = true
+		a.tlsCfg.ClientAuth = tls.NoClientCert
+		a.tlsCfg.InsecureSkipVerify = a.noVerifyTLS
 	}
 
-	if sock == nil {
-		fatalf("Protocol not specified.")
+	if a.sock == nil {
+		return errors.New("protocol not specified")
 	}
 
-	if len(listenAddrs) == 0 && len(dialAddrs) == 0 {
-		fatalf("No address specified.")
+	if len(a.bindAddr) == 0 && len(a.dialAddr) == 0 {
+		return errors.New("no address specified")
 	}
 
-	if sock.Info().Self != mangos.ProtoSub {
-		if len(subscriptions) > 0 {
-			fatalf("Subscription only valid with SUB protocol.")
+	if a.sock.Info().Self != mangos.ProtoSub {
+		if len(a.subscriptions) > 0 {
+			return errors.New("subscription only valid with SUB protocol")
 		}
 	} else {
-		if len(subscriptions) > 0 {
-			for i := range subscriptions {
-				err := sock.SetOption(mangos.OptionSubscribe,
-					[]byte(subscriptions[i]))
-				if err != nil {
-					fatalf("Can't subscribe: %v", err)
-				}
+		if len(a.subscriptions) > 0 {
+			for i := range a.subscriptions {
+				err := a.sock.SetOption(mangos.OptionSubscribe,
+					[]byte(a.subscriptions[i]))
+				mustSucceed(err)
 			}
 		} else {
-			err := sock.SetOption(mangos.OptionSubscribe, []byte{})
-			if err != nil {
-				fatalf("Can't wild card subscribe: %v", err)
-			}
+			err := a.sock.SetOption(mangos.OptionSubscribe, []byte{})
+			mustSucceed(err)
 		}
 	}
 
-	for i := range listenAddrs {
+	for _, addr := range a.bindAddr {
 		var opts = make(map[string]interface{})
 
 		// TLS addresses require a certificate to be supplied.
-		if strings.HasPrefix(listenAddrs[i], "tls") {
-			if len(tlscfg.Certificates) == 0 {
-				fatalf("No server certificate specified.")
+		if strings.HasPrefix(addr, "tls") ||
+			strings.HasPrefix(addr, "wss") {
+			if len(a.tlsCfg.Certificates) == 0 {
+				return errors.New("no server cert specified")
 			}
-			if tlscfg.InsecureSkipVerify && !noVerifyTLS {
-				fatalf("No CA certificate specified.")
-			}
-			opts[mangos.OptionTLSConfig] = &tlscfg
+			opts[mangos.OptionTLSConfig] = &a.tlsCfg
 		}
-		err := sock.ListenOptions(listenAddrs[i], opts)
+		err := a.sock.ListenOptions(addr, opts)
 		if err != nil {
-			fatalf("Bind(%s): %v", listenAddrs[i], err)
+			return fmt.Errorf("bind(%s): %v", addr, err)
 		}
 	}
 
-	for i := range dialAddrs {
+	for _, addr := range a.dialAddr {
 		var opts = make(map[string]interface{})
 
-		if strings.HasPrefix(dialAddrs[i], "tls") {
-			if tlscfg.InsecureSkipVerify && !noVerifyTLS {
-				fatalf("No CA certificate specified.")
+		if strings.HasPrefix(addr, "tls") ||
+			strings.HasPrefix(addr, "wss") {
+			if a.tlsCfg.RootCAs == nil && !a.noVerifyTLS {
+				return errors.New("no CA cert specified")
 			}
-			opts[mangos.OptionTLSConfig] = &tlscfg
+			opts[mangos.OptionTLSConfig] = &a.tlsCfg
 		}
-		err := sock.DialOptions(dialAddrs[i], opts)
+		err := a.sock.DialOptions(addr, opts)
 		if err != nil {
-			fatalf("Dial(%s): %v", dialAddrs[i], err)
+			return fmt.Errorf("dial(%s): %v", addr, err)
 		}
 	}
 
-	// XXX: fugly hack - work around TCP slow start
+	// XXX: ugly hack - work around TCP slow start
 	time.Sleep(time.Millisecond * 20)
-	time.Sleep(time.Second * time.Duration(sendDelay))
+	time.Sleep(time.Duration(a.sendDelay))
+
+	if dur := time.Duration(a.recvTimeout); dur >= 0 {
+		_ = a.sock.SetOption(mangos.OptionRecvDeadline, dur)
+	}
+	if dur := time.Duration(a.sendTimeout); dur >= 0 {
+		_ = a.sock.SetOption(mangos.OptionSendDeadline, dur)
+	}
 
 	// Start main processing
-	switch sock.Info().Self {
+	switch a.sock.Info().Self {
 
 	case mangos.ProtoPull:
 		fallthrough
 	case mangos.ProtoSub:
-		recvLoop(sock)
+		return a.recvLoop()
 
 	case mangos.ProtoPush:
 		fallthrough
 	case mangos.ProtoPub:
-		sendLoop(sock)
+		return a.sendLoop()
 
 	case mangos.ProtoPair:
 		fallthrough
 	case mangos.ProtoStar:
 		fallthrough
 	case mangos.ProtoBus:
-		if sendData != nil {
-			sendRecvLoop(sock)
-		} else {
-			recvLoop(sock)
+		if a.sendData != nil {
+			return a.sendRecvLoop()
 		}
+		return a.recvLoop()
 
 	case mangos.ProtoSurveyor:
 		fallthrough
 	case mangos.ProtoReq:
-		sendRecvLoop(sock)
+		return a.sendRecvLoop()
 
 	case mangos.ProtoRep:
 		fallthrough
 	case mangos.ProtoRespondent:
-		if sendData != nil {
-			replyLoop(sock)
-		} else {
-			recvLoop(sock)
-		}
+		return a.replyLoop()
 
 	default:
-		fatalf("Unknown protocol!")
+		return errors.New("unknown protocol")
 	}
 }

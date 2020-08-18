@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -35,15 +35,15 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
-	closeq chan struct{}
-	sendq  chan *protocol.Message
+	closeQ chan struct{}
+	sendQ  chan *protocol.Message
 }
 
 type socket struct {
 	closed     bool
-	closeq     chan struct{}
-	recvq      chan *protocol.Message
+	closeQ     chan struct{}
+	sizeQ      chan struct{}
+	recvQ      chan *protocol.Message
 	pipes      map[uint32]*pipe
 	recvExpire time.Duration
 	sendExpire time.Duration
@@ -62,7 +62,7 @@ var (
 const defaultQLen = 128
 
 func init() {
-	closedQ := make(chan time.Time)
+	closedQ = make(chan time.Time)
 	close(closedQ)
 }
 
@@ -71,7 +71,15 @@ func init() {
 // we should send to.
 func (s *socket) SendMsg(m *protocol.Message) error {
 
+	s.Lock()
+
+	if s.closed {
+		s.Unlock()
+		return protocol.ErrClosed
+	}
+
 	if len(m.Header) < 4 {
+		s.Unlock()
 		m.Free()
 		return nil
 	}
@@ -80,15 +88,14 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	hdr := m.Header
 	m.Header = m.Header[4:]
 
-	s.Lock()
+	bestEffort := s.bestEffort
+	tq := nilQ
 	p, ok := s.pipes[id]
 	if !ok {
 		s.Unlock()
 		m.Free()
 		return nil
 	}
-	bestEffort := s.bestEffort
-	tq := nilQ
 	if bestEffort {
 		tq = closedQ
 	} else if s.sendExpire > 0 {
@@ -97,9 +104,9 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	s.Unlock()
 
 	select {
-	case p.sendq <- m:
+	case p.sendQ <- m:
 		return nil
-	case <-s.closeq:
+	case <-p.closeQ:
 		// restore the header
 		m.Header = hdr
 		return protocol.ErrClosed
@@ -115,19 +122,25 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	tq := nilQ
-	s.Lock()
-	if s.recvExpire > 0 {
-		tq = time.After(s.recvExpire)
-	}
-	s.Unlock()
-	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
-	case m := <-s.recvq:
-		return m, nil
+	for {
+		s.Lock()
+		timeQ := nilQ
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
+		closeQ := s.closeQ
+		if s.recvExpire > 0 {
+			timeQ = time.After(s.recvExpire)
+		}
+		s.Unlock()
+		select {
+		case <-closeQ:
+			return nil, protocol.ErrClosed
+		case <-timeQ:
+			return nil, protocol.ErrRecvTimeout
+		case m := <-recvQ:
+			return m, nil
+		case <-sizeQ:
+		}
 	}
 }
 
@@ -139,10 +152,6 @@ outer:
 		if m == nil {
 			break
 		}
-		if len(m.Body) < 4 {
-			m.Free()
-			continue
-		}
 
 		// Outer most value of header is pipe ID
 		m.Header = append(make([]byte, 4), m.Header...)
@@ -150,9 +159,11 @@ outer:
 
 		s.Lock()
 		ttl := s.ttl
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
 		s.Unlock()
 
-		hops := 0
+		hops := 1
 		finish := false
 		for !finish {
 			if hops > ttl {
@@ -174,17 +185,16 @@ outer:
 		}
 
 		select {
-		case s.recvq <- m:
+		case recvQ <- m:
 			continue
-		case <-s.closeq:
-			m.Free()
-			break outer
-		case <-p.closeq:
+		case <-sizeQ:
+			continue
+		case <-p.closeQ:
 			m.Free()
 			break outer
 		}
 	}
-	go p.Close()
+	go p.close()
 }
 
 // This is a puller, and doesn't permit for priorities.  We might want
@@ -194,34 +204,20 @@ outer:
 	for {
 		var m *protocol.Message
 		select {
-		case m = <-p.sendq:
-		case <-p.closeq:
+		case m = <-p.sendQ:
+		case <-p.closeQ:
 			break outer
-		}
-		if m == nil {
-			break
 		}
 
 		if e := p.p.SendMsg(m); e != nil {
 			break
 		}
 	}
-	go p.Close()
+	go p.close()
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(s.pipes, p.p.ID())
-	s.Unlock()
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (s *socket) SetOption(name string, value interface{}) error {
@@ -244,6 +240,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			return nil
 		}
 		return protocol.ErrBadValue
+
 	case protocol.OptionSendDeadline:
 		if v, ok := value.(time.Duration); ok {
 			s.Lock()
@@ -268,19 +265,23 @@ func (s *socket) SetOption(name string, value interface{}) error {
 			// This does not impact pipes already connected.
 			s.sendQLen = v
 			s.Unlock()
+			return nil
 		}
 		return protocol.ErrBadValue
 
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
+			recvQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			s.Lock()
 			s.recvQLen = v
-			s.recvq = newchan
+			s.recvQ = recvQ
+			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.Unlock()
+			close(sizeQ)
+			return nil
 		}
-		// We don't support these
-		// case OptionLinger:
+		return protocol.ErrBadValue
 	}
 
 	return protocol.ErrBadOption
@@ -327,53 +328,42 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 
 func (s *socket) Close() error {
 	s.Lock()
-
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
-	close(s.closeq)
-
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
+	close(s.closeQ)
 	return nil
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
+	p := &pipe{
+		p:      pp,
+		s:      s,
+		closeQ: make(chan struct{}),
+		sendQ:  make(chan *protocol.Message, s.sendQLen),
+	}
+	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
 		return protocol.ErrClosed
 	}
-	p := &pipe{
-		p:      pp,
-		s:      s,
-		closeq: make(chan struct{}),
-		sendq:  make(chan *protocol.Message, s.sendQLen),
-	}
 	s.pipes[pp.ID()] = p
-
 	go p.sender()
 	go p.receiver()
 	return nil
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeQ)
+
 	s.Lock()
-	p, ok := s.pipes[pp.ID()]
+	delete(s.pipes, p.p.ID())
 	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -393,8 +383,9 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		pipes:    make(map[uint32]*pipe),
-		closeq:   make(chan struct{}),
-		recvq:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
 		recvQLen: defaultQLen,
 		ttl:      8,

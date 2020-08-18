@@ -32,9 +32,7 @@ import (
 var cliCfg, _ = NewTLSConfig(false)
 var srvCfg, _ = NewTLSConfig(true)
 
-type newSockFunc func() (mangos.Socket, error)
-
-// T is a structure that subtests can inherit from.
+// T is a structure that sub-tests can inherit from.
 type T struct {
 	t       *testing.T
 	debug   bool
@@ -55,8 +53,6 @@ type T struct {
 	sdone   bool
 	sdoneq  chan struct{}
 	readyq  chan struct{}
-	dialer  mangos.Dialer
-	listen  mangos.Listener
 	Server  bool
 	sync.Mutex
 }
@@ -122,12 +118,12 @@ func (c *T) NewMessage() *mangos.Message {
 	return mangos.NewMessage(c.MsgSize)
 }
 
-func (c *T) SendHook(m *mangos.Message) bool {
+func (c *T) SendHook(*mangos.Message) bool {
 	c.BumpSend()
 	return true
 }
 
-func (c *T) RecvHook(m *mangos.Message) bool {
+func (c *T) RecvHook(*mangos.Message) bool {
 	c.BumpRecv()
 	return true
 }
@@ -136,12 +132,12 @@ func (c *T) SendMsg(m *mangos.Message) error {
 	// We sleep a tiny bit, to avoid cramming too many messages on
 	// busses, etc. all at once.  (The test requires no dropped messages.)
 	time.Sleep(c.SendDelay())
-	c.Sock.SetOption(mangos.OptionSendDeadline, time.Second*5)
+	_ = c.Sock.SetOption(mangos.OptionSendDeadline, time.Second*5)
 	return c.Sock.SendMsg(m)
 }
 
 func (c *T) RecvMsg() (*mangos.Message, error) {
-	c.Sock.SetOption(mangos.OptionRecvDeadline, time.Second*5)
+	_ = c.Sock.SetOption(mangos.OptionRecvDeadline, time.Second*5)
 	return c.Sock.RecvMsg()
 }
 
@@ -266,7 +262,7 @@ func (c *T) Listen() bool {
 }
 
 func (c *T) Close() {
-	c.Sock.Close()
+	_ = c.Sock.Close()
 }
 
 func (c *T) SendDelay() time.Duration {
@@ -536,7 +532,7 @@ func slowStartReceiver(c TestCase, wakeq chan bool, exitq chan bool) {
 	}
 }
 
-func slowStart(t *testing.T, cases []TestCase) bool {
+func slowStart(_ *testing.T, cases []TestCase) bool {
 	exitq := make(chan bool)
 	wakeq := make(chan bool)
 	needrdy := len(cases)
@@ -636,54 +632,24 @@ func NextPort() uint16 {
 }
 
 func AddrTestIPC() string {
-	return (fmt.Sprintf("ipc://mangostest%d", NextPort()))
+	return fmt.Sprintf("ipc://mangostest%d", NextPort())
 }
 
 func AddrTestWSS() string {
-	return (fmt.Sprintf("wss://127.0.0.1:%d/", NextPort()))
+	return fmt.Sprintf("wss://127.0.0.1:%d/", NextPort())
 }
 
 func AddrTestWS() string {
-	return (fmt.Sprintf("ws://127.0.0.1:%d/", NextPort()))
+	return fmt.Sprintf("ws://127.0.0.1:%d/", NextPort())
 }
 func AddrTestTCP() string {
-	return (fmt.Sprintf("tcp://127.0.0.1:%d", NextPort()))
+	return fmt.Sprintf("tcp://127.0.0.1:%d", NextPort())
 }
 
 func AddrTestTLS() string {
-	return (fmt.Sprintf("tls+tcp://127.0.0.1:%d", NextPort()))
+	return fmt.Sprintf("tls+tcp://127.0.0.1:%d", NextPort())
 }
 
 func AddrTestInp() string {
-	return (fmt.Sprintf("inproc://test_%d", NextPort()))
-}
-
-// RunTestsTCP runs the TCP tests.
-func RunTestsTCP(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestTCP(), cases)
-}
-
-// RunTestsIPC runs the IPC tests.
-func RunTestsIPC(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestIPC(), cases)
-}
-
-// RunTestsInp runs the inproc tests.
-func RunTestsInp(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestInp(), cases)
-}
-
-// RunTestsTLS runs the TLS tests.
-func RunTestsTLS(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestTLS(), cases)
-}
-
-// RunTestsWS runs the websock tests.
-func RunTestsWS(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestWS(), cases)
-}
-
-// RunTestsWSS runs the websock tests.
-func RunTestsWSS(t *testing.T, cases []TestCase) {
-	RunTests(t, AddrTestWSS(), cases)
+	return fmt.Sprintf("inproc://test_%d", NextPort())
 }

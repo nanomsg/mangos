@@ -25,42 +25,35 @@ import (
 )
 
 // NewConnPipeIPC allocates a new Pipe using the IPC exchange protocol.
-func NewConnPipeIPC(c net.Conn, proto ProtocolInfo, options map[string]interface{}) (Pipe, error) {
+func NewConnPipeIPC(c net.Conn, proto ProtocolInfo) ConnPipe {
 	p := &connipc{
 		conn: conn{
 			c:       c,
 			proto:   proto,
 			options: make(map[string]interface{}),
+			maxrx:   0,
 		},
 	}
-	p.options[mangos.OptionMaxRecvSize] = int64(0)
-	for n, v := range options {
-		p.options[n] = v
-	}
-	p.maxrx = p.options[mangos.OptionMaxRecvSize].(int)
-
-	return p, nil
+	p.options[mangos.OptionMaxRecvSize] = 0
+	p.options[mangos.OptionLocalAddr] = c.LocalAddr()
+	p.options[mangos.OptionRemoteAddr] = c.RemoteAddr()
+	return p
 }
 
 func (p *connipc) Send(msg *Message) error {
 
+	var buff = net.Buffers{}
+
+	// Serialize the length header
 	l := uint64(len(msg.Header) + len(msg.Body))
-	var err error
+	lbyte := make([]byte, 9)
+	lbyte[0] = 1
+	binary.BigEndian.PutUint64(lbyte[1:], l)
 
-	// send length header
-	header := make([]byte, 9)
-	header[0] = 1
-	binary.BigEndian.PutUint64(header[1:], l)
+	// Attach the length header along with the actual header and body
+	buff = append(buff, lbyte, msg.Header, msg.Body)
 
-	if _, err = p.c.Write(header[:]); err != nil {
-		return err
-	}
-
-	if _, err = p.c.Write(msg.Header); err != nil {
-		return err
-	}
-	// hope this works
-	if _, err = p.c.Write(msg.Body); err != nil {
+	if _, err := buff.WriteTo(p.c); err != nil {
 		return err
 	}
 	msg.Free()

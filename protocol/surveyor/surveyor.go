@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -38,26 +38,35 @@ const defaultSurveyTime = time.Second
 type pipe struct {
 	s      *socket
 	p      protocol.Pipe
-	closed bool
-	closeq chan struct{}
-	sendq  chan *protocol.Message
+	closeQ chan struct{}
+	sendQ  chan *protocol.Message
+}
+
+type survey struct {
+	timer  *time.Timer
+	recvQ  chan *protocol.Message
+	active bool
+	id     uint32
+	ctx    *context
+	sock   *socket
+	err    error
+	once   sync.Once
 }
 
 type context struct {
 	s          *socket
 	closed     bool
-	closeq     chan struct{}
-	recvq      chan *protocol.Message
+	closeQ     chan struct{}
 	recvQLen   int
 	recvExpire time.Duration
 	survExpire time.Duration
-	survID     uint32
+	surv       *survey
 }
 
 type socket struct {
 	master   *context              // default context
 	ctxs     map[*context]struct{} // all contexts
-	surveys  map[uint32]*context   // contexts by survey ID
+	surveys  map[uint32]*survey    // contexts by survey ID
 	pipes    map[uint32]*pipe      // all pipes by pipe ID
 	nextID   uint32                // next survey ID
 	closed   bool                  // true if closed
@@ -71,59 +80,78 @@ var (
 
 const defaultQLen = 128
 
-func (c *context) cancel() {
-	s := c.s
-	if id := c.survID; id != 0 {
-		delete(s.surveys, id)
-		c.survID = 0
-		oldrecvq := c.recvq
-		c.recvq = nil
+func (s *survey) cancel(err error) {
 
-		// drain and close the old queue
-		close(oldrecvq)
-		for {
-			if m := <-oldrecvq; m != nil {
-				m.Free()
-			} else {
-				break
-			}
+	s.once.Do(func() {
+		sock := s.sock
+		ctx := s.ctx
+
+		s.err = err
+		sock.Lock()
+		s.timer.Stop()
+		if ctx.surv == s {
+			ctx.surv = nil
 		}
-	}
+		delete(sock.surveys, s.id)
+		sock.Unlock()
+
+		// Don't close this until after we have removed it from
+		// the list of pending surveys, to prevent the receiver
+		// from trying to write to a closed channel.
+		close(s.recvQ)
+		for m := range s.recvQ {
+			m.Free()
+		}
+	})
+}
+
+func (s *survey) start(qLen int, expire time.Duration) {
+	// NB: Called with the socket lock held
+	s.recvQ = make(chan *protocol.Message, qLen)
+	s.sock.surveys[s.id] = s
+	s.ctx.surv = s
+	s.timer = time.AfterFunc(expire, func() {
+		s.cancel(protocol.ErrProtoState)
+	})
 }
 
 func (c *context) SendMsg(m *protocol.Message) error {
 	s := c.s
 
-	id := atomic.AddUint32(&s.nextID, 1)
-	id |= 0x80000000
+	newsurv := &survey{
+		active: true,
+		id:     atomic.AddUint32(&s.nextID, 1) | 0x80000000,
+		ctx:    c,
+		sock:   s,
+	}
 
+	m.MakeUnique()
 	m.Header = make([]byte, 4)
-	binary.BigEndian.PutUint32(m.Header, id)
+	binary.BigEndian.PutUint32(m.Header, newsurv.id)
 
 	s.Lock()
-	defer s.Unlock()
 	if s.closed || c.closed {
+		s.Unlock()
 		return protocol.ErrClosed
 	}
-	c.cancel()
-	c.survID = id
-	c.recvq = make(chan *protocol.Message, c.recvQLen)
-	s.surveys[id] = c
-	time.AfterFunc(c.survExpire, func() {
-		s.Lock()
-		if c.survID == id {
-			c.cancel()
-		}
-		s.Unlock()
-	})
+	oldsurv := c.surv
+	newsurv.start(c.recvQLen, c.survExpire)
+	if oldsurv != nil {
+		go oldsurv.cancel(protocol.ErrCanceled)
+	}
+	pipes := make([]*pipe, 0, len(s.pipes))
+	for _, p := range s.pipes {
+		pipes = append(pipes, p)
+	}
+	s.Unlock()
 
 	// Best-effort broadcast on all pipes
-	for _, p := range s.pipes {
-		dm := m.Dup()
+	for _, p := range pipes {
+		m.Clone()
 		select {
-		case p.sendq <- dm:
+		case p.sendQ <- m:
 		default:
-			dm.Free()
+			m.Free()
 		}
 	}
 	m.Free()
@@ -134,24 +162,29 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	s := c.s
 
 	s.Lock()
-	recvq := c.recvq
+	if s.closed {
+		s.Unlock()
+		return nil, protocol.ErrClosed
+	}
+	surv := c.surv
 	timeq := nilQ
 	if c.recvExpire > 0 {
 		timeq = time.After(c.recvExpire)
 	}
 	s.Unlock()
 
-	if recvq == nil {
+	if surv == nil {
 		return nil, protocol.ErrProtoState
 	}
-
 	select {
-	case <-c.closeq:
+	case <-c.closeQ:
 		return nil, protocol.ErrClosed
 
-	case m := <-recvq:
+	case m := <-surv.recvQ:
 		if m == nil {
-			return nil, protocol.ErrProtoState
+			// Sometimes the recvQ can get closed ahead of
+			// the closeQ, but the closeQ takes precedence.
+			return nil, surv.err
 		}
 		return m, nil
 
@@ -160,23 +193,24 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	}
 }
 
+func (c *context) close() {
+	if !c.closed {
+		c.closed = true
+		close(c.closeQ)
+		if surv := c.surv; surv != nil {
+			c.surv = nil
+			go surv.cancel(protocol.ErrClosed)
+		}
+	}
+}
+
 func (c *context) Close() error {
-	s := c.s
-	s.Lock()
+	c.s.Lock()
+	defer c.s.Unlock()
 	if c.closed {
-		s.Unlock()
 		return protocol.ErrClosed
 	}
-	c.closed = true
-	close(c.closeq)
-	if id := c.survID; id != 0 {
-		c.recvq = nil
-		c.survID = 0
-		delete(s.surveys, id)
-		// Leave the recvq open, so that closeq wins
-	}
-	delete(s.ctxs, c)
-	s.Unlock()
+	c.close()
 	return nil
 }
 
@@ -201,10 +235,9 @@ func (c *context) SetOption(name string, value interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionReadQLen:
-		if v, ok := value.(int); ok {
-			newchan := make(chan *protocol.Message, v)
+		if v, ok := value.(int); ok && v >= 0 {
+			// this will only affect new surveys
 			c.s.Lock()
-			c.recvq = newchan
 			c.recvQLen = v
 			c.s.Unlock()
 			return nil
@@ -237,19 +270,8 @@ func (c *context) GetOption(option string) (interface{}, error) {
 	return nil, protocol.ErrBadOption
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (p *pipe) sender() {
@@ -257,9 +279,9 @@ outer:
 	for {
 		var m *protocol.Message
 		select {
-		case <-p.closeq:
+		case <-p.closeQ:
 			break outer
-		case m = <-p.sendq:
+		case m = <-p.sendQ:
 		}
 
 		if err := p.p.SendMsg(m); err != nil {
@@ -267,7 +289,7 @@ outer:
 			break
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 func (p *pipe) receiver() {
@@ -287,16 +309,18 @@ func (p *pipe) receiver() {
 		id := binary.BigEndian.Uint32(m.Header)
 
 		s.Lock()
-		if c, ok := s.surveys[id]; ok {
+		if surv, ok := s.surveys[id]; ok {
 			select {
-			case c.recvq <- m:
+			case surv.recvQ <- m:
+				m = nil
 			default:
-				m.Free()
 			}
-		} else {
-			m.Free()
 		}
 		s.Unlock()
+
+		if m != nil {
+			m.Free()
+		}
 	}
 }
 
@@ -308,9 +332,10 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	}
 	c := &context{
 		s:          s,
-		closeq:     make(chan struct{}),
+		closeQ:     make(chan struct{}),
 		survExpire: s.master.survExpire,
 		recvExpire: s.master.recvExpire,
+		recvQLen:   s.master.recvQLen,
 	}
 	s.ctxs[c] = struct{}{}
 	return c, nil
@@ -328,9 +353,10 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	p := &pipe{
 		p:      pp,
 		s:      s,
-		sendq:  make(chan *protocol.Message, s.sendQLen),
-		closeq: make(chan struct{}),
+		sendQ:  make(chan *protocol.Message, s.sendQLen),
+		closeQ: make(chan struct{}),
 	}
+	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
@@ -343,15 +369,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeQ)
 	s.Lock()
-	defer s.Unlock()
-	p := s.pipes[pp.ID()]
-	if p != nil && p.p == pp && !p.closed {
-		p.closed = true
-		close(p.closeq)
-		pp.Close()
-		delete(s.pipes, pp.ID())
-	}
+	delete(s.pipes, pp.ID())
+	s.Unlock()
 }
 
 func (s *socket) Close() error {
@@ -362,25 +384,9 @@ func (s *socket) Close() error {
 	}
 	s.closed = true
 	for c := range s.ctxs {
-		delete(s.ctxs, c)
-		if !c.closed {
-			c.closed = true
-			close(c.closeq)
-			if c.survID != 0 {
-				delete(s.surveys, c.survID)
-			}
-		}
-	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
+		c.close()
 	}
 	s.Unlock()
-
-	// This allows synchronous close without the lock.
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
 }
 
@@ -402,7 +408,7 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 func (s *socket) SetOption(option string, value interface{}) error {
 	switch option {
 	case protocol.OptionWriteQLen:
-		if v, ok := value.(int); ok {
+		if v, ok := value.(int); ok && v >= 0 {
 			s.Lock()
 			s.sendQLen = v
 			s.Unlock()
@@ -426,18 +432,18 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		pipes:    make(map[uint32]*pipe),
-		surveys:  make(map[uint32]*context),
+		surveys:  make(map[uint32]*survey),
 		ctxs:     make(map[*context]struct{}),
 		sendQLen: defaultQLen,
 		nextID:   uint32(time.Now().UnixNano()), // quasi-random
 	}
 	s.master = &context{
 		s:          s,
-		recvq:      make(chan *protocol.Message, defaultQLen),
-		closeq:     make(chan struct{}),
+		closeQ:     make(chan struct{}),
 		recvQLen:   defaultQLen,
 		survExpire: defaultSurveyTime,
 	}
+	s.ctxs[s.master] = struct{}{}
 	return s
 }
 

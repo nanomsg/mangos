@@ -1,4 +1,4 @@
-// Copyright 2016 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -16,6 +16,7 @@ package mangos
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // Message encapsulates the messages that we exchange back and forth.  The
@@ -39,10 +40,10 @@ type Message struct {
 	// informational purposes.
 	Pipe Pipe
 
-	bbuf  []byte
-	hbuf  []byte
-	bsize int
-	pool  *sync.Pool
+	bbuf   []byte
+	hbuf   []byte
+	bsize  int
+	refcnt int32
 }
 
 type msgCacheInfo struct {
@@ -108,17 +109,50 @@ var messageCache = []msgCacheInfo{
 // for the resources to be recycled without engaging GC.  This can have
 // rather substantial benefits for performance.
 func (m *Message) Free() {
-	for i := range messageCache {
-		if m.bsize == messageCache[i].maxbody {
-			messageCache[i].pool.Put(m)
-			return
+	if m != nil {
+		if atomic.AddInt32(&m.refcnt, -1) == 0 {
+			for i := range messageCache {
+				if m.bsize == messageCache[i].maxbody {
+					messageCache[i].pool.Put(m)
+					return
+				}
+			}
 		}
 	}
 }
 
-// Dup creates a "duplicate" message.
-// Reference counting was found to be error prone, so we have elected
-// to simply make a full copy of the message for now.
+// Clone bumps the reference count on the message, allowing it to be
+// shared.  Callers of this MUST ensure that the message is never modified.
+// If a read-only copy needs to be made "unique", callers can do so by
+// using the Uniq function.
+func (m *Message) Clone() {
+	atomic.AddInt32(&m.refcnt, 1)
+}
+
+// MakeUnique ensures that the message is not shared.  If the reference
+// count on the message is one, then the message is returned as is.
+// Otherwise a new copy of hte message is made, and the reference count
+// on the original is dropped.  Note that it is an error for the caller
+// to use the original message after this function; the caller should
+// always do `m = m.MakeUnique()`.  This function should be called whenever
+// the message is leaving the control of the caller, such as when passing
+// it to a user program.
+//
+// Note that transports always should call this on their transmit path
+// if they are going to modify the message.  (Most do not.)
+func (m *Message) MakeUnique() *Message {
+	if atomic.LoadInt32(&m.refcnt) == 1 {
+		return m
+	}
+	d := m.Dup()
+	m.Free()
+	return d
+}
+
+//
+
+// Dup creates a "duplicate" message.  The message is made as a
+// deep copy, so the resulting message is safe to modify.
 func (m *Message) Dup() *Message {
 	dup := NewMessage(len(m.Body))
 	dup.Body = append(dup.Body, m.Body...)
@@ -143,5 +177,6 @@ func NewMessage(sz int) *Message {
 
 	m.Body = m.bbuf
 	m.Header = m.hbuf
+	atomic.StoreInt32(&m.refcnt, 1)
 	return m
 }

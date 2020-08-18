@@ -55,7 +55,7 @@ func (p *conn) Recv() (*Message, error) {
 	}
 
 	// Limit messages to the maximum receive value, if not
-	// unlimited.  This avoids a potential denaial of service.
+	// unlimited.  This avoids a potential denial of service.
 	if sz < 0 || (p.maxrx > 0 && sz > int64(p.maxrx)) {
 		return nil, mangos.ErrTooLong
 	}
@@ -89,16 +89,6 @@ func (p *conn) Send(msg *Message) error {
 	return nil
 }
 
-// LocalProtocol returns our local protocol number.
-func (p *conn) LocalProtocol() uint16 {
-	return p.proto.Self
-}
-
-// RemoteProtocol returns our peer's protocol number.
-func (p *conn) RemoteProtocol() uint16 {
-	return p.proto.Peer
-}
-
 // Close implements the Pipe Close method.
 func (p *conn) Close() error {
 	p.Lock()
@@ -111,10 +101,24 @@ func (p *conn) Close() error {
 }
 
 func (p *conn) GetOption(n string) (interface{}, error) {
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		return p.maxrx, nil
+	}
 	if v, ok := p.options[n]; ok {
 		return v, nil
 	}
 	return nil, mangos.ErrBadProperty
+}
+
+// ConnPipe is used for stream oriented transports.  It is a superset of
+// Pipe, but adds methods specific for transports.
+type ConnPipe interface {
+
+	// SetMaxRecvSize is used to set the maximum receive size.
+	SetMaxRecvSize(int)
+
+	Pipe
 }
 
 // NewConnPipe allocates a new Pipe using the supplied net.Conn, and
@@ -126,32 +130,36 @@ func (p *conn) GetOption(n string) (interface{}, error) {
 // and the Transport enclosing structure.   Using this layered interface,
 // the implementation needn't bother concerning itself with passing actual
 // SP messages once the lower layer connection is established.
-func NewConnPipe(c net.Conn, proto ProtocolInfo, options map[string]interface{}) (Pipe, error) {
+func NewConnPipe(c net.Conn, proto ProtocolInfo, options map[string]interface{}) ConnPipe {
 	p := &conn{
 		c:       c,
 		proto:   proto,
 		options: make(map[string]interface{}),
 	}
 
-	p.options[mangos.OptionMaxRecvSize] = int(0)
-	p.options[mangos.OptionLocalAddr] = p.c.LocalAddr()
-	p.options[mangos.OptionRemoteAddr] = p.c.RemoteAddr()
+	p.options[mangos.OptionMaxRecvSize] = 0
+	p.options[mangos.OptionLocalAddr] = c.LocalAddr()
+	p.options[mangos.OptionRemoteAddr] = c.RemoteAddr()
 	for n, v := range options {
 		p.options[n] = v
 	}
 	p.maxrx = p.options[mangos.OptionMaxRecvSize].(int)
 
-	return p, nil
+	return p
+}
+
+func (p *conn) SetMaxRecvSize(sz int) {
+	p.maxrx = sz
 }
 
 // connHeader is exchanged during the initial handshake.
 type connHeader struct {
-	Zero    byte // must be zero
-	S       byte // 'S'
-	P       byte // 'P'
-	Version byte // only zero at present
-	Proto   uint16
-	Rsvd    uint16 // always zero at present
+	Zero     byte // must be zero
+	S        byte // 'S'
+	P        byte // 'P'
+	Version  byte // only zero at present
+	Proto    uint16
+	Reserved uint16 // always zero at present
 }
 
 // handshake establishes an SP connection between peers.  Both sides must
@@ -166,22 +174,22 @@ func (p *conn) handshake() error {
 		return err
 	}
 	if err = binary.Read(p.c, binary.BigEndian, &h); err != nil {
-		p.c.Close()
+		_ = p.c.Close()
 		return err
 	}
-	if h.Zero != 0 || h.S != 'S' || h.P != 'P' || h.Rsvd != 0 {
-		p.c.Close()
+	if h.Zero != 0 || h.S != 'S' || h.P != 'P' || h.Reserved != 0 {
+		_ = p.c.Close()
 		return mangos.ErrBadHeader
 	}
 	// The only version number we support at present is "0", at offset 3.
 	if h.Version != 0 {
-		p.c.Close()
+		_ = p.c.Close()
 		return mangos.ErrBadVersion
 	}
 
 	// The protocol number lives as 16-bits (big-endian) at offset 4.
 	if h.Proto != p.proto.Peer {
-		p.c.Close()
+		_ = p.c.Close()
 		return mangos.ErrBadProto
 	}
 	p.open = true
@@ -231,36 +239,30 @@ func (h *connHandshaker) Wait() (Pipe, error) {
 	return item.c, item.e
 }
 
-func (h *connHandshaker) Start(p Pipe) error {
-	conn, ok := p.(connHandshakerPipe)
-	if !ok {
-		p.Close()
-		return mangos.ErrBadTran
-	}
+func (h *connHandshaker) Start(p Pipe) {
+	// If the following type assertion fails, then its a software bug.
+	conn := p.(connHandshakerPipe)
 	h.Lock()
-	defer h.Unlock()
-	if h.closed {
-		p.Close()
-		return mangos.ErrClosed
-	}
 	h.workq[conn] = true
+	h.Unlock()
 	go h.worker(conn)
-	return nil
 }
 
-func (h *connHandshaker) Close() error {
+func (h *connHandshaker) Close() {
 	h.Lock()
 	h.closed = true
 	h.cv.Broadcast()
 	for conn := range h.workq {
-		conn.Close()
+		_ = conn.Close()
 	}
 	for len(h.doneq) != 0 {
 		item := h.doneq[0]
 		h.doneq = h.doneq[1:]
-		item.c.Close()
+		if item.c != nil {
+			_ = item.c.Close()
+		}
 	}
-	return nil
+	h.Unlock()
 }
 
 func (h *connHandshaker) worker(conn connHandshakerPipe) {
@@ -272,12 +274,11 @@ func (h *connHandshaker) worker(conn connHandshakerPipe) {
 	delete(h.workq, conn)
 
 	if item.e != nil {
-		item.c.Close()
+		_ = item.c.Close()
 		item.c = nil
 	} else if h.closed {
 		item.e = mangos.ErrClosed
-		item.c.Close()
-		item.c = nil
+		_ = item.c.Close()
 	}
 	h.doneq = append(h.doneq, item)
 	h.cv.Broadcast()

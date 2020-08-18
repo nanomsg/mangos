@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -19,7 +19,6 @@
 package xstar
 
 import (
-	"encoding/binary"
 	"sync"
 	"time"
 
@@ -37,7 +36,6 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
 	closeq chan struct{}
 	sendq  chan *protocol.Message
 }
@@ -69,32 +67,19 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 
 	// Raw mode messages are required to come wth the header.
 	if len(m.Header) != 4 {
+		s.Unlock()
 		m.Free()
 		return nil
 	}
 
-	// This is coming back to us - its a forwarded message
-	// from an earlier pipe.  Note that we could also have
-	// used the m.Pipe but this is how mangos v1 and nanomsg
-	// did it historically.
-	id := binary.BigEndian.Uint32(m.Header)
-
-	// This could benefit from optimization to avoid useless duplicates.
 	for _, p := range s.pipes {
 
-		// Don't deliver the message back up to the same pipe it
-		// arrived from.
-		if p.p.ID() == id {
-			continue
-		}
-		pm := m.Dup()
+		m.Clone()
 		select {
-		case p.sendq <- pm:
-		case <-p.closeq:
-			pm.Free()
+		case p.sendq <- m:
 		default:
-			// backpressure, but we do not exert
-			pm.Free()
+			// back-pressure, but we do not exert
+			m.Free()
 		}
 	}
 	s.Unlock()
@@ -198,16 +183,17 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
-	s.Lock()
-	defer s.Unlock()
-	if s.closed {
-		return protocol.ErrClosed
-	}
 	p := &pipe{
 		p:      pp,
 		s:      s,
 		closeq: make(chan struct{}),
 		sendq:  make(chan *protocol.Message, s.sendQLen),
+	}
+	pp.SetPrivate(p)
+	s.Lock()
+	defer s.Unlock()
+	if s.closed {
+		return protocol.ErrClosed
 	}
 	s.pipes[pp.ID()] = p
 
@@ -217,12 +203,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeq)
 	s.Lock()
-	p, ok := s.pipes[pp.ID()]
+	delete(p.s.pipes, p.p.ID())
 	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -240,27 +225,15 @@ func (*socket) Info() protocol.Info {
 
 func (s *socket) Close() error {
 	s.Lock()
-
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
 	s.closed = true
-
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
-
 	s.Unlock()
 
 	close(s.closeq)
-
-	for _, p := range pipes {
-		p.Close()
-	}
 	return nil
-
 }
 
 func (p *pipe) sender() {
@@ -278,7 +251,7 @@ outer:
 			break
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 func (p *pipe) receiver() {
@@ -290,10 +263,6 @@ outer:
 			break
 		}
 
-		if len(m.Body) < 4 {
-			m.Free()
-			continue
-		}
 		if len(m.Body) < 4 ||
 			m.Body[0] != 0 || m.Body[1] != 0 || m.Body[2] != 0 ||
 			int(m.Body[3]) >= s.ttl {
@@ -307,15 +276,13 @@ outer:
 		userm := m.Dup()
 		s.Lock()
 		for _, p2 := range s.pipes {
-			if p2 == p || p2.closed {
+			if p2 == p {
 				continue
 			}
 
 			m2 := m.Dup()
 			select {
 			case p2.sendq <- m2:
-			case <-s.closeq:
-				m2.Free()
 			default:
 				m2.Free()
 			}
@@ -333,22 +300,11 @@ outer:
 			break outer
 		}
 	}
-	p.Close()
+	p.close()
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 // NewProtocol returns a new protocol implementation.

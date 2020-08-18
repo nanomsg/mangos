@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -37,17 +37,13 @@ type inproc struct {
 	peerProto uint16
 	addr      addr
 	peer      *inproc
-	sync.Mutex
+	once      sync.Once
 }
 
 type addr string
 
 func (a addr) String() string {
-	s := string(a)
-	if strings.HasPrefix(s, "inproc://") {
-		s = s[len("inproc://"):]
-	}
-	return s
+	return strings.TrimPrefix(string(a), "inproc://")
 }
 
 func (addr) Network() string {
@@ -58,6 +54,8 @@ type listener struct {
 	addr      string
 	selfProto uint16
 	peerProto uint16
+	active    bool
+	closed    bool
 	accepters []*inproc
 }
 
@@ -79,18 +77,8 @@ func init() {
 
 func (p *inproc) Recv() (*transport.Message, error) {
 
-	if p.peer == nil {
-		return nil, mangos.ErrClosed
-	}
 	select {
-	case m, ok := <-p.rq:
-		if m == nil || !ok {
-			return nil, mangos.ErrClosed
-		}
-		// Upper protocols expect to have to pick header and
-		// body part.  So mush them back together.
-		//msg.Body = append(msg.Header, msg.Body...)
-		//msg.Header = make([]byte, 0, 32)
+	case m := <-p.rq:
 		return m, nil
 	case <-p.closeq:
 		return nil, mangos.ErrClosed
@@ -100,10 +88,6 @@ func (p *inproc) Recv() (*transport.Message, error) {
 }
 
 func (p *inproc) Send(m *mangos.Message) error {
-
-	if p.peer == nil {
-		return mangos.ErrClosed
-	}
 
 	// Upper protocols expect to have to pick header and body part.
 	// Also we need to have a fresh copy of the message for receiver, to
@@ -123,22 +107,10 @@ func (p *inproc) Send(m *mangos.Message) error {
 	}
 }
 
-func (p *inproc) LocalProtocol() uint16 {
-	return p.selfProto
-}
-
-func (p *inproc) RemoteProtocol() uint16 {
-	return p.peerProto
-}
-
 func (p *inproc) Close() error {
-	p.Lock()
-	select {
-	case <-p.closeq: // If already closed, don't do it again.
-	default:
+	p.once.Do(func() {
 		close(p.closeq)
-	}
-	p.Unlock()
+	})
 	return nil
 }
 
@@ -183,6 +155,7 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 
 		if (client.selfProto != l.peerProto) ||
 			(client.peerProto != l.selfProto) {
+			listeners.mx.Unlock()
 			return nil, mangos.ErrBadProto
 		}
 
@@ -220,11 +193,16 @@ func (*dialer) GetOption(string) (interface{}, error) {
 
 func (l *listener) Listen() error {
 	listeners.mx.Lock()
+	if l.closed {
+		listeners.mx.Unlock()
+		return mangos.ErrClosed
+	}
 	if _, ok := listeners.byAddr[l.addr]; ok {
 		listeners.mx.Unlock()
 		return mangos.ErrAddrInUse
 	}
 
+	l.active = true
 	listeners.byAddr[l.addr] = l
 	listeners.cv.Broadcast()
 	listeners.mx.Unlock()
@@ -245,6 +223,10 @@ func (l *listener) Accept() (mangos.TranPipe, error) {
 	server.closeq = make(chan struct{})
 
 	listeners.mx.Lock()
+	if !l.active || l.closed {
+		listeners.mx.Unlock()
+		return nil, mangos.ErrClosed
+	}
 	l.accepters = append(l.accepters, server)
 	listeners.cv.Broadcast()
 	listeners.mx.Unlock()
@@ -273,6 +255,7 @@ func (l *listener) Close() error {
 	servers := l.accepters
 	l.accepters = nil
 	listeners.cv.Broadcast()
+	l.closed = true
 	listeners.mx.Unlock()
 
 	for _, s := range servers {

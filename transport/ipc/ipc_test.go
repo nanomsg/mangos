@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -12,58 +12,86 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// +build !nacl,!plan9,!wasm
+
 package ipc
 
 import (
-	"runtime"
+	"io/ioutil"
+	"os"
 	"testing"
 
-	"nanomsg.org/go/mangos/v2/test"
+	"nanomsg.org/go/mangos/v2"
+	"nanomsg.org/go/mangos/v2/internal/test"
 )
 
-var tt = test.NewTranTest(Transport, "ipc:///tmp/test1234")
+var tran = Transport
 
+func TestMain(m *testing.M) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		panic("Failed to determine working directory")
+	}
+
+	dir, err := ioutil.TempDir("", "ipctest")
+	if err != nil {
+		panic("Failed to create directory")
+	}
+	if err = os.Chdir(dir); err != nil {
+		panic("Failed to chdir: " + err.Error())
+	}
+	v := m.Run()
+	if err = os.Chdir(cwd); err != nil {
+		panic("Failed to chdir: " + err.Error())
+	}
+	if err = os.RemoveAll(dir); err != nil {
+		panic("Failed to clean up directory: " + err.Error())
+	}
+	os.Exit(v)
+}
+
+func TestIpcRecvMax(t *testing.T) {
+	test.TranVerifyMaxRecvSize(t, tran, nil, nil)
+}
+
+func TestIpcOptions(t *testing.T) {
+	test.TranVerifyInvalidOption(t, tran)
+	test.TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
+}
+
+func TestIpcScheme(t *testing.T) {
+	test.TranVerifyScheme(t, tran)
+}
+func TestIpcAcceptWithoutListen(t *testing.T) {
+	test.TranVerifyAcceptWithoutListen(t, tran)
+}
 func TestIpcListenAndAccept(t *testing.T) {
-	switch runtime.GOOS {
-	case "plan9":
-		t.Skip("IPC not supported on Plan9")
-	default:
-		tt.TestListenAndAccept(t)
-	}
+	test.TranVerifyListenAndAccept(t, tran, nil, nil)
 }
-
 func TestIpcDuplicateListen(t *testing.T) {
-	switch runtime.GOOS {
-	case "plan9":
-		t.Skip("IPC not supported on Plan9")
-	default:
-		tt.TestDuplicateListen(t)
-	}
+	test.TranVerifyDuplicateListen(t, tran, nil)
 }
-
-func TestIpcConnRefused(t *testing.T) {
-	switch runtime.GOOS {
-	case "plan9":
-		t.Skip("IPC not supported on Plan9")
-	default:
-		tt.TestConnRefused(t)
-	}
+func TestIpcConnectionRefused(t *testing.T) {
+	test.TranVerifyConnectionRefused(t, tran, nil)
 }
-
+func TestIpcHandshake(t *testing.T) {
+	test.TranVerifyHandshakeFail(t, tran, nil, nil)
+}
 func TestIpcSendRecv(t *testing.T) {
-	switch runtime.GOOS {
-	case "plan9":
-		t.Skip("IPC not supported on Plan9")
-	default:
-		tt.TestSendRecv(t)
-	}
+	test.TranVerifySendRecv(t, tran, nil, nil)
 }
-
-func TestIpcAll(t *testing.T) {
-	switch runtime.GOOS {
-	case "plan9":
-		t.Skip("IPC not supported on Plan9")
-	default:
-		tt.TestAll(t)
-	}
+func TestIpcListenerClosed(t *testing.T) {
+	test.TranVerifyListenerClosed(t, tran, nil)
+}
+func TestIpcMessageSize(t *testing.T) {
+	test.TranVerifyMessageSizes(t, tran, nil, nil)
+}
+func TestIpcMessageHeader(t *testing.T) {
+	test.TranVerifyMessageHeader(t, tran, nil, nil)
+}
+func TestIpcVerifyPipeAddresses(t *testing.T) {
+	test.TranVerifyPipeAddresses(t, tran, nil, nil)
+}
+func TestIpcVerifyPipeOptions(t *testing.T) {
+	test.TranVerifyPipeOptions2(t, tran, nil, nil)
 }

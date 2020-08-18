@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -32,6 +32,12 @@ type ProtocolPipe interface {
 	// RecvMsg receives a message.  It blocks until the message is
 	// received.  On error, the pipe is closed and nil is returned.
 	RecvMsg() *Message
+
+	// SetPrivate is used to set protocol private data.
+	SetPrivate(interface{})
+
+	// GetPrivate returns the previously stored protocol private data.
+	GetPrivate() interface{}
 }
 
 // ProtocolInfo is a description of the protocol.
@@ -85,12 +91,21 @@ type ProtocolBase interface {
 
 	// AddPipe is called when a new Pipe is added to the socket.
 	// Typically this is as a result of connect or accept completing.
+	// The pipe ID will be unique for the socket at this time.
+	// The implementation must not call back into the socket, but it
+	// may reject the pipe by returning a non-nil result.
 	AddPipe(ProtocolPipe) error
 
 	// RemovePipe is called when a Pipe is removed from the socket.
 	// Typically this indicates a disconnected or closed connection.
+	// This is called exactly once, after the underlying transport pipe
+	// is closed.  The Pipe ID will still be valid.
 	RemovePipe(ProtocolPipe)
 
+	// OpenContext is a request to create a unique instance of the
+	// protocol state machine, allowing concurrent use of states on
+	// a given protocol socket.  Protocols that don't support this
+	// should return ErrProtoOp.
 	OpenContext() (ProtocolContext, error)
 }
 

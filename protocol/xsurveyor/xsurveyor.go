@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -34,19 +34,19 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
-	closed bool
-	closeq chan struct{}
-	sendq  chan *protocol.Message
+	closeQ chan struct{}
+	sendQ  chan *protocol.Message
 }
 
 type socket struct {
 	closed     bool
-	closeq     chan struct{}
 	pipes      map[uint32]*pipe
 	recvQLen   int
 	sendQLen   int
 	recvExpire time.Duration
-	recvq      chan *protocol.Message
+	recvQ      chan *protocol.Message
+	closeQ     chan struct{}
+	sizeQ      chan struct{}
 	sync.Mutex
 }
 
@@ -62,16 +62,14 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
+
 	// This could benefit from optimization to avoid useless duplicates.
 	for _, p := range s.pipes {
-		pm := m.Dup()
+		m.Clone()
 		select {
-		case p.sendq <- pm:
-		case <-p.closeq:
-			pm.Free()
+		case p.sendQ <- m:
 		default:
-			// backpressure, but we do not exert
-			pm.Free()
+			m.Free()
 		}
 	}
 	s.Unlock()
@@ -83,19 +81,28 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	// For now this uses a simple unified queue for the entire
 	// socket.  Later we can look at moving this to priority queues
 	// based on socket pipes.
-	tq := nilQ
-	s.Lock()
-	if s.recvExpire > 0 {
-		tq = time.After(s.recvExpire)
-	}
-	s.Unlock()
-	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
-	case m := <-s.recvq:
-		return m, nil
+
+	for {
+		s.Lock()
+		timeQ := nilQ
+		if s.recvExpire > 0 {
+			timeQ = time.After(s.recvExpire)
+		}
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
+		closeQ := s.closeQ
+		s.Unlock()
+
+		select {
+		case m := <-recvQ:
+			return m, nil
+		case <-closeQ:
+			return nil, protocol.ErrClosed
+		case <-timeQ:
+			return nil, protocol.ErrRecvTimeout
+		case <-sizeQ:
+			continue
+		}
 	}
 }
 
@@ -122,31 +129,20 @@ func (s *socket) SetOption(name string, value interface{}) error {
 
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok && v >= 0 {
-			newchan := make(chan *protocol.Message, v)
+			recvQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			s.Lock()
+			s.recvQ = recvQ
+			sizeQ, s.sizeQ = s.sizeQ, sizeQ
 			s.recvQLen = v
-			oldchan := s.recvq
-			s.recvq = newchan
 			s.Unlock()
-
-			for {
-				var m *protocol.Message
-				select {
-				case m = <-oldchan:
-				default:
-				}
-				if m == nil {
-					break
-				}
-				select {
-				case newchan <- m:
-				default:
-					m.Free()
-				}
-			}
+			close(sizeQ)
+			// Messages in the old channel "leak", but should be
+			// picked up by garbage collection.  This is not
+			// a big deal for us.
+			return nil
 		}
-		// We don't support these
-		// case OptionLinger:
+		return protocol.ErrBadValue
 	}
 
 	return protocol.ErrBadOption
@@ -177,16 +173,17 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
+	p := &pipe{
+		p:      pp,
+		s:      s,
+		closeQ: make(chan struct{}),
+		sendQ:  make(chan *protocol.Message, s.sendQLen),
+	}
+	pp.SetPrivate(p)
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
 		return protocol.ErrClosed
-	}
-	p := &pipe{
-		p:      pp,
-		s:      s,
-		closeq: make(chan struct{}),
-		sendq:  make(chan *protocol.Message, s.sendQLen),
 	}
 	s.pipes[pp.ID()] = p
 
@@ -196,12 +193,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeQ)
 	s.Lock()
-	p, ok := s.pipes[pp.ID()]
+	delete(p.s.pipes, p.p.ID())
 	s.Unlock()
-	if ok && p.p == pp {
-		p.Close()
-	}
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -225,18 +221,9 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
 	s.Unlock()
 
-	close(s.closeq)
-
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.Close()
-	}
+	close(s.closeQ)
 	return nil
 
 }
@@ -246,9 +233,9 @@ outer:
 	for {
 		var m *protocol.Message
 		select {
-		case <-p.closeq:
+		case <-p.closeQ:
 			break outer
-		case m = <-p.sendq:
+		case m = <-p.sendQ:
 		}
 
 		if err := p.p.SendMsg(m); err != nil {
@@ -256,10 +243,11 @@ outer:
 			break
 		}
 	}
-	p.Close()
+	p.close()
 }
 
 func (p *pipe) receiver() {
+	s := p.s
 outer:
 	for {
 		m := p.p.RecvMsg()
@@ -275,40 +263,34 @@ outer:
 		m.Header = m.Body[:4]
 		m.Body = m.Body[4:]
 
+		s.Lock()
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
+		s.Unlock()
+
 		select {
-		case p.s.recvq <- m:
-		case <-p.closeq:
+		case recvQ <- m:
+		case <-p.closeQ:
 			m.Free()
 			break outer
-		case <-p.s.closeq:
+		case <-sizeQ:
 			m.Free()
-			break outer
 		}
 	}
-	p.Close()
+	p.close()
 }
 
-func (p *pipe) Close() error {
-	p.s.Lock()
-	if p.closed {
-		p.s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	delete(p.s.pipes, p.p.ID())
-	p.s.Unlock()
-
-	close(p.closeq)
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		pipes:    make(map[uint32]*pipe),
-		closeq:   make(chan struct{}),
-		recvq:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
 		recvQLen: defaultQLen,
 	}

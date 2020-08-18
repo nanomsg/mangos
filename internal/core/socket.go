@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -15,7 +15,6 @@
 package core
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +47,7 @@ type socket struct {
 
 	listeners []*listener
 	dialers   []*dialer
-	pipes     map[*pipe]struct{}
+	pipes     pipeList
 	pipehook  mangos.PipeEventHook
 }
 
@@ -59,33 +58,38 @@ type context struct {
 func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 	p := newPipe(tp, s, d, l)
 
-	// Either listener or dialer is non-nil.
-	if l == nil && d == nil {
-		panic("both l and d should not be nil")
-	}
-
 	s.Lock()
 	ph := s.pipehook
 	s.Unlock()
+
+	// Add to the list of pipes for the socket; this also reserves an ID
+	// for it.
+	s.pipes.Add(p)
 
 	if ph != nil {
 		ph(mangos.PipeEventAttaching, p)
 	}
 
-	s.Lock()
-	if s.pipes == nil || s.proto.AddPipe(p) != nil {
-		s.Unlock()
-		go p.Close()
+	p.lock.Lock()
+	if p.closing {
+		p.lock.Lock()
 		return
 	}
-	s.pipes[p] = struct{}{}
+	if s.proto.AddPipe(p) != nil {
+		p.lock.Unlock()
+		s.pipes.Remove(p)
+		go p.close()
+		return
+	}
+	p.added = true
+	p.lock.Unlock()
+
 	if p.d != nil {
 		// This call resets the redial time in the dialer.  Its
 		// kind of ugly that we have the socket doing this, but
 		// the scope is narrow, and it works.
 		go p.d.pipeConnected()
 	}
-	s.Unlock()
 	if ph != nil {
 		ph(mangos.PipeEventAttached, p)
 	}
@@ -96,11 +100,17 @@ func (s *socket) remPipe(p *pipe) {
 	s.proto.RemovePipe(p)
 
 	s.Lock()
-	delete(s.pipes, p)
-	if ph := s.pipehook; ph != nil {
-		go ph(mangos.PipeEventDetached, p)
-	}
+	ph := s.pipehook
 	s.Unlock()
+	s.pipes.Remove(p)
+	go func() {
+		if ph != nil {
+			ph(mangos.PipeEventDetached, p)
+		}
+		// Don't free the pipe ID until the callback is run, to
+		// ensure no use-after-free of the ID itself.
+		pipeIDs.Free(p.id)
+	}()
 }
 
 func newSocket(proto mangos.ProtocolBase) *socket {
@@ -109,7 +119,6 @@ func newSocket(proto mangos.ProtocolBase) *socket {
 		reconnMinTime: defaultReconnMinTime,
 		reconnMaxTime: defaultReconnMaxTime,
 		maxRxSize:     defaultMaxRxSize,
-		pipes:         make(map[*pipe]struct{}),
 	}
 	return s
 }
@@ -123,32 +132,24 @@ func MakeSocket(proto mangos.ProtocolBase) mangos.Socket {
 func (s *socket) Close() error {
 
 	s.Lock()
-	if s.closed {
-		s.Unlock()
-		return mangos.ErrClosed
-	}
 	listeners := s.listeners
 	dialers := s.dialers
-	pipes := s.pipes
 
 	s.listeners = nil
 	s.dialers = nil
-	s.pipes = nil
+	s.closed = true // ensure we don't add new listeners or dialers
 	s.Unlock()
 
 	for _, l := range listeners {
-		l.Close()
+		_ = l.Close()
 	}
 	for _, d := range dialers {
-		d.Close()
+		_ = d.Close()
 	}
 
-	for p := range pipes {
-		p.Close()
-	}
-
-	s.proto.Close()
-	return nil
+	err := s.proto.Close()
+	s.pipes.CloseAll()
+	return err
 }
 
 func (ctx context) Send(b []byte) error {
@@ -200,13 +201,6 @@ func (s *socket) Recv() ([]byte, error) {
 	return b, nil
 }
 
-// String just emits a very high level debug.  This avoids
-// triggering race conditions from trying to print %v without
-// holding locks on structure members.
-func (s *socket) String() string {
-	return fmt.Sprintf("SOCKET[%s](%p)", s.proto.Info().SelfName, s)
-}
-
 func (s *socket) getTransport(addr string) transport.Transport {
 	var i int
 
@@ -245,6 +239,7 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 		s:             s,
 		reconnMinTime: s.reconnMinTime,
 		reconnMaxTime: s.reconnMaxTime,
+		asynch:        s.dialAsynch,
 		addr:          addr,
 	}
 	for n, v := range options {
@@ -273,6 +268,7 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 	s.Lock()
 	if s.closed {
 		s.Unlock()
+		_ = d.Close()
 		return nil, mangos.ErrClosed
 	}
 	s.dialers = append(s.dialers, d)
@@ -308,7 +304,7 @@ func (s *socket) NewListener(addr string, options map[string]interface{}) (mango
 	}
 	for n, v := range options {
 		if err = tl.SetOption(n, v); err != nil {
-			tl.Close()
+			_ = tl.Close()
 			return nil, err
 		}
 	}
@@ -326,7 +322,7 @@ func (s *socket) NewListener(addr string, options map[string]interface{}) (mango
 	s.Lock()
 	if s.closed {
 		s.Unlock()
-		tl.Close()
+		_ = l.Close()
 		return nil, mangos.ErrClosed
 	}
 	s.listeners = append(s.listeners, l)
@@ -350,7 +346,6 @@ func (s *socket) SetOption(name string, value interface{}) error {
 		} else {
 			return mangos.ErrBadValue
 		}
-		break
 	case mangos.OptionReconnectTime:
 		if v, ok := value.(time.Duration); ok {
 			s.reconnMinTime = v
@@ -373,10 +368,10 @@ func (s *socket) SetOption(name string, value interface{}) error {
 		return mangos.ErrBadOption
 	}
 	for _, d := range s.dialers {
-		d.SetOption(name, value)
+		_ = d.SetOption(name, value)
 	}
 	for _, l := range s.listeners {
-		l.SetOption(name, value)
+		_ = l.SetOption(name, value)
 	}
 	return nil
 }
@@ -396,6 +391,8 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 		return s.reconnMinTime, nil
 	case mangos.OptionMaxReconnectTime:
 		return s.reconnMaxTime, nil
+	case mangos.OptionDialAsynch:
+		return s.dialAsynch, nil
 	}
 	return nil, mangos.ErrBadOption
 }

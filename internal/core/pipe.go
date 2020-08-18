@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -15,60 +15,112 @@
 package core
 
 import (
-	"math/rand"
-	"sync"
-	"time"
-
+	"crypto/rand"
+	"encoding/binary"
 	"nanomsg.org/go/mangos/v2"
 	"nanomsg.org/go/mangos/v2/transport"
+	"sync"
 )
 
-// The pipes global state is just an ID allocator; it manages the
-// list of which IDs are in use.  Nothing looks things up this way,
-// so this doesn't keep references to other state.
-var pipes struct {
-	sync.Mutex
-	IDs    map[uint32]struct{}
-	nextID uint32
+// This is an application-wide global ID allocator.  Unfortunately we need
+// to have unique pipe IDs globally to permit certain things to work
+// correctly.
+
+type pipeIDAllocator struct {
+	used map[uint32]struct{}
+	next uint32
+	lock sync.Mutex
+}
+
+func (p *pipeIDAllocator) Get() uint32 {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	if p.used == nil {
+		b := make([]byte, 4)
+		// The following could in theory fail, but in that case
+		// we will wind up with IDs starting at zero.  It should
+		// not happen unless the platform can't get good entropy.
+		_, _ = rand.Read(b)
+		p.used = make(map[uint32]struct{})
+		p.next = binary.BigEndian.Uint32(b)
+	}
+	for {
+		id := p.next & 0x7fffffff
+		p.next++
+		if id == 0 {
+			continue
+		}
+		if _, ok := p.used[id]; ok {
+			continue
+		}
+		p.used[id] = struct{}{}
+		return id
+	}
+}
+
+func (p *pipeIDAllocator) Free(id uint32) {
+	p.lock.Lock()
+	if _, ok := p.used[id]; !ok {
+		panic("free of unused pipe ID")
+	}
+	delete(p.used, id)
+	p.lock.Unlock()
+}
+
+var pipeIDs pipeIDAllocator
+
+type pipeList struct {
+	pipes map[uint32]*pipe
+	lock  sync.Mutex
+}
+
+func (l *pipeList) Add(p *pipe) {
+	l.lock.Lock()
+	if l.pipes == nil {
+		l.pipes = make(map[uint32]*pipe)
+	}
+	l.pipes[p.id] = p
+	l.lock.Unlock()
+}
+
+func (l *pipeList) Remove(p *pipe) {
+	l.lock.Lock()
+	delete(l.pipes, p.id)
+	l.lock.Unlock()
+}
+
+// CloseAll closes all pipes, asynchronously.
+func (l *pipeList) CloseAll() {
+	l.lock.Lock()
+	for _, p := range l.pipes {
+		go p.close()
+	}
+	l.lock.Unlock()
 }
 
 // pipe wraps the Pipe data structure with the stuff we need to keep
 // for the core.  It implements the Pipe interface.
 type pipe struct {
-	sync.Mutex
-	id     uint32
-	p      transport.Pipe
-	l      *listener
-	d      *dialer
-	s      *socket
-	closed bool // true if we were closed
-}
-
-func init() {
-	pipes.IDs = make(map[uint32]struct{})
-	pipes.nextID = uint32(rand.NewSource(time.Now().UnixNano()).Int63())
+	id        uint32
+	p         transport.Pipe
+	l         *listener
+	d         *dialer
+	s         *socket
+	closeOnce sync.Once
+	data      interface{} // Protocol private
+	added     bool
+	closing   bool
+	lock      sync.Mutex // held across calls to remPipe and addPipe
 }
 
 func newPipe(tp transport.Pipe, s *socket, d *dialer, l *listener) *pipe {
 	p := &pipe{
-		p: tp,
-		d: d,
-		l: l,
-		s: s,
+		p:  tp,
+		d:  d,
+		l:  l,
+		s:  s,
+		id: pipeIDs.Get(),
 	}
-	pipes.Lock()
-	for {
-		p.id = pipes.nextID & 0x7fffffff
-		pipes.nextID++
-		if p.id == 0 {
-			continue
-		}
-		if _, ok := pipes.IDs[p.id]; !ok {
-			pipes.IDs[p.id] = struct{}{}
-			break
-		}
-	}
-	pipes.Unlock()
 	return p
 }
 
@@ -76,40 +128,37 @@ func (p *pipe) ID() uint32 {
 	return p.id
 }
 
+func (p *pipe) close() {
+	_ = p.Close()
+}
+
 func (p *pipe) Close() error {
-	s := p.s
+	p.closeOnce.Do(func() {
+		// Close the underlying transport pipe first.
+		_ = p.p.Close()
 
-	p.Lock()
-	if p.closed {
-		p.Unlock()
-		return nil
-	}
-	p.closed = true
-	p.Unlock()
+		// Deregister it from the socket.  This will also arrange
+		// for asynchronously running the event callback, and
+		// releasing the pipe ID for reuse.
+		p.lock.Lock()
+		p.closing = true
+		if p.added {
+			p.s.remPipe(p)
+		}
+		p.lock.Unlock()
 
-	if s != nil {
-		s.remPipe(p)
-	}
-	p.p.Close()
-
-	// If the pipe was from a inform it so that it can redial.
-	if d := p.d; d != nil {
-		go d.pipeClosed()
-	}
-
-	// This is last, as we keep the ID reserved until everything is
-	// done with it.
-	pipes.Lock()
-	delete(pipes.IDs, p.id)
-	pipes.Unlock()
-
+		if p.d != nil {
+			// Inform the dialer so that it will redial.
+			go p.d.pipeClosed()
+		}
+	})
 	return nil
 }
 
 func (p *pipe) SendMsg(msg *mangos.Message) error {
 
 	if err := p.p.Send(msg); err != nil {
-		p.Close()
+		_ = p.Close()
 		return err
 	}
 	return nil
@@ -119,7 +168,7 @@ func (p *pipe) RecvMsg() *mangos.Message {
 
 	msg, err := p.p.Recv()
 	if err != nil {
-		p.Close()
+		_ = p.Close()
 		return nil
 	}
 	msg.Pipe = p
@@ -160,4 +209,12 @@ func (p *pipe) Listener() mangos.Listener {
 		return nil
 	}
 	return p.l
+}
+
+func (p *pipe) SetPrivate(i interface{}) {
+	p.data = i
+}
+
+func (p *pipe) GetPrivate() interface{} {
+	return p.data
 }

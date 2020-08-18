@@ -23,7 +23,7 @@ package transport
 type Handshaker interface {
 	// Start injects a pipe into the handshaker.  The
 	// handshaking is done asynchronously on a Go routine.
-	Start(Pipe) error
+	Start(Pipe)
 
 	// Waits for until a pipe has completely finished the
 	// handshaking and returns it.
@@ -33,5 +33,5 @@ type Handshaker interface {
 	// negotiations will be canceled, and the underlying
 	// transport sockets will be closed.  Any new attempts
 	// to start will return mangos.ErrClosed.
-	Close() error
+	Close()
 }

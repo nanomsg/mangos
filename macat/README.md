@@ -54,7 +54,7 @@ macat <*OPTIONS*>
 * −l,−−connect‐local *PORT*
 > Connect socket to TCP localhost *PORT*
 * −−subscribe *PREFIX*
-> Subcribe to *PREFIX* (default is wildcard)
+> Subscribe to *PREFIX* (default is wildcard)
 * −−recv‐timeout *SEC*
 > Set receive timeout
 * −−send‐timeout *SEC*
@@ -68,7 +68,7 @@ macat <*OPTIONS*>
 * −Q,−−quoted
 > Quoted output, one per line
 * −−msgpack
-> Msgpacked binay output (see msgpack.org)
+> Msgpacked binary output (see msgpack.org)
 * −i,−−interval *SEC*
 > Send DATA every *SEC* seconds
 * −D,−−data *DATA*
@@ -90,7 +90,7 @@ macat <*OPTIONS*>
 * −−key *FILE*
 > Use private key in *FILE* for SSL/TLS
 * −−cacert *FILE*
-> Use CA certicate(s) in *FILE* for SSL/TLS
+> Use CA certificate(s) in *FILE* for SSL/TLS
 * −k,−−insecure
 > Do not validate TLS/SSL peer certificate
 * −−help

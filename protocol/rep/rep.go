@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -34,21 +34,22 @@ const (
 type pipe struct {
 	s      *socket
 	p      protocol.Pipe
-	closed bool
 	sendQ  chan *protocol.Message
 	closeQ chan struct{}
 }
 
+type recvQEntry struct {
+	m *protocol.Message
+	p *pipe
+}
+
 type socket struct {
-	sock     protocol.Socket
 	closed   bool
-	pipes    map[uint32]*pipe
 	ttl      int
 	sendQLen int
-	recvCond *sync.Cond
-	recvCtxs map[*context]struct{}
-	ctxs     map[*context]struct{}
-	defCtx   *context
+	recvQ    chan recvQEntry
+	contexts map[*context]struct{}
+	master   *context
 	sync.Mutex
 }
 
@@ -58,22 +59,13 @@ type context struct {
 	recvWait   bool
 	recvExpire time.Duration
 	recvPipe   *pipe
-	recvQ      chan *protocol.Message
 	closeQ     chan struct{}
-
 	sendExpire time.Duration
-	sendWait   bool
-	sendMsg    *protocol.Message
-
 	bestEffort bool
 	backtrace  []byte
-	repMsg     *protocol.Message
-	pipeID     uint32 // using ID keeps GC from holding the pipe
-
-	cond *sync.Cond
 }
 
-// closedQ represents a nonblocking time channel.
+// closedQ represents a non-blocking time channel.
 var closedQ <-chan time.Time
 
 // nilQ represents a nil time channel (blocks forever)
@@ -101,22 +93,20 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 
 	cq := c.closeQ
 	wq := nilQ
-	exptime := c.recvExpire
-
-	s.recvCtxs[c] = struct{}{}
-	s.recvCond.Signal()
+	expireTime := c.recvExpire
 	s.Unlock()
 
-	if exptime > 0 {
-		wq = time.After(exptime * 10)
+	if expireTime > 0 {
+		wq = time.After(expireTime)
 	}
 
 	var err error
 	var m *protocol.Message
+	var p *pipe
 
 	select {
-	case m = <-c.recvQ:
-		err = nil
+	case entry := <-s.recvQ:
+		m, p = entry.m, entry.p
 	case <-wq:
 		err = protocol.ErrRecvTimeout
 	case <-cq:
@@ -124,19 +114,11 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	}
 
 	s.Lock()
-	delete(s.recvCtxs, c)
 
-	// We got an error -- maybe.  Try to drain it just in case.
-	if err != nil {
-		select {
-		case m = <-c.recvQ:
-			err = nil
-		default:
-		}
-	}
 	if m != nil {
 		c.backtrace = append([]byte{}, m.Header...)
 		m.Header = nil
+		c.recvPipe = p
 	}
 	c.recvWait = false
 	s.Unlock()
@@ -159,11 +141,11 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	c.recvPipe = nil
 
 	bestEffort := c.bestEffort
-	wq := nilQ
+	timeQ := nilQ
 	if bestEffort {
-		wq = closedQ
+		timeQ = closedQ
 	} else if c.sendExpire > 0 {
-		wq = time.After(c.sendExpire)
+		timeQ = time.After(c.sendExpire)
 	}
 
 	m.Header = c.backtrace
@@ -180,7 +162,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		// Just discard the message.
 		m.Free()
 		return nil
-	case <-wq:
+	case <-timeQ:
 		if bestEffort {
 			// No way to report to caller, so just discard
 			// the message.
@@ -202,8 +184,7 @@ func (c *context) Close() error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
-	delete(s.recvCtxs, c)
-	delete(s.ctxs, c)
+	delete(s.contexts, c)
 	c.closed = true
 	close(c.closeQ)
 	s.Unlock()
@@ -237,8 +218,17 @@ func (c *context) GetOption(name string) (interface{}, error) {
 
 func (c *context) SetOption(name string, v interface{}) error {
 	switch name {
+	case protocol.OptionBestEffort:
+		if val, ok := v.(bool); ok {
+			c.s.Lock()
+			c.bestEffort = val
+			c.s.Unlock()
+			return nil
+		}
+		return protocol.ErrBadValue
+
 	case protocol.OptionSendDeadline:
-		if val, ok := v.(time.Duration); ok && val.Nanoseconds() > 0 {
+		if val, ok := v.(time.Duration); ok && val > 0 {
 			c.s.Lock()
 			c.sendExpire = val
 			c.s.Unlock()
@@ -247,7 +237,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionRecvDeadline:
-		if val, ok := v.(time.Duration); ok && val.Nanoseconds() > 0 {
+		if val, ok := v.(time.Duration); ok && val > 0 {
 			c.s.Lock()
 			c.recvExpire = val
 			c.s.Unlock()
@@ -262,7 +252,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 
 func (p *pipe) receiver() {
 	s := p.s
-getmsg:
+outer:
 	for {
 		m := p.p.RecvMsg()
 		if m == nil {
@@ -274,12 +264,12 @@ getmsg:
 		for {
 			if hops >= s.ttl {
 				m.Free() // ErrTooManyHops
-				continue getmsg
+				continue outer
 			}
 			hops++
 			if len(m.Body) < 4 {
 				m.Free() // ErrGarbled
-				continue getmsg
+				continue outer
 			}
 			m.Header = append(m.Header, m.Body[:4]...)
 			m.Body = m.Body[4:]
@@ -289,29 +279,16 @@ getmsg:
 			}
 		}
 
-		s.Lock()
-		for len(s.recvCtxs) == 0 && !s.closed && !p.closed {
-			s.recvCond.Wait()
-		}
-		if s.closed || p.closed {
-			s.Unlock()
+		entry := recvQEntry{m: m, p: p}
+		select {
+		case s.recvQ <- entry:
+		case <-p.closeQ:
+			// Either the pipe or the socket has closed (which
+			// closes the pipe.)  In either case, we have no
+			// way to return a response, so we have to abandon.
 			m.Free()
-			break
+			break outer
 		}
-
-		for c := range s.recvCtxs {
-			delete(s.recvCtxs, c)
-			c.recvPipe = p
-			select {
-			case c.recvQ <- m:
-			default:
-				m.Free()
-			}
-			// We *only* want to do this loop once, as we just
-			// want to use a random element of recvCtxs.
-			break
-		}
-		s.Unlock()
 	}
 	go p.close()
 }
@@ -331,14 +308,7 @@ func (p *pipe) sender() {
 }
 
 func (p *pipe) close() {
-	// Avoid double close
-	p.s.Lock()
-	if !p.closed {
-		p.closed = true
-		p.p.Close()
-		close(p.closeQ)
-	}
-	p.s.Unlock()
+	_ = p.p.Close()
 }
 
 func (s *socket) Close() error {
@@ -350,18 +320,14 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	for c := range s.ctxs {
-		go c.Close()
-	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
+	var contexts []*context
+	for c := range s.contexts {
+		contexts = append(contexts, c)
 	}
 	s.Unlock()
 
-	// close and remove each and every pipe
-	for _, p := range pipes {
-		p.close()
+	for _, c := range contexts {
+		_ = c.Close()
 	}
 	return nil
 }
@@ -377,18 +343,18 @@ func (*socket) Info() protocol.Info {
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
 
-	s.Lock()
 	p := &pipe{
 		p:      pp,
 		s:      s,
 		sendQ:  make(chan *protocol.Message, s.sendQLen),
 		closeQ: make(chan struct{}),
 	}
+	pp.SetPrivate(p)
+	s.Lock()
 	if s.closed {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
-	s.pipes[pp.ID()] = p
 	go p.sender()
 	go p.receiver()
 	s.Unlock()
@@ -397,18 +363,14 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
 
-	s.Lock()
-	if p, ok := s.pipes[pp.ID()]; ok {
-		delete(s.pipes, pp.ID())
-		go p.close()
-	}
-	s.Unlock()
+	p := pp.GetPrivate().(*pipe)
+	close(p.closeQ)
 }
 
 func (s *socket) SetOption(name string, v interface{}) error {
 	switch name {
 	case protocol.OptionWriteQLen:
-		if qlen, ok := v.(int); ok && qlen > 0 {
+		if qlen, ok := v.(int); ok && qlen >= 0 {
 			s.Lock()
 			s.sendQLen = qlen
 			s.Unlock()
@@ -425,7 +387,7 @@ func (s *socket) SetOption(name string, v interface{}) error {
 		}
 		return protocol.ErrBadValue
 	}
-	return s.defCtx.SetOption(name, v)
+	return s.master.SetOption(name, v)
 }
 
 func (s *socket) GetOption(name string) (interface{}, error) {
@@ -444,7 +406,7 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 		return v, nil
 	}
 
-	return s.defCtx.GetOption(name)
+	return s.master.GetOption(name)
 }
 
 func (s *socket) OpenContext() (protocol.Context, error) {
@@ -456,34 +418,31 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	c := &context{
 		s:      s,
 		closeQ: make(chan struct{}),
-		recvQ:  make(chan *protocol.Message, 1),
 	}
+	s.contexts[c] = struct{}{}
 	return c, nil
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	return s.defCtx.RecvMsg()
+	return s.master.RecvMsg()
 }
 
 func (s *socket) SendMsg(m *protocol.Message) error {
-	return s.defCtx.SendMsg(m)
+	return s.master.SendMsg(m)
 }
 
 // NewProtocol allocates a protocol state for the REP protocol.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		ttl:      8,
-		pipes:    make(map[uint32]*pipe),
-		ctxs:     make(map[*context]struct{}),
-		recvCtxs: make(map[*context]struct{}),
-		defCtx: &context{
+		contexts: make(map[*context]struct{}),
+		recvQ:    make(chan recvQEntry), // unbuffered!
+		master: &context{
 			closeQ: make(chan struct{}),
-			recvQ:  make(chan *protocol.Message, 1),
 		},
 	}
-	s.defCtx.s = s
-	s.recvCond = sync.NewCond(s)
-	s.ctxs[s.defCtx] = struct{}{}
+	s.master.s = s
+	s.contexts[s.master] = struct{}{}
 	return s
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2019 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -41,22 +41,21 @@ const (
 type socket struct {
 	master *context
 	ctxs   map[*context]struct{}
-	pipes  map[uint32]*pipe
 	closed bool
 	sync.Mutex
 }
 
 type pipe struct {
-	s      *socket
-	p      protocol.Pipe
-	closed bool
+	s *socket
+	p protocol.Pipe
 }
 
 type context struct {
-	recvq      chan *protocol.Message
 	recvQLen   int
+	recvQ      chan *protocol.Message
+	closeQ     chan struct{}
+	sizeQ      chan struct{}
 	recvExpire time.Duration
-	closeq     chan struct{}
 	closed     bool
 	subs       [][]byte
 	s          *socket
@@ -64,27 +63,39 @@ type context struct {
 
 const defaultQLen = 128
 
-func (*context) SendMsg(m *protocol.Message) error {
+func (*context) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
 func (c *context) RecvMsg() (*protocol.Message, error) {
 
 	s := c.s
-	var timeq <-chan time.Time
+	var timeQ <-chan time.Time
 	s.Lock()
+	recvQ := c.recvQ
+	sizeQ := c.sizeQ
+	closeQ := c.closeQ
 	if c.recvExpire > 0 {
-		timeq = time.After(c.recvExpire)
+		timeQ = time.After(c.recvExpire)
 	}
 	s.Unlock()
 
-	select {
-	case <-timeq:
-		return nil, protocol.ErrRecvTimeout
-	case <-c.closeq:
-		return nil, protocol.ErrClosed
-	case m := <-c.recvq:
-		return m, nil
+	for {
+		select {
+		case <-timeQ:
+			return nil, protocol.ErrRecvTimeout
+		case <-closeQ:
+			return nil, protocol.ErrClosed
+		case <-sizeQ:
+			s.Lock()
+			sizeQ = c.sizeQ
+			recvQ = c.recvQ
+			s.Unlock()
+			continue
+		case m := <-recvQ:
+			m = m.MakeUnique()
+			return m, nil
+		}
 	}
 }
 
@@ -95,14 +106,14 @@ func (c *context) Close() error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
-	s.closed = true
+	c.closed = true
 	delete(s.ctxs, c)
 	s.Unlock()
-	close(c.closeq)
+	close(c.closeQ)
 	return nil
 }
 
-func (*socket) SendMsg(m *protocol.Message) error {
+func (*socket) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
@@ -120,11 +131,24 @@ func (p *pipe) receiver() {
 				// As we are passing this to the user,
 				// we need to ensure that the message
 				// may be modified.
-				dm := m.Dup()
+				m.Clone()
 				select {
-				case c.recvq <- dm:
+				case c.recvQ <- m:
 				default:
-					dm.Free()
+					select {
+					case m2 := <-c.recvQ:
+						m2.Free()
+					default:
+					}
+					// We have made room, and as we are
+					// holding the lock, we are guaranteed
+					// to be able to enqueue another
+					// message. (No other pipe can
+					// get in right now.)
+					// NB: If we ever do work to break
+					// up the locking, we will need to
+					// revisit this.
+					c.recvQ <- m
 				}
 			}
 		}
@@ -132,7 +156,7 @@ func (p *pipe) receiver() {
 		m.Free()
 	}
 
-	p.Close()
+	p.close()
 }
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
@@ -145,20 +169,11 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	if s.closed {
 		return protocol.ErrClosed
 	}
-	s.pipes[p.p.ID()] = p
 	go p.receiver()
 	return nil
 }
 
-func (s *socket) RemovePipe(pp protocol.Pipe) {
-	s.Lock()
-	defer s.Unlock()
-	p := s.pipes[pp.ID()]
-	if p != nil && p.p == pp && !p.closed {
-		p.closed = true
-		pp.Close()
-		delete(s.pipes, pp.ID())
-	}
+func (s *socket) RemovePipe(protocol.Pipe) {
 }
 
 func (s *socket) Close() error {
@@ -171,32 +186,16 @@ func (s *socket) Close() error {
 	for c := range s.ctxs {
 		ctxs = append(ctxs, c)
 	}
-	pipes := make([]*pipe, 0, len(s.pipes))
-	for _, p := range s.pipes {
-		pipes = append(pipes, p)
-	}
+	s.closed = true
 	s.Unlock()
 	for _, c := range ctxs {
-		c.Close()
-	}
-	for _, p := range pipes {
-		p.Close()
+		_ = c.Close()
 	}
 	return nil
 }
 
-func (p *pipe) Close() error {
-	s := p.s
-	s.Lock()
-	if p.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	p.closed = true
-	s.Unlock()
-
-	p.p.Close()
-	return nil
+func (p *pipe) close() {
+	_ = p.p.Close()
 }
 
 func (c *context) matches(m *protocol.Message) bool {
@@ -216,6 +215,8 @@ func (c *context) subscribe(topic []byte) error {
 			return nil
 		}
 	}
+	// We need a full data copy of our own.
+	topic = append(make([]byte, 0, len(topic)), topic...)
 	c.subs = append(c.subs, topic)
 	return nil
 }
@@ -230,21 +231,27 @@ func (c *context) unsubscribe(topic []byte) error {
 		// Because we have changed the subscription,
 		// we may have messages in the channel that
 		// we don't want any more.  Lets prune those.
-		newchan := make(chan *protocol.Message, c.recvQLen)
-		oldchan := c.recvq
-		c.recvq = newchan
-		for m := range oldchan {
-			if !c.matches(m) {
-				m.Free()
-				continue
-			}
+		recvQ := make(chan *protocol.Message, c.recvQLen)
+		sizeQ := make(chan struct{})
+		recvQ, c.recvQ = c.recvQ, recvQ
+		sizeQ, c.sizeQ = c.sizeQ, sizeQ
+		close(sizeQ)
+		for {
 			select {
-			case newchan <- m:
+			case m := <-recvQ:
+				if !c.matches(m) {
+					m.Free()
+					continue
+				}
+				// We're holding the lock, so nothing else
+				// can contend for this (pipes must be
+				// waiting) -- so this is guaranteed not to
+				// block.
+				c.recvQ <- m
 			default:
-				m.Free()
+				return nil
 			}
 		}
-		return nil
 	}
 	// Subscription not present
 	return protocol.ErrBadValue
@@ -253,13 +260,19 @@ func (c *context) unsubscribe(topic []byte) error {
 func (c *context) SetOption(name string, value interface{}) error {
 	s := c.s
 
+	var fn func([]byte) error
+
 	switch name {
 	case protocol.OptionReadQLen:
 		if v, ok := value.(int); ok {
-			newchan := make(chan *protocol.Message, v)
+			recvQ := make(chan *protocol.Message, v)
+			sizeQ := make(chan struct{})
 			c.s.Lock()
-			c.recvq = newchan
+			c.recvQ = recvQ
+			sizeQ, c.sizeQ = c.sizeQ, sizeQ
+			c.recvQ = recvQ
 			c.recvQLen = v
+			close(sizeQ)
 			c.s.Unlock()
 			return nil
 		}
@@ -275,7 +288,9 @@ func (c *context) SetOption(name string, value interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionSubscribe:
+		fn = c.subscribe
 	case protocol.OptionUnsubscribe:
+		fn = c.unsubscribe
 	default:
 		return protocol.ErrBadOption
 	}
@@ -294,16 +309,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	s.Lock()
 	defer s.Unlock()
 
-	switch name {
-	case protocol.OptionSubscribe:
-		return c.subscribe(vb)
-
-	case protocol.OptionUnsubscribe:
-		return c.unsubscribe(vb)
-
-	default:
-		return protocol.ErrBadOption
-	}
+	return fn(vb)
 }
 
 func (c *context) GetOption(name string) (interface{}, error) {
@@ -311,6 +317,11 @@ func (c *context) GetOption(name string) (interface{}, error) {
 	case protocol.OptionReadQLen:
 		c.s.Lock()
 		v := c.recvQLen
+		c.s.Unlock()
+		return v, nil
+	case protocol.OptionRecvDeadline:
+		c.s.Lock()
+		v := c.recvExpire
 		c.s.Unlock()
 		return v, nil
 	}
@@ -329,8 +340,9 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	}
 	c := &context{
 		s:          s,
-		closeq:     make(chan struct{}),
-		recvq:      make(chan *protocol.Message, s.master.recvQLen),
+		closeQ:     make(chan struct{}),
+		sizeQ:      make(chan struct{}),
+		recvQ:      make(chan *protocol.Message, s.master.recvQLen),
 		recvQLen:   s.master.recvQLen,
 		recvExpire: s.master.recvExpire,
 		subs:       [][]byte{},
@@ -364,20 +376,20 @@ func (s *socket) Info() protocol.Info {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		pipes: make(map[uint32]*pipe),
-		ctxs:  make(map[*context]struct{}),
+		ctxs: make(map[*context]struct{}),
 	}
 	s.master = &context{
 		s:        s,
-		recvq:    make(chan *protocol.Message, defaultQLen),
-		closeq:   make(chan struct{}),
+		recvQ:    make(chan *protocol.Message, defaultQLen),
+		closeQ:   make(chan struct{}),
+		sizeQ:    make(chan struct{}),
 		recvQLen: defaultQLen,
 	}
 	s.ctxs[s.master] = struct{}{}
 	return s
 }
 
-// NewSocket allocates a new Socket using the RESPONDENT protocol.
+// NewSocket allocates a new Socket using the SUB protocol.
 func NewSocket() (protocol.Socket, error) {
 	return protocol.MakeSocket(NewProtocol()), nil
 }
