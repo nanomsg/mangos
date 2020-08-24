@@ -31,7 +31,6 @@ type dialer struct {
 	addr          string
 	closed        bool
 	active        bool
-	dialing       bool
 	asynch        bool
 	redialer      *time.Timer
 	reconnTime    time.Duration

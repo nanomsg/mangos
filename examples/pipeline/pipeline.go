@@ -57,6 +57,9 @@ func node0(url string) {
 	for {
 		// Could also use sock.RecvMsg to get header
 		msg, err = sock.Recv()
+		if err != nil {
+			die("cannot receive from mangos Socket: %s", err.Error())
+		}
 		fmt.Printf("NODE0: RECEIVED \"%s\"\n", msg)
 
 		if string(msg) == "STOP" {
