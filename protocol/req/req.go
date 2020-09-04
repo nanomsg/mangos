@@ -113,7 +113,7 @@ func (p *pipe) sendCtx(c *context, m *protocol.Message) {
 		}
 	}
 	s.Lock()
-	if !c.closed && !p.closed {
+	if !s.closed && !p.closed {
 		s.readyq = append(s.readyq, p)
 		s.send()
 	}

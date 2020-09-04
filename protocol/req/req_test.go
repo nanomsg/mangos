@@ -363,7 +363,7 @@ func TestReqCtxCloseRecv(t *testing.T) {
 // This sets up a bunch of contexts to run in parallel, and verifies that
 // they all seem to run with no mis-deliveries.
 func TestReqMultiContexts(t *testing.T) {
-	count := 30
+	count := 300
 	repeat := 20
 
 	self := GetSocket(t, NewSocket)
@@ -381,11 +381,13 @@ func TestReqMultiContexts(t *testing.T) {
 		c, e := self.OpenContext()
 		MustSucceed(t, e)
 		MustNotBeNil(t, c)
+		defer c.Close()
 
 		ctxs = append(ctxs, c)
 		topic := make([]byte, 4)
 		binary.BigEndian.PutUint32(topic, uint32(index))
 
+		MustSucceed(t, c.SetOption(mangos.OptionSendDeadline, time.Second))
 		MustSucceed(t, c.SetOption(mangos.OptionRecvDeadline, time.Second))
 
 		for i := 0; i < repeat; i++ {
