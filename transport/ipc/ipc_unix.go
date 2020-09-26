@@ -22,7 +22,6 @@ import (
 	"net"
 	"os"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -43,7 +42,8 @@ type dialer struct {
 	addr        *net.UnixAddr
 	proto       transport.ProtocolInfo
 	hs          transport.Handshaker
-	maxRecvSize int32
+	maxRecvSize int
+	lock        sync.Mutex
 }
 
 // Dial implements the Dialer Dial method
@@ -54,17 +54,23 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 		return nil, err
 	}
 	p := transport.NewConnPipeIPC(conn, d.proto)
-	p.SetMaxRecvSize(int(atomic.LoadInt32(&d.maxRecvSize)))
+	d.lock.Lock()
+	p.SetOption(mangos.OptionMaxRecvSize, d.maxRecvSize)
+	getPeer(conn, p)
+	d.lock.Unlock()
 	d.hs.Start(p)
 	return d.hs.Wait()
 }
 
 // SetOption implements Dialer SetOption method.
 func (d *dialer) SetOption(n string, v interface{}) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
-			atomic.StoreInt32(&d.maxRecvSize, int32(b))
+			d.maxRecvSize = b
 			return nil
 		}
 		return mangos.ErrBadValue
@@ -74,9 +80,12 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 
 // GetOption implements Dialer GetOption method.
 func (d *dialer) GetOption(n string) (interface{}, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
-		return int(atomic.LoadInt32(&d.maxRecvSize)), nil
+		return d.maxRecvSize, nil
 	}
 	return nil, mangos.ErrBadOption
 }
@@ -88,7 +97,7 @@ type listener struct {
 	hs          transport.Handshaker
 	closeq      chan struct{}
 	closed      bool
-	maxRecvSize int32
+	maxRecvSize int
 	once        sync.Once
 	lock        sync.Mutex
 }
@@ -97,6 +106,7 @@ type listener struct {
 func (l *listener) Listen() error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
+
 	select {
 	case <-l.closeq:
 		return mangos.ErrClosed
@@ -127,7 +137,10 @@ func (l *listener) Listen() error {
 				}
 			}
 			p := transport.NewConnPipeIPC(conn, l.proto)
-			p.SetMaxRecvSize(int(atomic.LoadInt32(&l.maxRecvSize)))
+			l.lock.Lock()
+			p.SetOption(mangos.OptionMaxRecvSize, l.maxRecvSize)
+			getPeer(conn, p)
+			l.lock.Unlock()
 			l.hs.Start(p)
 		}
 	}()
@@ -166,10 +179,13 @@ func (l *listener) Close() error {
 
 // SetOption implements a stub PipeListener SetOption method.
 func (l *listener) SetOption(n string, v interface{}) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
-			atomic.StoreInt32(&l.maxRecvSize, int32(b))
+			l.maxRecvSize = b
 			return nil
 		}
 		return mangos.ErrBadValue
@@ -179,9 +195,12 @@ func (l *listener) SetOption(n string, v interface{}) error {
 
 // GetOption implements a stub PipeListener GetOption method.
 func (l *listener) GetOption(n string) (interface{}, error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
-		return int(atomic.LoadInt32(&l.maxRecvSize)), nil
+		return l.maxRecvSize, nil
 	}
 	return nil, mangos.ErrBadOption
 }

@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -55,10 +55,9 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts := make(map[string]interface{})
-	opts[mangos.OptionTLSConnState] = conn.ConnectionState()
-	p := transport.NewConnPipe(conn, d.proto, opts)
-	p.SetMaxRecvSize(maxRecvSize)
+	p := transport.NewConnPipe(conn, d.proto)
+	p.SetOption(mangos.OptionMaxRecvSize, maxRecvSize)
+	p.SetOption(mangos.OptionTLSConnState, conn.ConnectionState())
 	d.hs.Start(p)
 	return d.hs.Wait()
 }
@@ -182,13 +181,11 @@ func (l *listener) Listen() error {
 			}
 
 			tc := conn.(*tls.Conn)
-			opts := make(map[string]interface{})
+			p := transport.NewConnPipe(conn, l.proto)
 			l.lock.Lock()
-			maxRecvSize := l.maxRecvSize
+			p.SetOption(mangos.OptionMaxRecvSize, l.maxRecvSize)
+			p.SetOption(mangos.OptionTLSConnState, tc.ConnectionState())
 			l.lock.Unlock()
-			opts[mangos.OptionTLSConnState] = tc.ConnectionState()
-			p := transport.NewConnPipe(conn, l.proto, opts)
-			p.SetMaxRecvSize(maxRecvSize)
 
 			l.hs.Start(p)
 		}

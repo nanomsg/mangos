@@ -111,13 +111,20 @@ func (p *conn) GetOption(n string) (interface{}, error) {
 	return nil, mangos.ErrBadProperty
 }
 
+func (p *conn) SetOption(n string, v interface{}) {
+	switch n {
+	case mangos.OptionMaxRecvSize:
+		p.maxrx = v.(int)
+	}
+	p.options[n] = v
+}
+
 // ConnPipe is used for stream oriented transports.  It is a superset of
 // Pipe, but adds methods specific for transports.
 type ConnPipe interface {
 
-	// SetMaxRecvSize is used to set the maximum receive size.
-	SetMaxRecvSize(int)
-
+	// SetOption just records an option that can be retrieved later.
+	SetOption(string, interface{})
 	Pipe
 }
 
@@ -130,7 +137,7 @@ type ConnPipe interface {
 // and the Transport enclosing structure.   Using this layered interface,
 // the implementation needn't bother concerning itself with passing actual
 // SP messages once the lower layer connection is established.
-func NewConnPipe(c net.Conn, proto ProtocolInfo, options map[string]interface{}) ConnPipe {
+func NewConnPipe(c net.Conn, proto ProtocolInfo) ConnPipe {
 	p := &conn{
 		c:       c,
 		proto:   proto,
@@ -140,16 +147,8 @@ func NewConnPipe(c net.Conn, proto ProtocolInfo, options map[string]interface{})
 	p.options[mangos.OptionMaxRecvSize] = 0
 	p.options[mangos.OptionLocalAddr] = c.LocalAddr()
 	p.options[mangos.OptionRemoteAddr] = c.RemoteAddr()
-	for n, v := range options {
-		p.options[n] = v
-	}
-	p.maxrx = p.options[mangos.OptionMaxRecvSize].(int)
 
 	return p
-}
-
-func (p *conn) SetMaxRecvSize(sz int) {
-	p.maxrx = sz
 }
 
 // connHeader is exchanged during the initial handshake.

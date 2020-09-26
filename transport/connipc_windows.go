@@ -1,6 +1,6 @@
 // +build windows
 
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -19,27 +19,9 @@ package transport
 import (
 	"encoding/binary"
 	"io"
-	"net"
 
 	"go.nanomsg.org/mangos/v3"
 )
-
-// NewConnPipeIPC allocates a new Pipe using the IPC exchange protocol.
-func NewConnPipeIPC(c net.Conn, proto ProtocolInfo) ConnPipe {
-	p := &connipc{
-		conn: conn{
-			c:       c,
-			proto:   proto,
-			options: make(map[string]interface{}),
-			maxrx:   0,
-		},
-	}
-	p.options[mangos.OptionMaxRecvSize] = 0
-	p.options[mangos.OptionLocalAddr] = c.LocalAddr()
-	p.options[mangos.OptionRemoteAddr] = c.RemoteAddr()
-
-	return p
-}
 
 func (p *connipc) Send(msg *Message) error {
 

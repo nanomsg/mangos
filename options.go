@@ -192,4 +192,19 @@ const (
 	// Note that mangos v1 behavior is the same as if this option is
 	// set to true.
 	OptionDialAsynch = "DIAL-ASYNCH"
+
+	// OptionPeerPID is the peer process ID.  This is only implemented for
+	// transports that support it, and it is a read-only option for pipes
+	// only.  The value is an int.
+	OptionPeerPID = "PEER-PID"
+
+	// OptionPeerUID is the peer process user ID, typically obtained via
+	// SO_PEERCRED.  It is only available transports that support it, and is
+	// a read-only option for pipes.  The value of is an int.
+	OptionPeerUID = "PEER-UID"
+
+	// OptionPeerGID is the peer process group ID, typically obtained via
+	// SO_PEERCRED.  It is only available transports that support it, and is
+	// a read-only option for pipes.  The value of is an int.
+	OptionPeerGID = "PEER-GID"
 )

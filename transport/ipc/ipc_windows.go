@@ -1,6 +1,6 @@
 // +build windows
 
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -21,7 +21,6 @@ package ipc
 import (
 	"net"
 	"sync"
-	"sync/atomic"
 
 	"github.com/Microsoft/go-winio"
 
@@ -61,7 +60,7 @@ type dialer struct {
 	path        string
 	proto       transport.ProtocolInfo
 	hs          transport.Handshaker
-	recvMaxSize int32
+	recvMaxSize int
 	lock        sync.Mutex
 }
 
@@ -73,17 +72,23 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 		return nil, err
 	}
 	p := transport.NewConnPipeIPC(conn, d.proto)
-	p.SetMaxRecvSize(int(atomic.LoadInt32(&d.recvMaxSize)))
+	d.lock.Lock()
+	mrs := d.recvMaxSize
+	d.lock.Unlock()
+	p.SetOption(mangos.OptionMaxRecvSize, mrs)
 	d.hs.Start(p)
 	return d.hs.Wait()
 }
 
 // SetOption implements a stub PipeDialer SetOption method.
 func (d *dialer) SetOption(n string, v interface{}) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		if val, ok := v.(int); ok {
-			atomic.StoreInt32(&d.recvMaxSize, int32(val))
+			d.recvMaxSize = val
 			return nil
 		}
 		return mangos.ErrBadValue
@@ -94,9 +99,12 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 
 // GetOption implements a stub PipeDialer GetOption method.
 func (d *dialer) GetOption(n string) (interface{}, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
-		return int(atomic.LoadInt32(&d.recvMaxSize)), nil
+		return d.recvMaxSize, nil
 	}
 	return nil, mangos.ErrBadOption
 }
@@ -107,7 +115,7 @@ type listener struct {
 	listener         net.Listener
 	hs               transport.Handshaker
 	closed           bool
-	recvMaxSize      int32
+	recvMaxSize      int
 	outputBufferSize int32
 	inputBufferSize  int32
 	securityDesc     string
@@ -120,8 +128,8 @@ func (l *listener) Listen() error {
 
 	l.lock.Lock()
 	config := &winio.PipeConfig{
-		InputBufferSize:    atomic.LoadInt32(&l.inputBufferSize),
-		OutputBufferSize:   atomic.LoadInt32(&l.outputBufferSize),
+		InputBufferSize:    l.inputBufferSize,
+		OutputBufferSize:   l.outputBufferSize,
 		SecurityDescriptor: l.securityDesc,
 		MessageMode:        false,
 	}
@@ -143,6 +151,7 @@ func (l *listener) Listen() error {
 				l.lock.Unlock()
 				return
 			}
+			mrs := l.recvMaxSize
 			l.lock.Unlock()
 			conn, err := listener.Accept()
 			if err != nil {
@@ -150,7 +159,7 @@ func (l *listener) Listen() error {
 				continue
 			}
 			p := transport.NewConnPipeIPC(conn, l.proto)
-			p.SetMaxRecvSize(int(atomic.LoadInt32(&l.recvMaxSize)))
+			p.SetOption(mangos.OptionMaxRecvSize, mrs)
 			l.hs.Start(p)
 		}
 	}()
@@ -186,16 +195,19 @@ func (l *listener) Close() error {
 
 // SetOption implements a stub PipeListener SetOption method.
 func (l *listener) SetOption(name string, val interface{}) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
 	switch name {
 	case OptionInputBufferSize:
 		if b, ok := val.(int32); ok {
-			atomic.StoreInt32(&l.inputBufferSize, b)
+			l.inputBufferSize = b
 			return nil
 		}
 		return mangos.ErrBadValue
 	case OptionOutputBufferSize:
 		if b, ok := val.(int32); ok {
-			atomic.StoreInt32(&l.outputBufferSize, b)
+			l.outputBufferSize = b
 			return nil
 		}
 		return mangos.ErrBadValue
@@ -209,7 +221,7 @@ func (l *listener) SetOption(name string, val interface{}) error {
 
 	case mangos.OptionMaxRecvSize:
 		if b, ok := val.(int); ok {
-			atomic.StoreInt32(&l.recvMaxSize, int32(b))
+			l.recvMaxSize = b
 			return nil
 		}
 		return mangos.ErrBadValue
@@ -220,13 +232,15 @@ func (l *listener) SetOption(name string, val interface{}) error {
 
 // GetOption implements a stub PipeListener GetOption method.
 func (l *listener) GetOption(name string) (interface{}, error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
 	switch name {
 	case mangos.OptionMaxRecvSize:
-		return int(atomic.LoadInt32(&l.recvMaxSize)), nil
+		return l.recvMaxSize, nil
 	case OptionInputBufferSize:
-		return atomic.LoadInt32(&l.inputBufferSize), nil
+		return l.inputBufferSize, nil
 	case OptionOutputBufferSize:
-		return atomic.LoadInt32(&l.outputBufferSize), nil
+		return l.outputBufferSize, nil
 	case OptionSecurityDescriptor:
 		return l.securityDesc, nil
 	}

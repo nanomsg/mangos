@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -50,18 +50,19 @@ func (d *dialer) Dial() (_ transport.Pipe, err error) {
 		return nil, err
 	}
 
+	p := transport.NewConnPipe(conn, d.proto)
 	d.lock.Lock()
-	mrs := d.maxRecvSize
+	p.SetOption(mangos.OptionMaxRecvSize, d.maxRecvSize)
 	d.lock.Unlock()
-	p := transport.NewConnPipe(conn, d.proto, nil)
-	p.SetMaxRecvSize(mrs)
 	d.hs.Start(p)
 	return d.hs.Wait()
 }
 
 func (d *dialer) SetOption(n string, v interface{}) error {
-	switch n {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
+	switch n {
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
 			d.maxRecvSize = b
@@ -101,6 +102,7 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 func (d *dialer) GetOption(n string) (interface{}, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		return d.maxRecvSize, nil
@@ -166,11 +168,10 @@ func (l *listener) Listen() (err error) {
 					continue
 				}
 			}
+			p := transport.NewConnPipe(conn, l.proto)
 			l.lock.Lock()
-			mrs := l.maxRecvSize
+			p.SetOption(mangos.OptionMaxRecvSize, l.maxRecvSize)
 			l.lock.Unlock()
-			p := transport.NewConnPipe(conn, l.proto, nil)
-			p.SetMaxRecvSize(mrs)
 			l.handshaker.Start(p)
 		}
 	}()
@@ -196,6 +197,9 @@ func (l *listener) Close() error {
 }
 
 func (l *listener) SetOption(n string, v interface{}) error {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
@@ -234,6 +238,9 @@ func (l *listener) SetOption(n string, v interface{}) error {
 }
 
 func (l *listener) GetOption(n string) (interface{}, error) {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		return l.maxRecvSize, nil
