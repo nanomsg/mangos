@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -20,7 +20,6 @@ import (
 	"errors"
 	"net"
 	"os"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -184,44 +183,4 @@ func TestIpcSendAbort(t *testing.T) {
 	MustSend(t, sock, make([]byte, 1024*1024))
 	time.Sleep(time.Millisecond * 100)
 	MustSucceed(t, c.Close())
-}
-
-func TestIpcPeerId(t *testing.T) {
-	sock1 := GetMockSocket()
-	sock2 := GetMockSocket()
-	defer MustClose(t, sock1)
-	defer MustClose(t, sock2)
-	addr := AddrTestIPC()
-	l, e := sock1.NewListener(addr, nil)
-	MustSucceed(t, e)
-	MustSucceed(t, l.Listen())
-	d, e := sock2.NewDialer(addr, nil)
-	MustSucceed(t, d.Dial())
-	time.Sleep(time.Millisecond*20)
-
-	MustSend(t, sock1, make([]byte, 1))
-	m := MustRecvMsg(t, sock2)
-	p := m.Pipe
-
-	switch runtime.GOOS {
-	case "linux":
-		v, err  := p.GetOption(mangos.OptionPeerPID)
-		MustSucceed(t, err)
-		pid, ok := v.(int)
-		MustBeTrue(t, ok)
-		MustBeTrue(t, pid == os.Getpid())
-
-		v, err  = p.GetOption(mangos.OptionPeerUID)
-		MustSucceed(t, err)
-		uid, ok := v.(int)
-		MustBeTrue(t, ok)
-		MustBeTrue(t, uid == os.Getuid())
-
-		v, err  = p.GetOption(mangos.OptionPeerGID)
-		MustSucceed(t, err)
-		gid, ok := v.(int)
-		MustBeTrue(t, ok)
-		MustBeTrue(t, gid == os.Getgid())
-	default:
-	}
 }

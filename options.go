@@ -195,16 +195,23 @@ const (
 
 	// OptionPeerPID is the peer process ID.  This is only implemented for
 	// transports that support it, and it is a read-only option for pipes
-	// only.  The value is an int.
+	// only.  It may require cgo on some platforms.  The value is an int.
 	OptionPeerPID = "PEER-PID"
 
-	// OptionPeerUID is the peer process user ID, typically obtained via
+	// OptionPeerUID is the effective peer user ID, typically obtained via
 	// SO_PEERCRED.  It is only available transports that support it, and is
-	// a read-only option for pipes.  The value of is an int.
+	// a read-only option for pipes.  It may require cgo on some platforms.
+	// The value is an int.
 	OptionPeerUID = "PEER-UID"
 
-	// OptionPeerGID is the peer process group ID, typically obtained via
+	// OptionPeerGID is the effective peer group ID, typically obtained via
 	// SO_PEERCRED.  It is only available transports that support it, and is
-	// a read-only option for pipes.  The value of is an int.
+	// a read-only option for pipes.  It may require cgo on some platforms.
+	// The value is an int.
 	OptionPeerGID = "PEER-GID"
+
+	// OptionPeerZone is the peer's zone ID.  This is only supported on
+	// Solaris platforms at present, and only when cgo support is enabled.
+	// The value is an int.
+	OptionPeerZone = "PEER-ZONE"
 )

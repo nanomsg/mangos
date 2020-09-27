@@ -1,4 +1,4 @@
-// +build !linux,!windows,!plan9,!js
+// +build !linux,!windows,!plan9,!js,!solaris solaris,!cgo
 
 // Copyright 2020 The Mangos Authors
 //

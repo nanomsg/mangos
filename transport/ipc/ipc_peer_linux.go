@@ -14,8 +14,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package ipc implements the IPC transport on top of UNIX domain sockets.
-// To enable it simply import it.
 package ipc
 
 import (
