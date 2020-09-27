@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -96,7 +96,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	expireTime := c.recvExpire
 	s.Unlock()
 
-	if expireTime > 0 {
+	if expireTime != 0 {
 		wq = time.After(expireTime)
 	}
 
@@ -107,10 +107,15 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	select {
 	case entry := <-s.recvQ:
 		m, p = entry.m, entry.p
-	case <-wq:
-		err = protocol.ErrRecvTimeout
-	case <-cq:
-		err = protocol.ErrClosed
+	default:
+		select {
+		case entry := <-s.recvQ:
+			m, p = entry.m, entry.p
+		case <-wq:
+			err = protocol.ErrRecvTimeout
+		case <-cq:
+			err = protocol.ErrClosed
+		}
 	}
 
 	s.Lock()
@@ -144,7 +149,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	timeQ := nilQ
 	if bestEffort {
 		timeQ = closedQ
-	} else if c.sendExpire > 0 {
+	} else if c.sendExpire != 0 {
 		timeQ = time.After(c.sendExpire)
 	}
 
@@ -154,26 +159,31 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	r.Unlock()
 
 	select {
-	case <-cq:
-		m.Header = nil
-		return protocol.ErrClosed
-	case <-p.closeQ:
-		// Pipe closed, so no way to get it to the recipient.
-		// Just discard the message.
-		m.Free()
-		return nil
-	case <-timeQ:
-		if bestEffort {
-			// No way to report to caller, so just discard
-			// the message.
-			m.Free()
-			return nil
-		}
-		m.Header = nil
-		return protocol.ErrSendTimeout
-
 	case p.sendQ <- m:
 		return nil
+	default:
+		select {
+		case <-cq:
+			m.Header = nil
+			return protocol.ErrClosed
+		case <-p.closeQ:
+			// Pipe closed, so no way to get it to the recipient.
+			// Just discard the message.
+			m.Free()
+			return nil
+		case <-timeQ:
+			if bestEffort {
+				// No way to report to caller, so just discard
+				// the message.
+				m.Free()
+				return nil
+			}
+			m.Header = nil
+			return protocol.ErrSendTimeout
+
+		case p.sendQ <- m:
+			return nil
+		}
 	}
 }
 
@@ -228,7 +238,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionSendDeadline:
-		if val, ok := v.(time.Duration); ok && val > 0 {
+		if val, ok := v.(time.Duration); ok {
 			c.s.Lock()
 			c.sendExpire = val
 			c.s.Unlock()
@@ -237,7 +247,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionRecvDeadline:
-		if val, ok := v.(time.Duration); ok && val > 0 {
+		if val, ok := v.(time.Duration); ok {
 			c.s.Lock()
 			c.recvExpire = val
 			c.s.Unlock()
