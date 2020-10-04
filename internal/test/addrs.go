@@ -16,6 +16,8 @@ package test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 )
@@ -31,10 +33,11 @@ func NextPort() uint32 {
 	return atomic.AddUint32(&currPort, 1)
 }
 
-// AddrTestIPC returns a test IPC address.  It will be in the current
+// AddrTestIPC returns a test IPC address.  It will be in the temporary
 // directory.
 func AddrTestIPC() string {
-	return (fmt.Sprintf("ipc://mangostest%d", NextPort()))
+	temp := filepath.ToSlash(os.TempDir())
+	return fmt.Sprintf("ipc://%s/mangostest%d", temp, NextPort())
 }
 
 // AddrTestWSS returns a websocket over TLS address.

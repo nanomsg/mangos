@@ -20,6 +20,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -183,4 +184,26 @@ func TestIpcSendAbort(t *testing.T) {
 	MustSend(t, sock, make([]byte, 1024*1024))
 	time.Sleep(time.Millisecond * 100)
 	MustSucceed(t, c.Close())
+}
+
+func TestIpcListenerOptions(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	addr := AddrTestIPC()
+	l, e := tran.NewListener(addr, sock)
+	MustSucceed(t, e)
+
+	MustBeError(t, l.SetOption(OptionIpcSocketOwner, true), mangos.ErrBadValue)
+	MustBeError(t, l.SetOption(OptionIpcSocketGroup, true), mangos.ErrBadValue)
+	MustBeError(t, l.SetOption(OptionIpcSocketPermissions, true), mangos.ErrBadValue)
+	MustBeError(t, l.SetOption(OptionIpcSocketPermissions, os.ModeDir), mangos.ErrBadValue)
+	MustSucceed(t, l.SetOption(OptionIpcSocketPermissions, uint32(0642)))
+	MustSucceed(t, l.SetOption(OptionIpcSocketPermissions, os.FileMode(0642)))
+	MustSucceed(t, l.SetOption(OptionIpcSocketOwner, 0))
+	MustSucceed(t, l.SetOption(OptionIpcSocketGroup, 0))
+
+	MustSucceed(t, l.Listen())
+	i, e := os.Stat(strings.TrimPrefix(addr, "ipc://"))
+	MustSucceed(t, e)
+	MustBeTrue(t, i.Mode() & os.ModePerm == 0642)
 }

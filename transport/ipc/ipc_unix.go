@@ -34,6 +34,29 @@ const (
 	Transport = ipcTran(0)
 )
 
+const (
+	// OptionIpcSocketPermissions is used to set the permissions on the
+	// UNIX domain socket via chmod.  The argument is a uint32, and
+	// represents the mode passed to chmod().  This is
+	// done on the server side.  Be aware that relying on
+	// socket permissions for enforcement is not portable.
+	OptionIpcSocketPermissions = "UNIX-IPC-CHMOD"
+
+	// OptionIpcSocketOwner is used to set the socket owner by
+	// using chown on the server socket.  This will only work if
+	// the process has permission.   The argument is an int.
+	// If this fails to set at socket creation time,
+	// no error is reported.
+	OptionIpcSocketOwner = "UNIX-IPC-OWNER"
+
+	// OptionIpcSocketGroup is used to set the socket group by
+	// using chown on the server socket.  This will only work if
+	// the process has permission.   The argument is an int.
+	// If this fails to set at socket creation time,
+	// no error is reported.
+	OptionIpcSocketGroup = "UNIX-IPC-GROUP"
+)
+
 func init() {
 	transport.RegisterTransport(Transport)
 }
@@ -98,6 +121,11 @@ type listener struct {
 	closeq      chan struct{}
 	closed      bool
 	maxRecvSize int
+	owner       int
+	group       int
+	chown       bool
+	mode        uint32
+	chmod       bool
 	once        sync.Once
 	lock        sync.Mutex
 }
@@ -113,6 +141,14 @@ func (l *listener) Listen() error {
 	default:
 	}
 	listener, err := net.ListenUnix("unix", l.addr)
+
+	if l.chown {
+		os.Chown(l.addr.String(), l.owner, l.group)
+
+	}
+	if l.chmod {
+		os.Chmod(l.addr.String(), os.FileMode(l.mode))
+	}
 
 	if err != nil && (isSyscallError(err, syscall.EADDRINUSE) || isSyscallError(err, syscall.EEXIST)) {
 		l.removeStaleIPC()
@@ -189,7 +225,34 @@ func (l *listener) SetOption(n string, v interface{}) error {
 			return nil
 		}
 		return mangos.ErrBadValue
+	case OptionIpcSocketPermissions:
+		if b, ok := v.(uint32); ok && b&uint32(os.ModePerm) == v {
+			l.mode = b
+			l.chmod = true
+			return nil
+		}
+		if b, ok := v.(os.FileMode); ok && b&os.ModePerm == v {
+			l.mode = uint32(b)
+			l.chmod = true
+			return nil
+		}
+		return mangos.ErrBadValue
+	case OptionIpcSocketOwner:
+		if b, ok := v.(int); ok {
+			l.owner = b
+			l.chown = true
+			return nil
+		}
+		return mangos.ErrBadValue
+	case OptionIpcSocketGroup:
+		if b, ok := v.(int); ok {
+			l.group = b
+			l.chown = true
+			return nil
+		}
+		return mangos.ErrBadValue
 	}
+
 	return mangos.ErrBadOption
 }
 
@@ -253,6 +316,8 @@ func (t ipcTran) NewListener(addr string, sock mangos.Socket) (transport.Listene
 		proto:  sock.Info(),
 		closeq: make(chan struct{}),
 		hs:     transport.NewConnHandshaker(),
+		owner:  os.Geteuid(),
+		group:  os.Getegid(),
 	}
 
 	if addr, err = transport.StripScheme(t, addr); err != nil {
