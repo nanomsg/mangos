@@ -1,6 +1,6 @@
 // +build !windows,!plan9,!js
 
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
