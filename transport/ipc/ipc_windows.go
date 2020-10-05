@@ -34,28 +34,6 @@ func init() {
 	transport.RegisterTransport(Transport)
 }
 
-// The options here are pretty specific to Windows Named Pipes.
-
-const (
-	// OptionSecurityDescriptor represents a Windows security
-	// descriptor in SDDL format (string).  This can only be set on
-	// a Listener, and must be set before the Listen routine
-	// is called.
-	OptionSecurityDescriptor = "WIN-IPC-SECURITY-DESCRIPTOR"
-
-	// OptionInputBufferSize represents the Windows Named Pipe
-	// input buffer size in bytes (type int32).  Default is 4096.
-	// This is only for Listeners, and must be set before the
-	// Listener is started.
-	OptionInputBufferSize = "WIN-IPC-INPUT-BUFFER-SIZE"
-
-	// OptionOutputBufferSize represents the Windows Named Pipe
-	// output buffer size in bytes (type int32).  Default is 4096.
-	// This is only for Listeners, and must be set before the
-	// Listener is started.
-	OptionOutputBufferSize = "WIN-IPC-OUTPUT-BUFFER-SIZE"
-)
-
 type dialer struct {
 	path        string
 	proto       transport.ProtocolInfo

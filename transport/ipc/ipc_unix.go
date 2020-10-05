@@ -34,29 +34,6 @@ const (
 	Transport = ipcTran(0)
 )
 
-const (
-	// OptionIpcSocketPermissions is used to set the permissions on the
-	// UNIX domain socket via chmod.  The argument is a uint32, and
-	// represents the mode passed to chmod().  This is
-	// done on the server side.  Be aware that relying on
-	// socket permissions for enforcement is not portable.
-	OptionIpcSocketPermissions = "UNIX-IPC-CHMOD"
-
-	// OptionIpcSocketOwner is used to set the socket owner by
-	// using chown on the server socket.  This will only work if
-	// the process has permission.   The argument is an int.
-	// If this fails to set at socket creation time,
-	// no error is reported.
-	OptionIpcSocketOwner = "UNIX-IPC-OWNER"
-
-	// OptionIpcSocketGroup is used to set the socket group by
-	// using chown on the server socket.  This will only work if
-	// the process has permission.   The argument is an int.
-	// If this fails to set at socket creation time,
-	// no error is reported.
-	OptionIpcSocketGroup = "UNIX-IPC-GROUP"
-)
-
 func init() {
 	transport.RegisterTransport(Transport)
 }
