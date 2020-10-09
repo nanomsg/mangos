@@ -511,8 +511,14 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 			// We are closing this pipe, so we need to
 			// immediately reschedule it.
 			c.lastPipe = nil
-			c.unscheduleSend()
-			go c.resendMessage(c.reqID)
+			// If there is no resend time, then we need to simply
+			// discard the message, because it's not necessarily idempotent.
+			if c.resendTime == 0 {
+				c.cancel()
+			} else {
+				c.unscheduleSend()
+				go c.resendMessage(c.reqID)
+			}
 		}
 	}
 	s.Unlock()

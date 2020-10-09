@@ -98,7 +98,7 @@ func TestReqContextClosed(t *testing.T) {
 	MustBeError(t, e, mangos.ErrClosed)
 }
 
-// This test demonstrates that sending a second survey cancels any Rx on the
+// This test demonstrates that sending a second request cancels any Rx on the
 // earlier outstanding ones.
 func TestReqCancel(t *testing.T) {
 	s := GetSocket(t, NewSocket)
@@ -119,6 +119,26 @@ func TestReqCancel(t *testing.T) {
 	MustSendString(t, s, "second")
 	wg.Wait()
 	MustBeTrue(t, pass)
+	MustSucceed(t, s.Close())
+}
+
+// This test demonstrates that sending a second request cancels any Rx on the
+// earlier outstanding ones.
+func TestReqCancelDisconnect(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	peer := GetSocket(t, rep.NewSocket)
+	ConnectPair(t, s, peer)
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Second*3))
+	MustSucceed(t, s.SetOption(mangos.OptionRetryTime, time.Duration(0)))
+	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, true))
+	MustSendString(t, s, "first")
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		peer.Close()
+	}()
+	v, e := s.Recv()
+	MustBeError(t, e, mangos.ErrCanceled)
+	MustBeNil(t, v)
 	MustSucceed(t, s.Close())
 }
 
