@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2021 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -134,7 +134,7 @@ const (
 	// This option is only intended to prevent gross abuse  of the system,
 	// and not a substitute for proper application message verification.
 	//
-	// This option is type int64.
+	// This option is type int.
 	OptionMaxRecvSize = "MAX-RCV-SIZE"
 
 	// OptionReconnectTime is the initial interval used for connection
