@@ -504,6 +504,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 		resendTime: s.defCtx.resendTime,
 		sendExpire: s.defCtx.sendExpire,
 		recvExpire: s.defCtx.recvExpire,
+		failNoPeers: s.defCtx.failNoPeers,
 	}
 	s.ctxs[c] = struct{}{}
 	return c, nil
