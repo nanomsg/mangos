@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2021 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -39,14 +39,17 @@ type pipe struct {
 }
 
 type socket struct {
-	closed     bool
-	closeQ     chan struct{}
-	sendQ      chan *protocol.Message
-	sendExpire time.Duration
-	sendQLen   int
-	bestEffort bool
-	readyQ     []*pipe
-	cv         *sync.Cond
+	closed      bool
+	closeQ      chan struct{}
+	sendQ       chan *protocol.Message
+	noPeerQ     chan struct{}
+	sendExpire  time.Duration
+	sendQLen    int
+	bestEffort  bool
+	failNoPeers bool
+	readyQ      []*pipe
+	pipes       map[uint32]*pipe
+	cv          *sync.Cond
 	sync.Mutex
 }
 
@@ -79,9 +82,16 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
+	if s.failNoPeers && len(s.pipes) == 0 {
+		s.Unlock()
+		return protocol.ErrNoPeers
+	}
+	pq := s.noPeerQ
 	s.Unlock()
 
 	select {
+	case <-pq:
+		return protocol.ErrNoPeers
 	case s.sendQ <- m:
 	case <-s.closeQ:
 		return protocol.ErrClosed
@@ -174,6 +184,15 @@ func (s *socket) SetOption(name string, value interface{}) error {
 		}
 		return protocol.ErrBadValue
 
+	case protocol.OptionFailNoPeers:
+		if v, ok := value.(bool); ok {
+			s.Lock()
+			s.failNoPeers = v
+			s.Unlock()
+			return nil
+		}
+		return protocol.ErrBadValue
+
 	case protocol.OptionWriteQLen:
 		if v, ok := value.(int); ok && v >= 0 {
 
@@ -225,6 +244,11 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 		v := s.sendQLen
 		s.Unlock()
 		return v, nil
+	case protocol.OptionFailNoPeers:
+		s.Lock()
+		v := s.failNoPeers
+		s.Unlock()
+		return v, nil
 	}
 
 	return nil, protocol.ErrBadOption
@@ -256,7 +280,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 		return protocol.ErrClosed
 	}
 	go p.receiver()
-
+	s.pipes[pp.ID()] = p
 	s.readyQ = append(s.readyQ, p)
 	s.cv.Broadcast()
 	return nil
@@ -273,6 +297,11 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 			s.readyQ = append(s.readyQ[:i], s.readyQ[i+1:]...)
 			break
 		}
+	}
+	delete(s.pipes, pp.ID())
+	if s.failNoPeers && len(s.pipes) == 0 {
+		close(s.noPeerQ)
+		s.noPeerQ = make(chan struct{})
 	}
 	s.Unlock()
 }
@@ -294,8 +323,10 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		closeQ:   make(chan struct{}),
+		noPeerQ: make(chan struct{}),
 		sendQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
+		pipes:    make(map[uint32]*pipe),
 	}
 	s.cv = sync.NewCond(s)
 	go s.sender()

@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2021 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -42,6 +42,7 @@ func TestXPushRaw(t *testing.T) {
 func TestXPushOptions(t *testing.T) {
 	VerifyInvalidOption(t, NewSocket)
 	VerifyOptionBool(t, NewSocket, mangos.OptionBestEffort)
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
 	VerifyOptionDuration(t, NewSocket, mangos.OptionSendDeadline)
 	VerifyOptionQLen(t, NewSocket, mangos.OptionWriteQLen)
 }
@@ -221,4 +222,28 @@ func TestXPushSendFail(t *testing.T) {
 	MustBeTrue(t, nAdd == 1)
 	MustBeTrue(t, nRem == 1)
 	MustBeTrue(t, len(mp.SendQ()) == 0)
+}
+
+func TestXPushFastFailNoPeerDisconnect(t *testing.T) {
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
+
+	s := GetSocket(t, NewSocket)
+	p := GetSocket(t, pull.NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Second))
+
+	MustSucceed(t, s.SetOption(mangos.OptionFailNoPeers, true))
+	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 0))
+	MustSucceed(t, p.SetOption(mangos.OptionReadQLen, 0))
+
+	// Now connect them so they can drain -- we should only have 3 messages
+	// that arrive at the peer.
+	ConnectPair(t, s, p)
+
+	go func() {
+		time.Sleep(time.Millisecond*20)
+		MustSucceed(t, p.Close())
+	}()
+
+	MustBeError(t ,s.Send([]byte("three")), mangos.ErrNoPeers)
+	MustSucceed(t, s.Close())
 }

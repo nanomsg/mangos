@@ -45,6 +45,7 @@ func TestReqOptions(t *testing.T) {
 	VerifyOptionDuration(t, NewSocket, mangos.OptionSendDeadline)
 	VerifyOptionDuration(t, NewSocket, mangos.OptionRetryTime)
 	VerifyOptionBool(t, NewSocket, mangos.OptionBestEffort)
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
 }
 
 func TestReqClosed(t *testing.T) {
@@ -449,4 +450,90 @@ func TestReqMultiContexts(t *testing.T) {
 	for i := 0; i < count; i++ {
 		MustBeTrue(t, recv[i] == repeat)
 	}
+}
+
+func TestReqSendNoPeers(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionFailNoPeers, true))
+	MustBeError(t, s.Send([]byte("junk")), mangos.ErrNoPeers)
+	MustSucceed(t, s.Close())
+}
+
+func TestReqSendNoPeerDisconnect(t *testing.T) {
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
+
+	s := GetSocket(t, NewSocket)
+	p := GetSocket(t, rep.NewSocket)
+	c1, err := s.OpenContext()
+	MustSucceed(t, err)
+	c2, err := s.OpenContext()
+	MustSucceed(t, err)
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Second))
+
+	MustSucceed(t, s.SetOption(mangos.OptionFailNoPeers, true))
+
+	// Now connect them so they can drain -- we should only have 3 messages
+	// that arrive at the peer.
+	ConnectPair(t, s, p)
+	time.Sleep(time.Millisecond * 20)
+	// this logic fills the queue
+	go func() {
+		_ = c1.Send([]byte("one"))
+	}()
+	go func() {
+		_ = c2.Send([]byte("one"))
+	}()
+	time.Sleep(time.Millisecond * 10)
+	go func() {
+		time.Sleep(time.Millisecond * 20)
+		MustSucceed(t, p.Close())
+	}()
+	time.Sleep(time.Millisecond * 20)
+
+	MustBeError(t, s.Send([]byte("three")), mangos.ErrNoPeers)
+	MustSucceed(t, s.Close())
+}
+
+
+func TestReqRecvNoPeer(t *testing.T) {
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
+
+	s := GetSocket(t, NewSocket)
+	p := GetSocket(t, rep.NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Second))
+
+	MustSucceed(t, s.SetOption(mangos.OptionFailNoPeers, true))
+
+	// Now connect them so they can drain -- we should only have 3 messages
+	// that arrive at the peer.
+	ConnectPair(t, s, p)
+	time.Sleep(time.Millisecond * 20)
+	MustSucceed(t, s.Send([]byte("one"))) // sent by the socket, picked up by rep socket
+	time.Sleep(time.Millisecond * 20)
+	MustSucceed(t, p.Close())
+	time.Sleep(time.Millisecond*20)
+	MustNotRecv(t, s, mangos.ErrNoPeers)
+	MustSucceed(t, s.Close())
+}
+
+func TestReqRecvNoPeerDisconnect(t *testing.T) {
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
+
+	s := GetSocket(t, NewSocket)
+	p := GetSocket(t, rep.NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Second))
+
+	MustSucceed(t, s.SetOption(mangos.OptionFailNoPeers, true))
+
+	// Now connect them so they can drain -- we should only have 3 messages
+	// that arrive at the peer.
+	ConnectPair(t, s, p)
+	time.Sleep(time.Millisecond * 20)
+	MustSucceed(t, s.Send([]byte("one"))) // sent by the socket, picked up by rep socket
+	go func() {
+		time.Sleep(time.Millisecond*10)
+		MustSucceed(t, p.Close())
+	}()
+	MustNotRecv(t, s, mangos.ErrNoPeers)
+	MustSucceed(t, s.Close())
 }

@@ -1,4 +1,4 @@
-// Copyright 2020 The Mangos Authors
+// Copyright 2021 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -40,23 +40,24 @@ type pipe struct {
 }
 
 type context struct {
-	s          *socket
-	cond       *sync.Cond
-	resendTime time.Duration     // tunable resend time
-	sendExpire time.Duration     // how long to wait in send
-	recvExpire time.Duration     // how long to wait in recv
-	sendTimer  *time.Timer       // send timer
-	recvTimer  *time.Timer       // recv timer
-	resender   *time.Timer       // resend timeout
-	reqMsg     *protocol.Message // message for transmit
-	repMsg     *protocol.Message // received reply
-	sendMsg    *protocol.Message // messaging waiting for send
-	lastPipe   *pipe             // last pipe used for transmit
-	reqID      uint32            // request ID
-	recvWait   bool              // true if a thread is blocked in RecvMsg
-	bestEffort bool              // if true, don't block waiting in send
-	queued     bool              // true if we need to send a message
-	closed     bool              // true if we are closed
+	s           *socket
+	cond        *sync.Cond
+	resendTime  time.Duration     // tunable resend time
+	sendExpire  time.Duration     // how long to wait in send
+	recvExpire  time.Duration     // how long to wait in recv
+	sendTimer   *time.Timer       // send timer
+	recvTimer   *time.Timer       // recv timer
+	resender    *time.Timer       // resend timeout
+	reqMsg      *protocol.Message // message for transmit
+	repMsg      *protocol.Message // received reply
+	sendMsg     *protocol.Message // messaging waiting for send
+	lastPipe    *pipe             // last pipe used for transmit
+	reqID       uint32            // request ID
+	recvWait    bool              // true if a thread is blocked in RecvMsg
+	bestEffort  bool              // if true, don't block waiting in send
+	failNoPeers bool              // fast fail if no peers present
+	queued      bool              // true if we need to send a message
+	closed      bool              // true if we are closed
 }
 
 type socket struct {
@@ -68,6 +69,7 @@ type socket struct {
 	closed  bool                  // true if we are closed
 	sendq   []*context            // contexts waiting to send
 	readyq  []*pipe               // pipes available for sending
+	pipes   map[uint32]*pipe      // all pipes
 }
 
 func (s *socket) send() {
@@ -101,7 +103,7 @@ func (s *socket) send() {
 	}
 }
 
-func (p *pipe) sendCtx(c *context, m *protocol.Message) {
+func (p *pipe) sendCtx(_ *context, m *protocol.Message) {
 	s := p.s
 
 	// Send this message.  If an error occurs, we examine the
@@ -245,6 +247,9 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		return protocol.ErrClosed
 	}
 
+	if c.failNoPeers && len(s.pipes) == 0 {
+		return protocol.ErrNoPeers
+	}
 	c.cancel() // this cancels any pending send or recv calls
 	c.unscheduleSend()
 
@@ -281,7 +286,7 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	// It is responsible for providing the blocking semantic and
 	// ultimately back-pressure.  Note that we will "continue" if
 	// the send is canceled by a subsequent send.
-	for c.sendMsg == m && !expired && !c.closed {
+	for c.sendMsg == m && !expired && !c.closed && !(c.failNoPeers && len(s.pipes) == 0) {
 		c.cond.Wait()
 	}
 	if c.sendMsg == m {
@@ -290,6 +295,9 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		c.reqID = 0
 		if c.closed {
 			return protocol.ErrClosed
+		}
+		if c.failNoPeers && len(s.pipes) == 0 {
+			return protocol.ErrNoPeers
 		}
 		return protocol.ErrSendTimeout
 	}
@@ -302,6 +310,9 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	defer s.Unlock()
 	if s.closed || c.closed {
 		return nil, protocol.ErrClosed
+	}
+	if c.failNoPeers && len(s.pipes) == 0 {
+		return nil, protocol.ErrNoPeers
 	}
 	if c.recvWait || c.reqID == 0 {
 		return nil, protocol.ErrProtoState
@@ -332,11 +343,14 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	c.cond.Broadcast()
 
 	if m == nil {
+		if c.closed {
+			return nil, protocol.ErrClosed
+		}
 		if expired {
 			return nil, protocol.ErrRecvTimeout
 		}
-		if c.closed {
-			return nil, protocol.ErrClosed
+		if c.failNoPeers && len(s.pipes) == 0 {
+			return nil, protocol.ErrNoPeers
 		}
 		return nil, protocol.ErrCanceled
 	}
@@ -380,6 +394,16 @@ func (c *context) SetOption(name string, value interface{}) error {
 			return nil
 		}
 		return protocol.ErrBadValue
+
+	case protocol.OptionFailNoPeers:
+		if v, ok := value.(bool); ok {
+			c.s.Lock()
+			c.failNoPeers = v
+			c.s.Unlock()
+			return nil
+		}
+		return protocol.ErrBadValue
+
 	}
 
 	return protocol.ErrBadOption
@@ -405,6 +429,11 @@ func (c *context) GetOption(option string) (interface{}, error) {
 	case protocol.OptionBestEffort:
 		c.s.Lock()
 		v := c.bestEffort
+		c.s.Unlock()
+		return v, nil
+	case protocol.OptionFailNoPeers:
+		c.s.Lock()
+		v := c.failNoPeers
 		c.s.Unlock()
 		return v, nil
 	}
@@ -493,6 +522,7 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	}
 	s.readyq = append(s.readyq, p)
 	s.send()
+	s.pipes[pp.ID()] = p
 	go p.receiver()
 	return nil
 }
@@ -506,8 +536,11 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 			s.readyq = append(s.readyq[:i], s.readyq[i+1:]...)
 		}
 	}
+	delete(s.pipes, pp.ID())
 	for c := range s.ctxs {
-		if c.lastPipe == p && c.reqMsg != nil {
+		if c.failNoPeers && len(s.pipes) == 0 {
+			c.cancel()
+		} else if c.lastPipe == p && c.reqMsg != nil {
 			// We are closing this pipe, so we need to
 			// immediately reschedule it.
 			c.lastPipe = nil
@@ -539,6 +572,7 @@ func NewProtocol() protocol.Protocol {
 		nextID:  uint32(time.Now().UnixNano()), // quasi-random
 		ctxs:    make(map[*context]struct{}),
 		ctxByID: make(map[uint32]*context),
+		pipes:   make(map[uint32]*pipe),
 	}
 	s.defCtx = &context{
 		s:          s,

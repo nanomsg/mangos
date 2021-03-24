@@ -49,3 +49,11 @@ func TestPushOptions(t *testing.T) {
 func TestPushNoRecv(t *testing.T) {
 	CannotRecv(t, NewSocket)
 }
+
+func TestPushFastFailNoPeer(t *testing.T) {
+	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
+
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionFailNoPeers, true))
+	MustBeError(t, s.Send([]byte("junk")), mangos.ErrNoPeers)
+}

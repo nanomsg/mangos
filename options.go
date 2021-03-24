@@ -214,4 +214,15 @@ const (
 	// Solaris platforms at present, and only when cgo support is enabled.
 	// The value is an int.
 	OptionPeerZone = "PEER-ZONE"
+
+	// OptionFailNoPeers causes send or receive operations to fail
+	// immediately rather than waiting for a timeout if there are no
+	// connected peers.  This helps discriminate between cases involving
+	// flow control, from those where we we have no peers.  Use of this
+	// option may make applications more brittle, as a temporary disconnect
+	// that may otherwise self-heal quickly will now create an immediate
+	// failure.  Applications using this should be prepared to deal with
+	// such failures.  Note that not all protocols respect this -- best
+	// effort protocols will particularly not support this.
+	OptionFailNoPeers = "FAIL-NO-PEERS"
 )
