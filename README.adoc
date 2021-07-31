@@ -19,7 +19,7 @@ image:https://img.shields.io/github/v/tag/nanomsg/mangos?logo=github&sort=semver
 |===
 |_Mangos&trade;_  is an implementation in pure Go of the *SP*
 ("`Scalability Protocols`") messaging system.
-These are colloquially  known as a "`nanomsg`".
+These are colloquially  known as "`nanomsg`".
 a|image::mangos.jpg[float="right"]
 |===
 
