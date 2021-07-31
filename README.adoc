@@ -9,12 +9,10 @@ image:https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoCol
 image:https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=[Windows Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=[Darwin Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/codecov/c/github/nanomsg/mangos?logoColor=grey&logo=codecov&label=[Coverage,link="https://codecov.io/gh/nanomsg/mangos"]
-image:https://img.shields.io/codacy/grade/0addd1f6c00e4251b37854f3499e6d76?logoColor=grey&logo=codacy&label=[Code Quality,link="https://app.codacy.com/manual/gdamore/mangos/dashboard"]
 image:https://img.shields.io/discord/639573728212156478?label=&logo=discord[Discord,link="https://discord.gg/wewTkby"]
 image:https://img.shields.io/badge/godoc-docs-blue.svg?label=&logo=go[GoDoc,link="https://godoc.org/go.nanomsg.org/mangos"]
 image:https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=Open Source Initiative&label=&color=blue[Apache 2.0 License,link="https://github.com/nanomsg/mangos/blob/master/LICENSE"]
 image:https://img.shields.io/github/v/tag/nanomsg/mangos?logo=github&sort=semver&label=[Latest version,link="https://github.com/nanomsg/mangos/releases"]
-// image:https://goreportcard.com/badge/go.nanomsg.org/mangos?style=flat[Go Report Card,link="https://goreportcard.com/report/go.nanomsg.org/mangos"]
 
 
 [cols="2",grid="none",frame="none",options="autowidth"]
