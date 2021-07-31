@@ -5,7 +5,7 @@ ifdef::env-github[]
 endif::[]
 = mangos
 
-image:https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=ubuntu&label=[Linux Status,link="https://github.com/nanomsg/mangos/actions"]
+image:https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=linux&label=[Linux Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=[Windows Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=[Darwin Status,link="https://github.com/nanomsg/mangos/actions"]
 image:https://img.shields.io/codecov/c/github/nanomsg/mangos?logoColor=grey&logo=codecov&label=[Coverage,link="https://codecov.io/gh/nanomsg/mangos"]
