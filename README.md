@@ -1,6 +1,5 @@
 # mangos&trade; v3
 
-
 [![Linux](https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
 [![Windows](https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
 [![macOS](https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
@@ -10,20 +9,18 @@
 [![License](https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=opensourceinitiative&label=&color=blue)](https://github.com/nanomsg/mangos/blob/master/LICENSE)
 [![Version](https://img.shields.io/github/v/tag/nanomsg/mangos?logo=github&sort=semver&label=)](https://github.com/nanomsg/mangos/releases)
 
-
-
-_Mangos&trade;_  is an implementation in pure Go of the *SP*
+_Mangos&trade;_  is an implementation in pure Go of the _SP_
 (`Scalability Protocols`) messaging system.
 These are colloquially  known as `nanomsg`.
 
-> *NOTE*: The import path has changed! Please change any references
-to `go.nanomsg.org/mangos/v3`.
-The old v2 imports will still work for old applications, provided that
-a sufficiently modern version of Go is used.  However, no further work
-will be done on earlier versions.
-Earlier versions will still inter-operate with this version, except that
-within the same process the `inproc` transport can only be used by
-consumers using the same version of mangos.
+> _NOTE_: The import path has changed! Please change any references
+> to `go.nanomsg.org/mangos/v3`.
+> The old v2 imports will still work for old applications, provided that
+> a sufficiently modern version of Go is used.  However, no further work
+> will be done on earlier versions.
+> Earlier versions will still inter-operate with this version, except that
+> within the same process the `inproc` transport can only be used by
+> consumers using the same version of mangos.
 
 The modern C implementation of the SP protocols is available as
 [NNG&trade;](https://github.com/nanomsg/nng).
