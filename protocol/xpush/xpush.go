@@ -261,7 +261,7 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	s.cv.Signal()
+	s.cv.Broadcast() 
 	s.Unlock()
 	close(s.closeQ)
 	return nil
