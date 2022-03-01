@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2022 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -90,14 +90,14 @@ type ProtocolBase interface {
 	// XXX: Revisit these when we can use Pipe natively.
 
 	// AddPipe is called when a new Pipe is added to the socket.
-	// Typically this is as a result of connect or accept completing.
+	// Typically, this is as a result of connect or accept completing.
 	// The pipe ID will be unique for the socket at this time.
 	// The implementation must not call back into the socket, but it
 	// may reject the pipe by returning a non-nil result.
 	AddPipe(ProtocolPipe) error
 
 	// RemovePipe is called when a Pipe is removed from the socket.
-	// Typically this indicates a disconnected or closed connection.
+	// Typically, this indicates a disconnected or closed connection.
 	// This is called exactly once, after the underlying transport pipe
 	// is closed.  The Pipe ID will still be valid.
 	RemovePipe(ProtocolPipe)
@@ -113,15 +113,16 @@ type ProtocolBase interface {
 // is stored in the upper 12 bits, and the minor (subprotocol) is located in
 // the bottom 4 bits.
 const (
-	ProtoPair       = (1 * 16)
-	ProtoPub        = (2 * 16)
-	ProtoSub        = (2 * 16) + 1
-	ProtoReq        = (3 * 16)
-	ProtoRep        = (3 * 16) + 1
-	ProtoPush       = (5 * 16)
-	ProtoPull       = (5 * 16) + 1
-	ProtoSurveyor   = (6 * 16) + 2
-	ProtoRespondent = (6 * 16) + 3
-	ProtoBus        = (7 * 16)
-	ProtoStar       = (100 * 16) // Experimental!
+	ProtoPair       = 0x10
+	ProtoPair1      = 0x11
+	ProtoPub        = 0x20
+	ProtoSub        = 0x21
+	ProtoReq        = 0x30
+	ProtoRep        = 0x31
+	ProtoPush       = 0x50
+	ProtoPull       = 0x51
+	ProtoSurveyor   = 0x62
+	ProtoRespondent = 0x63
+	ProtoBus        = 0x70
+	ProtoStar       = 0x640 // Experimental!
 )

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 The Mangos Authors
+ * Copyright 2022 The Mangos Authors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use file except in compliance with the License.
@@ -15,7 +15,7 @@
  *
  */
 
-package pair
+package pair1
 
 import (
 	"testing"
@@ -26,21 +26,30 @@ import (
 	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 
-func TestPairIdentity(t *testing.T) {
-	s, e := NewSocket()
-	MustSucceed(t, e)
+func TestPair1Identity(t *testing.T) {
+	s := GetSocket(t, NewSocket)
 	id := s.Info()
-	MustBeTrue(t, id.Self == mangos.ProtoPair)
-	MustBeTrue(t, id.Peer == mangos.ProtoPair)
-	MustBeTrue(t, id.SelfName == "pair")
-	MustBeTrue(t, id.PeerName == "pair")
-	MustSucceed(t, s.Close())
+	MustBeTrue(t, id.Self == mangos.ProtoPair1)
+	MustBeTrue(t, id.Peer == mangos.ProtoPair1)
+	MustBeTrue(t, id.SelfName == "pair1")
+	MustBeTrue(t, id.PeerName == "pair1")
+	MustClose(t, s)
 }
 
 func TestPairCooked(t *testing.T) {
 	VerifyCooked(t, NewSocket)
 }
 
+func TestPair1SendReceive(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	peer := GetSocket(t, NewSocket)
+	ConnectPair(t, self, peer)
+	MustSendString(t, self, "ping")
+	m := MustRecvMsg(t, peer)
+	MustBeTrue(t, len(m.Header) == 0)
+	MustClose(t, self)
+	MustClose(t, peer)
+}
 func TestPairClosed(t *testing.T) {
 	VerifyClosedSend(t, NewSocket)
 	VerifyClosedRecv(t, NewSocket)
