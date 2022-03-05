@@ -118,7 +118,7 @@ func TestPipeHookReject(t *testing.T) {
 	}
 
 	MustSucceed(t, self.SetOption(mangos.OptionReconnectTime, time.Millisecond*10))
-	MustSucceed(t, self.SetOption(mangos.OptionMaxReconnectTime, time.Millisecond*100))
+	MustSucceed(t, self.SetOption(mangos.OptionMaxReconnectTime, time.Millisecond*20))
 	MustSucceed(t, self.SetOption(mangos.OptionDialAsynch, true))
 	self.SetPipeEventHook(hook)
 
