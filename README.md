@@ -1,5 +1,7 @@
 # mangos&trade; v3
 
+Please see [here](UKRAINE.md) for an important message for the people of Russia.
+
 [![Linux](https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
 [![Windows](https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
 [![macOS](https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
