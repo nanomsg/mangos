@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2022 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -15,12 +15,11 @@
 package test
 
 import (
+	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"math/big"
 	"net"
 	"sync"
@@ -28,12 +27,12 @@ import (
 )
 
 type key struct {
-	key    *rsa.PrivateKey
+	pubKey ed25519.PublicKey
+	prvKey ed25519.PrivateKey
 	keyPEM []byte
 
 	cert    *x509.Certificate
 	certDER []byte
-	certPEM []byte
 
 	pair tls.Certificate
 }
@@ -44,29 +43,28 @@ type keys struct {
 	client key
 }
 
-func (k *key) genKey(bits int) (err error) {
-	if k.key, err = rsa.GenerateKey(rand.Reader, bits); err != nil {
+func (k *key) genKey() (err error) {
+	if k.pubKey, k.prvKey, err = ed25519.GenerateKey(rand.Reader); err != nil {
 		return
 	}
-	k.keyPEM = pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(k.key),
-	})
 	return
 }
 
 func (k *key) genCert(tmpl *x509.Certificate, parent *key) (err error) {
-	k.cert = tmpl // for self-signed, we pass ourself as parent, this makes it work
-	k.certDER, err = x509.CreateCertificate(rand.Reader, tmpl, parent.cert, &k.key.PublicKey, parent.key)
+	k.cert = tmpl // for self-signed, we pass ourselves as parent, this makes it work
+	k.certDER, err = x509.CreateCertificate(rand.Reader, tmpl, parent.cert, parent.pubKey, parent.prvKey)
 	if err != nil {
 		return
 	}
 	if k.cert, err = x509.ParseCertificate(k.certDER); err != nil {
 		return
 	}
-	k.certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: k.certDER})
 
-	k.pair, err = tls.X509KeyPair(k.certPEM, k.keyPEM)
+	k.pair = tls.Certificate{
+		Certificate: [][]byte{k.certDER},
+		PrivateKey:  parent.prvKey,
+		Leaf:        k.cert,
+	}
 	if err != nil {
 		return
 	}
@@ -75,13 +73,13 @@ func (k *key) genCert(tmpl *x509.Certificate, parent *key) (err error) {
 
 func newKeys() (k *keys, err error) {
 	k = &keys{}
-	if err = k.root.genKey(2048); err != nil {
+	if err = k.root.genKey(); err != nil {
 		return nil, err
 	}
-	if err = k.server.genKey(1024); err != nil {
+	if err = k.server.genKey(); err != nil {
 		return nil, err
 	}
-	if err = k.client.genKey(1024); err != nil {
+	if err = k.client.genKey(); err != nil {
 		return nil, err
 	}
 
@@ -115,7 +113,7 @@ var rootTmpl = &x509.Certificate{
 	OCSPServer:            []string{"ocsp.mangos.example.com"},
 	DNSNames:              []string{"root.mangos.example.com"},
 	IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
-	SignatureAlgorithm:    x509.SHA1WithRSA,
+	SignatureAlgorithm:    x509.PureEd25519,
 	KeyUsage:              x509.KeyUsageCertSign,
 	ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 }
@@ -137,7 +135,7 @@ var serverTmpl = &x509.Certificate{
 	OCSPServer:         []string{"ocsp.mangos.example.com"},
 	DNSNames:           []string{"server.mangos.example.com"},
 	IPAddresses:        []net.IP{net.ParseIP("127.0.0.1")},
-	SignatureAlgorithm: x509.SHA1WithRSA,
+	SignatureAlgorithm: x509.PureEd25519,
 	KeyUsage:           x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 }
@@ -159,7 +157,7 @@ var clientTmpl = &x509.Certificate{
 	OCSPServer:         []string{"ocsp.mangos.example.com"},
 	DNSNames:           []string{"client.mangos.example.com"},
 	IPAddresses:        []net.IP{net.ParseIP("127.0.0.1")},
-	SignatureAlgorithm: x509.SHA1WithRSA,
+	SignatureAlgorithm: x509.PureEd25519,
 	KeyUsage:           x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 	ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 }
