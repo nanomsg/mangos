@@ -1,4 +1,4 @@
-// Copyright 2021 The Mangos Authors
+// Copyright 2022 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -158,6 +158,10 @@ func (p *pipe) receiver() {
 			if c.resender != nil {
 				c.resender.Stop()
 				c.resender = nil
+			}
+			if c.recvTimer != nil {
+				c.recvTimer.Stop()
+				c.recvTimer = nil
 			}
 			c.cond.Broadcast()
 		} else {
@@ -498,12 +502,12 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 		return nil, protocol.ErrClosed
 	}
 	c := &context{
-		s:          s,
-		cond:       sync.NewCond(s),
-		bestEffort: s.defCtx.bestEffort,
-		resendTime: s.defCtx.resendTime,
-		sendExpire: s.defCtx.sendExpire,
-		recvExpire: s.defCtx.recvExpire,
+		s:           s,
+		cond:        sync.NewCond(s),
+		bestEffort:  s.defCtx.bestEffort,
+		resendTime:  s.defCtx.resendTime,
+		sendExpire:  s.defCtx.sendExpire,
+		recvExpire:  s.defCtx.recvExpire,
 		failNoPeers: s.defCtx.failNoPeers,
 	}
 	s.ctxs[c] = struct{}{}
