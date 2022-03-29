@@ -23,7 +23,6 @@ import (
 	"go.nanomsg.org/mangos/v3"
 	. "go.nanomsg.org/mangos/v3/internal/test"
 	"go.nanomsg.org/mangos/v3/protocol"
-	. "go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/surveyor"
 	"go.nanomsg.org/mangos/v3/protocol/xsurveyor"
 	_ "go.nanomsg.org/mangos/v3/transport/inproc"
@@ -31,9 +30,9 @@ import (
 
 func TestXRespondentIdentity(t *testing.T) {
 	id := MustGetInfo(t, NewSocket)
-	MustBeTrue(t, id.Peer == ProtoSurveyor)
+	MustBeTrue(t, id.Peer == protocol.ProtoSurveyor)
 	MustBeTrue(t, id.PeerName == "surveyor")
-	MustBeTrue(t, id.Self == ProtoRespondent)
+	MustBeTrue(t, id.Self == protocol.ProtoRespondent)
 	MustBeTrue(t, id.SelfName == "respondent")
 }
 
@@ -215,8 +214,8 @@ func TestXRespondentRecvNoHeader(t *testing.T) {
 
 func TestXRespondentRecvJunk(t *testing.T) {
 	self := GetSocket(t, NewSocket)
-	MustSucceed(t, self.SetOption(OptionReadQLen, 20))
-	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond*10))
+	MustSucceed(t, self.SetOption(protocol.OptionReadQLen, 20))
+	MustSucceed(t, self.SetOption(protocol.OptionRecvDeadline, time.Millisecond*10))
 
 	mp, _ := MockConnect(t, self)
 	MockMustSend(t, mp, []byte{}, time.Second)
@@ -224,7 +223,7 @@ func TestXRespondentRecvJunk(t *testing.T) {
 	MockMustSend(t, mp, []byte{0, 1, 2, 3}, time.Second)
 	MockMustSend(t, mp, []byte{0, 1, 2, 3, 0x80}, time.Second)
 
-	MustNotRecv(t, self, ErrRecvTimeout)
+	MustNotRecv(t, self, protocol.ErrRecvTimeout)
 	MustClose(t, self)
 }
 
@@ -252,8 +251,8 @@ func TestXRespondentPipeCloseSendAbort(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	defer MustClose(t, self)
 
-	MustSucceed(t, self.SetOption(OptionWriteQLen, 0))
-	MustSucceed(t, self.SetOption(OptionSendDeadline, time.Second))
+	MustSucceed(t, self.SetOption(protocol.OptionWriteQLen, 0))
+	MustSucceed(t, self.SetOption(protocol.OptionSendDeadline, time.Second))
 
 	_, p := MockConnect(t, self)
 	var wg sync.WaitGroup
@@ -288,8 +287,8 @@ func TestXRespondentPipeCloseRecvAbort(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	defer MustClose(t, self)
 
-	MustSucceed(t, self.SetOption(OptionReadQLen, 1))
-	MustSucceed(t, self.SetOption(OptionSendDeadline, time.Second))
+	MustSucceed(t, self.SetOption(protocol.OptionReadQLen, 1))
+	MustSucceed(t, self.SetOption(protocol.OptionSendDeadline, time.Second))
 
 	mock, p := MockConnect(t, self)
 	var wg sync.WaitGroup
@@ -303,7 +302,7 @@ func TestXRespondentPipeCloseRecvAbort(t *testing.T) {
 			m := newRequest(i, "")
 			e := mock.MockSendMsg(m, time.Second)
 			if e != nil {
-				MustBeError(t, e, ErrClosed)
+				MustBeError(t, e, protocol.ErrClosed)
 				pass = true
 				return
 			}
@@ -323,24 +322,24 @@ func TestXRespondentPipeCloseRecvAbort(t *testing.T) {
 func TestXRespondentRecv1(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	mp, _ := MockConnect(t, self)
-	MustSucceed(t, self.SetOption(OptionReadQLen, 0))
-	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Millisecond))
+	MustSucceed(t, self.SetOption(protocol.OptionReadQLen, 0))
+	MustSucceed(t, self.SetOption(protocol.OptionRecvDeadline, time.Millisecond))
 	MockMustSendMsg(t, mp, newRequest(1, "hello"), time.Second)
 
 	time.Sleep(time.Millisecond * 50)
-	MustSucceed(t, self.SetOption(OptionReadQLen, 2))
-	MustNotRecv(t, self, ErrRecvTimeout)
+	MustSucceed(t, self.SetOption(protocol.OptionReadQLen, 2))
+	MustNotRecv(t, self, protocol.ErrRecvTimeout)
 	MustClose(t, self)
 }
 
 func TestXRespondentResizeRecv2(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	mp, _ := MockConnect(t, self)
-	MustSucceed(t, self.SetOption(OptionReadQLen, 1))
-	MustSucceed(t, self.SetOption(OptionRecvDeadline, time.Second))
+	MustSucceed(t, self.SetOption(protocol.OptionReadQLen, 1))
+	MustSucceed(t, self.SetOption(protocol.OptionRecvDeadline, time.Second))
 
 	time.AfterFunc(time.Millisecond*50, func() {
-		MustSucceed(t, self.SetOption(OptionReadQLen, 2))
+		MustSucceed(t, self.SetOption(protocol.OptionReadQLen, 2))
 		time.Sleep(time.Millisecond * 50)
 		MockMustSendMsg(t, mp, newRequest(1, "hello"), time.Second)
 	})
