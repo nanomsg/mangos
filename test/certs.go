@@ -27,14 +27,11 @@ import (
 )
 
 type key struct {
-	pubKey ed25519.PublicKey
-	prvKey ed25519.PrivateKey
-	keyPEM []byte
-
+	pubKey  ed25519.PublicKey
+	prvKey  ed25519.PrivateKey
 	cert    *x509.Certificate
 	certDER []byte
-
-	pair tls.Certificate
+	pair    tls.Certificate
 }
 
 type keys struct {

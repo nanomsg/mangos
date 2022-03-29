@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2022 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -214,7 +214,7 @@ func TestApp_Run8(t *testing.T) {
 	a := &App{}
 	a.Initialize()
 	addr := AddrTestIPC()
-	path := strings.TrimPrefix(addr, "ipc://")
+	ipcPath := strings.TrimPrefix(addr, "ipc://")
 	rx := GetSocket(t, req.NewSocket)
 	defer MustClose(t, rx)
 
@@ -224,7 +224,7 @@ func TestApp_Run8(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		a.stdOut = b
-		e := a.Run("--rep", "-X", path, "-A", "--data", "pong", "--send-timeout", "2", "--recv-timeout", "2")
+		e := a.Run("--rep", "-X", ipcPath, "-A", "--data", "pong", "--send-timeout", "2", "--recv-timeout", "2")
 		MustFailLike(t, e, mangos.ErrClosed.Error())
 	}()
 	time.Sleep(time.Millisecond * 20)
@@ -247,7 +247,7 @@ func TestApp_Ipc(t *testing.T) {
 	defer MustClose(t, rx)
 	MustSucceed(t, rx.SetOption(mangos.OptionRecvDeadline, time.Millisecond*40))
 	addr := AddrTestIPC()
-	path := strings.TrimPrefix(addr, "ipc://")
+	ipcPath := strings.TrimPrefix(addr, "ipc://")
 
 	b := &strings.Builder{}
 	var wg sync.WaitGroup
@@ -256,7 +256,7 @@ func TestApp_Ipc(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		a.stdOut = b
-		_ = a.Run("--rep", "-x", path, "-A", "--recv-timeout", "2")
+		_ = a.Run("--rep", "-x", ipcPath, "-A", "--recv-timeout", "2")
 	}()
 	time.Sleep(time.Millisecond * 20)
 	MustSendString(t, rx, "query")
@@ -1062,9 +1062,9 @@ func TestApp_TLS_Dup_CA(t *testing.T) {
 	keyfile := path.Join(dir, "key.pem")
 	crtfile := path.Join(dir, "cert.pem")
 
-	MustSucceed(t, ioutil.WriteFile(cafile, keys.Root.CertPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM, 0644))
+	MustSucceed(t, ioutil.WriteFile(cafile, keys.Root.CertPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM(), 0644))
 	addr := AddrTestTLS()
 
 	a := &App{}
@@ -1086,9 +1086,9 @@ func TestApp_Dial_TLS(t *testing.T) {
 	keyfile := path.Join(dir, "key.pem")
 	crtfile := path.Join(dir, "cert.pem")
 
-	MustSucceed(t, ioutil.WriteFile(cafile, keys.Root.CertPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM, 0644))
+	MustSucceed(t, ioutil.WriteFile(cafile, keys.Root.CertPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM(), 0644))
 	addr := AddrTestTLS()
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = cfg
@@ -1124,9 +1124,9 @@ func TestApp_Dial_TLS_Insecure(t *testing.T) {
 	keyfile := path.Join(dir, "key.pem")
 	crtfile := path.Join(dir, "cert.pem")
 
-	MustSucceed(t, ioutil.WriteFile(cafile, keys.Root.CertPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM, 0644))
+	MustSucceed(t, ioutil.WriteFile(cafile, keys.Root.CertPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM(), 0644))
 	addr := AddrTestTLS()
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = cfg
@@ -1186,8 +1186,8 @@ func TestApp_Bind_TLS(t *testing.T) {
 	keyfile := path.Join(dir, "key.pem")
 	crtfile := path.Join(dir, "cert.pem")
 
-	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Server.KeyPEM, 0644))
-	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Server.CertPEM, 0644))
+	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Server.KeyPEM(), 0644))
+	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Server.CertPEM(), 0644))
 	addr := AddrTestTLS()
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = cfg
