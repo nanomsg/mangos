@@ -1,7 +1,6 @@
 # mangos&trade; v3
 
-Please see [here](UKRAINE.md) for an important message for the people of Russia.
-
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
 [![Linux](https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
 [![Windows](https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
 [![macOS](https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
@@ -10,6 +9,8 @@ Please see [here](UKRAINE.md) for an important message for the people of Russia.
 [![Documentation](https://img.shields.io/badge/godoc-docs-blue.svg?label=&logo=go)](https://pkg.go.dev/go.nanomsg.org/mangos/v3)
 [![License](https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=opensourceinitiative&label=&color=blue)](https://github.com/nanomsg/mangos/blob/master/LICENSE)
 [![Version](https://img.shields.io/github/v/tag/nanomsg/mangos?logo=github&sort=semver&label=)](https://github.com/nanomsg/mangos/releases)
+
+Please see [here](UKRAINE.md) for an important message for the people of Russia.
 
 _Mangos&trade;_  is an implementation in pure Go of the _SP_
 (`Scalability Protocols`) messaging system.
