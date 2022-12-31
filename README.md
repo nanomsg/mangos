@@ -1,9 +1,9 @@
 # mangos&trade; v3
 
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
-[![Linux](https://img.shields.io/github/workflow/status/nanomsg/mangos/linux?logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
-[![Windows](https://img.shields.io/github/workflow/status/nanomsg/mangos/windows?logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
-[![macOS](https://img.shields.io/github/workflow/status/nanomsg/mangos/darwin?logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
+[![Linux](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/linux.yml?branch=master&logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
+[![Windows](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/windows.yml?branch=master&logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
+[![macOS](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/darwin.yml?branch=master&logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
 [![Coverage](https://img.shields.io/codecov/c/github/nanomsg/mangos?logoColor=grey&logo=codecov&label=)](https://codecov.io/gh/nanomsg/mangos)
 [![Discord](https://img.shields.io/discord/639573728212156478?label=&logo=discord)](https://discord.gg/wewTkby)
 [![Documentation](https://img.shields.io/badge/godoc-docs-blue.svg?label=&logo=go)](https://pkg.go.dev/go.nanomsg.org/mangos/v3)
@@ -12,14 +12,14 @@
 
 Please see [here](UKRAINE.md) for an important message for the people of Russia.
 
-_Mangos&trade;_  is an implementation in pure Go of the _SP_
+_Mangos&trade;_ is an implementation in pure Go of the _SP_
 (`Scalability Protocols`) messaging system.
-These are colloquially  known as `nanomsg`.
+These are colloquially known as `nanomsg`.
 
 > _NOTE_: The import path has changed! Please change any references
 > to `go.nanomsg.org/mangos/v3`.
 > The old v2 imports will still work for old applications, provided that
-> a sufficiently modern version of Go is used.  However, no further work
+> a sufficiently modern version of Go is used. However, no further work
 > will be done on earlier versions.
 > Earlier versions will still inter-operate with this version, except that
 > within the same process the `inproc` transport can only be used by
@@ -82,7 +82,7 @@ to run each example program.
 
 Enjoy!
 
-______
+---
 
 Copyright 2021 The Mangos Authors
 
