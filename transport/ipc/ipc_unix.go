@@ -54,7 +54,7 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	// TODO: It might be good to pass a context here to abort the dial after
 	// some timeout deadline. Ideally a dial/handshake would cover both
 	// initial dial and handshake. This is a bigger change because
-	// it would need to be implemented each transport dialer.
+	// it would need to be implemented by each transport dialer.
 	conn, err := net.DialUnix("unix", nil, d.addr)
 	if err != nil {
 		return nil, err

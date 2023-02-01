@@ -91,13 +91,13 @@ func (p *conn) Send(msg *Message) error {
 }
 
 // Close implements the Pipe Close method.
-// TODO: This does nothing during dial/handshake.
-// Ultimately this results in a Dialer that cannot Close while handshake is in progress.
-// Even with a timeout mechanism it would be good for Dialer.Close to
-// be able to abort pending handshakes in the workQ.
 func (p *conn) Close() error {
 	p.Lock()
 	defer p.Unlock()
+	// TODO: This does nothing during dial/handshake.
+	// Ultimately this results in a Dialer that cannot Close while handshake is in progress.
+	// Even with a timeout mechanism it would be good for Dialer.Close to
+	// be able to abort pending handshakes in the workQ.
 	if p.open {
 		p.open = false
 		return p.c.Close()
