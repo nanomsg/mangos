@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"go.nanomsg.org/mangos/v3"
 )
@@ -90,6 +91,10 @@ func (p *conn) Send(msg *Message) error {
 }
 
 // Close implements the Pipe Close method.
+// TODO: This does nothing during dial/handshake.
+// Ultimately this results in a Dialer that cannot Close while handshake is in progress.
+// Even with a timeout mechanism it would be good for Dialer.Close to
+// be able to abort pending handshakes in the workQ.
 func (p *conn) Close() error {
 	p.Lock()
 	defer p.Unlock()
@@ -166,10 +171,26 @@ type connHeader struct {
 // As a side effect, the peer's protocol number is stored in the conn.
 // Also, various properties are initialized.
 func (p *conn) handshake() error {
+
+	// Rational for a timeout mechanism (which may need to move elsewhere)
+	// The dial may have worked but that does not guarantee the
+	// server is going to send us any data.
+	// No/partial data will cause binary.Read to block indefinitely
+	// if the socket remains open. Closing the dialer does not work
+	// because the handshake is not complete (check for p.open).
+
+	// TODO: Timeout should be configurable however that results in a
+	// large change because each transport dialer would need to
+	// support it as an option to pass it to the connection
+	// handshaker.
+	p.c.SetDeadline(time.Now().Add(5 * time.Second))
+	defer p.c.SetDeadline(time.Time{})
+
 	var err error
 
 	h := connHeader{S: 'S', P: 'P', Proto: p.proto.Self}
 	if err = binary.Write(p.c, binary.BigEndian, &h); err != nil {
+		// TODO: should this call _ = p.c.Close()
 		return err
 	}
 	if err = binary.Read(p.c, binary.BigEndian, &h); err != nil {
@@ -252,6 +273,8 @@ func (h *connHandshaker) Close() {
 	h.closed = true
 	h.cv.Broadcast()
 	for conn := range h.workq {
+		// This does not do anything because conn.open is
+		// false and conn.Close is a no-op
 		_ = conn.Close()
 	}
 	for len(h.doneq) != 0 {
