@@ -1,3 +1,4 @@
+//go:build (!linux && !windows && !plan9 && !js && !solaris) || (solaris && !cgo)
 // +build !linux,!windows,!plan9,!js,!solaris solaris,!cgo
 
 // Copyright 2020 The Mangos Authors
@@ -23,5 +24,5 @@ import (
 	"net"
 )
 
-func getPeer(c *net.UnixConn, pipe transport.ConnPipe)  {
+func getPeer(c *net.UnixConn, pipe transport.ConnPipe) {
 }

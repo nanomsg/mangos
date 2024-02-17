@@ -1,3 +1,4 @@
+//go:build solaris && cgo
 // +build solaris,cgo
 
 // Copyright 2020 The Mangos Authors
