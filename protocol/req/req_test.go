@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -74,6 +74,22 @@ func TestReqRecvDeadline(t *testing.T) {
 	_ = MustRecv(t, peer)
 	m, e := self.RecvMsg()
 	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeNil(t, m)
+	MustSucceed(t, self.Close())
+	MustSucceed(t, peer.Close())
+}
+
+func TestReqRecvNonBlocking(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	peer := GetSocket(t, rep.NewSocket)
+	ConnectPair(t, self, peer)
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Duration(-1)))
+	MustSucceed(t, self.Send([]byte{}))
+	_ = MustRecv(t, peer)
+	start := time.Now()
+	m, e := self.RecvMsg()
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeTrue(t, time.Since(start) < time.Second)
 	MustBeNil(t, m)
 	MustSucceed(t, self.Close())
 	MustSucceed(t, peer.Close())
@@ -181,7 +197,20 @@ func TestReqBestEffort(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, false))
 	MustBeError(t, s.Send(msg), mangos.ErrSendTimeout)
 	MustBeError(t, s.Send(msg), mangos.ErrSendTimeout)
+	MustClose(t, s)
 }
+
+func TestReqSendNonBlocking(t *testing.T) {
+	timeout := -time.Millisecond
+	msg := []byte{'0', '1', '2', '3'}
+
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, timeout))
+	MustSucceed(t, s.Listen(AddrTestInp()))
+	MustBeError(t, s.Send(msg), mangos.ErrSendTimeout)
+	MustClose(t, s)
+}
+
 
 // This test demonstrates cancellation before calling receive but after the
 // message is received causes the original message to be discarded.

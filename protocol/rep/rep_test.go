@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -121,6 +121,40 @@ func TestRepBestEffortSend(t *testing.T) {
 	MustSucceed(t, p.Close())
 }
 
+func TestRepSendNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	p := GetSocket(t, xreq.NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 1))
+	MustSucceed(t, p.SetOption(mangos.OptionReadQLen, 1))
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Duration(-1)))
+
+	ConnectPair(t, s, p)
+	for i := 0; i < 100; i++ {
+		// We have to make a raw message when using xreq.  We
+		// use xreq because normal req will simply discard
+		// messages for requests it doesn't have outstanding.
+		m := mangos.NewMessage(0)
+		m.Header = make([]byte, 4)
+		binary.BigEndian.PutUint32(m.Header, uint32(i)|0x80000000)
+		MustSucceed(t, p.SendMsg(m))
+		m = MustRecvMsg(t, s)
+		start := time.Now()
+		e := s.SendMsg(m)
+		if e != nil {
+			MustBeError(t, e, mangos.ErrSendTimeout)
+			m.Free()
+			MustBeTrue(t, time.Since(start) < time.Second)
+			break
+		} else if i > 20 {
+			MustBeError(t, e, mangos.ErrSendTimeout)
+		}
+		// NB: We never ask the peer to receive it -- this ensures we
+		// encounter back-pressure.
+	}
+	MustSucceed(t, s.Close())
+	MustSucceed(t, p.Close())
+}
+
 // This verifies that closing the socket aborts a blocking send.
 // We use a context because closing the socket also closes pipes
 // making it less reproducible.
@@ -188,6 +222,23 @@ func TestRepRecvJunk(t *testing.T) {
 
 	time.Sleep(time.Millisecond * 10)
 	MustSucceed(t, self.Close())
+}
+
+func TestRepRecvNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	defer MustClose(t, s)
+	p := GetSocket(t, req.NewSocket)
+	defer MustClose(t, p)
+
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Duration(-1)))
+
+	ConnectPair(t, s, p)
+
+	start := time.Now()
+	m, e := s.Recv()
+	MustBeNil(t, m)
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeTrue(t, time.Since(start) < time.Second)
 }
 
 func TestRepDoubleRecv(t *testing.T) {
@@ -266,7 +317,7 @@ func TestRepPipeRecvCloseSocket(t *testing.T) {
 
 // This sets up a bunch of contexts to run in parallel, and verifies that
 // they all seem to run with no mis-deliveries.
-func TestRespondentMultiContexts(t *testing.T) {
+func TestRepMultiContexts(t *testing.T) {
 	count := 30
 	repeat := 20
 

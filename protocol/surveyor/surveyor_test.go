@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -176,6 +176,19 @@ func TestSurveyExpire(t *testing.T) {
 	MustBeNil(t, v)
 	MustSucceed(t, s.Close())
 }
+
+// This test demonstrates that surveys expire on their own.
+func TestSurveyRecvNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSurveyTime, time.Millisecond*10))
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Duration(-1)))
+	MustSucceed(t, s.Send([]byte("first")))
+	v, e := s.Recv()
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeNil(t, v)
+	MustClose(t, s)
+}
+
 
 // This test demonstrates that we can keep sending even if the pipes are full.
 func TestSurveyorBestEffortSend(t *testing.T) {
