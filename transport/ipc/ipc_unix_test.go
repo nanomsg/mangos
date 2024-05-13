@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !plan9,!windows,!js
+//go:build !plan9 && !windows && !js
 
 package ipc
 
@@ -205,5 +205,5 @@ func TestIpcListenerOptions(t *testing.T) {
 	MustSucceed(t, l.Listen())
 	i, e := os.Stat(strings.TrimPrefix(addr, "ipc://"))
 	MustSucceed(t, e)
-	MustBeTrue(t, i.Mode() & os.ModePerm == 0642)
+	MustBeTrue(t, i.Mode()&os.ModePerm == 0642)
 }

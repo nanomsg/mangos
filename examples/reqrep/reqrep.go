@@ -17,12 +17,11 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ ./reqrep node0 $url & node0=$! && sleep 1
-//   $ ./reqrep node1 $url
-//   $ kill $node0
-//
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$ ./reqrep node0 $url & node0=$! && sleep 1
+//	$ ./reqrep node1 $url
+//	$ kill $node0
 package main
 
 import (

@@ -17,13 +17,12 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ ./pair node0 $url & node0=$!
-//   $ ./pair node1 $url & node1=$!
-//   $ sleep 3
-//   $ kill $node0 $node1
-//
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$ ./pair node0 $url & node0=$!
+//	$ ./pair node1 $url & node1=$!
+//	$ sleep 3
+//	$ kill $node0 $node1
 package main
 
 import (

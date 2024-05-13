@@ -1,4 +1,5 @@
-// +build !race
+//go:build !race
+
 // Copyright 2018 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
