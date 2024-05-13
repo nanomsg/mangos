@@ -4,3 +4,4 @@ coverage.txt
 .idea
 .vscode
 .tool-versions
+coverage.*
