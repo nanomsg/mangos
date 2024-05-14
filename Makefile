@@ -27,4 +27,3 @@ clean:
 	go mod tidy
 	go clean ./...
 	rm -f coverage.*
-	rm -rf dist
