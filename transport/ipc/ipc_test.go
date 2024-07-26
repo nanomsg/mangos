@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// +build !nacl,!plan9,!wasm
+//go:build !nacl && !plan9 && !wasm
 
 package ipc
 

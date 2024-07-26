@@ -17,13 +17,12 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ ./pipeline node0 $url & node0=$! && sleep 1
-//   $ ./pipeline node1 $url "Hello, World."
-//   $ ./pipeline node1 $url "Goodbye."
-//   $ kill $node0
-//
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$ ./pipeline node0 $url & node0=$! && sleep 1
+//	$ ./pipeline node1 $url "Hello, World."
+//	$ ./pipeline node1 $url "Goodbye."
+//	$ kill $node0
 package main
 
 import (

@@ -1,4 +1,4 @@
-// +build !windows,!plan9,!js
+//go:build !windows && !plan9 && !js
 
 // Copyright 2021 The Mangos Authors
 //

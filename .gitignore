@@ -3,3 +3,5 @@ mangos.sublime-project
 coverage.txt
 .idea
 .vscode
+.tool-versions
+coverage.*

@@ -20,18 +20,17 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $
-//   $ ./context server $url & server=$! && sleep 1
-//   $ ./context client $url "John"
-//   $ ./context client $url "Bill"
-//   $ ./context client $url "Mary"
-//   $ ./context client $url "Susan"
-//   $ ./context client $url "Mark"
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$
+//	$ ./context server $url & server=$! && sleep 1
+//	$ ./context client $url "John"
+//	$ ./context client $url "Bill"
+//	$ ./context client $url "Mary"
+//	$ ./context client $url "Susan"
+//	$ ./context client $url "Mark"
 //
-//   $ kill $server
-//
+//	$ kill $server
 package main
 
 import (
@@ -53,7 +52,8 @@ func die(format string, v ...interface{}) {
 	os.Exit(1)
 }
 
-/**
+/*
+*
 This function will act as the server. It will create a single REP socket and a pool of worker go routines that will
 simultaneously service requests from many clients. This means that two clients can both send a request to the
 server and the server can deal with both of them concurrently. The server does not need to
