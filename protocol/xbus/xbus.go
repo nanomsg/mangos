@@ -33,6 +33,13 @@ type pipe struct {
 	sendQ  chan *protocol.Message
 }
 
+var closedQ chan time.Time
+
+func init() {
+	closedQ = make(chan time.Time)
+	close(closedQ)
+}
+
 type socket struct {
 	closed     bool
 	closeQ     chan struct{}
@@ -109,18 +116,25 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 		tq := nilQ
 		if s.recvExpire > 0 {
 			tq = time.After(s.recvExpire)
+		} else if s.recvExpire < 0 {
+			tq = closedQ
 		}
 		s.Unlock()
 
 		select {
-		case <-cq:
-			return nil, protocol.ErrClosed
-		case <-zq:
-			continue
-		case <-tq:
-			return nil, protocol.ErrRecvTimeout
 		case m := <-rq:
 			return m, nil
+		default:
+			select {
+			case <-cq:
+				return nil, protocol.ErrClosed
+			case <-zq:
+				continue
+			case <-tq:
+				return nil, protocol.ErrRecvTimeout
+			case m := <-rq:
+				return m, nil
+			}
 		}
 	}
 }
