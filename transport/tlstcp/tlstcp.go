@@ -153,7 +153,7 @@ func (l *listener) Listen() error {
 	if config == nil {
 		return mangos.ErrTLSNoConfig
 	}
-	if config.Certificates == nil || len(config.Certificates) == 0 {
+	if config.GetCertificate == nil && (config.Certificates == nil || len(config.Certificates) == 0) {
 		l.lock.Unlock()
 		return mangos.ErrTLSNoCert
 	}
