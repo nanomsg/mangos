@@ -15,7 +15,7 @@ If you're thinking of contributing, here's what you should know.
     Further, you are asserting that the project may continue to use, modify,
     and redistribute your contribution under the terms in the LICENSE file.
 
- 3. We maintain an "always release ready" stance for the master branch.  That
+ 3. We maintain an "always release ready" stance for the main branch.  That
     is, at any point in time the tree should be in a state that a release
     could be cut, and bisect should never find a point where an issue is
     incompletely fixed or addressed.
@@ -47,7 +47,7 @@ If you're thinking of contributing, here's what you should know.
     changes!)
 
 10. Submit a GitHub pull request.  Ideally just one bug per PR if possible,
-    and based upon the latest commit in the GitHub master branch.
+    and based upon the latest commit in the GitHub main branch.
 
 11. We may rebase your changes, including squashing multiple commits,
     or ask you to do so, if you have not followed the procedure above, or

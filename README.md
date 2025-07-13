@@ -1,13 +1,13 @@
 # mangos&trade; v3
 
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://stand-with-ukraine.pp.ua)
-[![Linux](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/linux.yml?branch=master&logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
-[![Windows](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/windows.yml?branch=master&logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
-[![macOS](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/darwin.yml?branch=master&logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
+[![Linux](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/linux.yml?branch=main&logoColor=grey&logo=linux&label=)](https://github.com/nanomsg/mangos/actions)
+[![Windows](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/windows.yml?branch=main&logoColor=grey&logo=windows&label=)](https://github.com/nanomsg/mangos/actions)
+[![macOS](https://img.shields.io/github/actions/workflow/status/nanomsg/mangos/darwin.yml?branch=main&logoColor=grey&logo=apple&label=)](https://github.com/nanomsg/mangos/actions)
 [![Coverage](https://img.shields.io/codecov/c/github/nanomsg/mangos?logoColor=grey&logo=codecov&label=)](https://codecov.io/gh/nanomsg/mangos)
 [![Discord](https://img.shields.io/discord/639573728212156478?label=&logo=discord)](https://discord.gg/wewTkby)
 [![Documentation](https://img.shields.io/badge/godoc-docs-blue.svg?label=&logo=go)](https://pkg.go.dev/go.nanomsg.org/mangos/v3)
-[![License](https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=opensourceinitiative&label=&color=blue)](https://github.com/nanomsg/mangos/blob/master/LICENSE)
+[![License](https://img.shields.io/github/license/nanomsg/mangos.svg?logoColor=silver&logo=opensourceinitiative&label=&color=blue)](https://github.com/nanomsg/mangos/blob/main/LICENSE)
 [![Version](https://img.shields.io/github/v/tag/nanomsg/mangos?logo=github&sort=semver&label=)](https://github.com/nanomsg/mangos/releases)
 
 Please see [here](UKRAINE.md) for an important message for the people of Russia.
