@@ -70,6 +70,16 @@ There are also internal benchmarks available:
 [Staysail Systems, Inc.](mailto:info@staysail.tech) offers
 [commercial support](http://staysail.tech/support/mangos) for mangos.
 
+## Compatibility
+
+Mangos should run on any reasonable platform, but we officially follow
+the same support matrix as Go - meaning only the most recent release of Go, and
+the release preceding it are guaranteed support.  Having said that, we generally
+will attempt not to break earlier versions of Go intentionally.
+
+As of this writing, Go versions before 1.22 are not supported (because of dependency
+requirements).
+
 ## Examples
 
 Some examples are posted in the directories under `examples/` in this project.
@@ -84,6 +94,6 @@ Enjoy!
 
 ---
 
-Copyright 2021 The Mangos Authors
+Copyright 2025 The Mangos Authors
 
 mangos&trade;, Nanomsg&trade; and NNG&trade; are [trademarks](http://nanomsg.org/trademarks.html) of Garrett D'Amore.
