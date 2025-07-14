@@ -75,7 +75,7 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	tq := nilQ
 	if bestEffort {
 		tq = closedQ
-	} else if s.sendExpire > 0 {
+	} else if s.sendExpire != 0 {
 		tq = time.After(s.sendExpire)
 	}
 	if s.closed {
@@ -93,14 +93,18 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	case <-pq:
 		return protocol.ErrNoPeers
 	case s.sendQ <- m:
-	case <-s.closeQ:
-		return protocol.ErrClosed
-	case <-tq:
-		if bestEffort {
-			m.Free()
-			return nil
+	default:
+		select {
+		case s.sendQ <- m:
+		case <-s.closeQ:
+			return protocol.ErrClosed
+		case <-tq:
+			if bestEffort {
+				m.Free()
+				return nil
+			}
+			return protocol.ErrSendTimeout
 		}
-		return protocol.ErrSendTimeout
 	}
 
 	s.Lock()
