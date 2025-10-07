@@ -38,12 +38,14 @@ const (
 type pipe struct {
 	p      protocol.Pipe
 	s      *socket
+	sendQ  chan *protocol.Message
+	closeQ chan struct{}
 	closed bool
 }
 
 type reqContext struct {
 	s             *socket
-	cond          *sync.Cond
+	notifyCh      chan struct{}     // channel for notifications (replaces cond)
 	resendTime    time.Duration     // tunable resend time
 	sendExpire    time.Duration     // how long to wait in send
 	receiveExpire time.Duration     // how long to wait in receive
@@ -74,6 +76,15 @@ type socket struct {
 	pipes    map[uint32]*pipe         // all pipes
 }
 
+// notify sends a non-blocking notification to the context
+func (c *reqContext) notify() {
+	select {
+	case c.notifyCh <- struct{}{}:
+	default:
+		// Channel full, notification already pending
+	}
+}
+
 func (s *socket) send() {
 	for len(s.sendQ) != 0 && len(s.readyQ) != 0 {
 		c := s.sendQ[0]
@@ -85,7 +96,7 @@ func (s *socket) send() {
 			c.reqMsg = m
 			c.sendMsg = nil
 			s.ctxByID[c.reqID] = c
-			c.cond.Broadcast()
+			c.notify()
 		} else {
 			m = c.reqMsg
 		}
@@ -101,27 +112,31 @@ func (s *socket) send() {
 				c.resendMessage(id)
 			})
 		}
-		go p.sendCtx(c, m)
+		p.sendQ <- m
 	}
 }
 
-func (p *pipe) sendCtx(_ *reqContext, m *protocol.Message) {
+func (p *pipe) sender() {
 	s := p.s
-
-	// Send this message.  If an error occurs, we examine the
-	// error.  If it is ErrClosed, we don't schedule our self.
-	if err := p.p.SendMsg(m); err != nil {
-		m.Free()
-		if err == protocol.ErrClosed {
+	for {
+		select {
+		case m := <-p.sendQ:
+			if err := p.p.SendMsg(m); err != nil {
+				m.Free()
+				if err == protocol.ErrClosed {
+					return
+				}
+			}
+			s.Lock()
+			if !s.closed && !p.closed {
+				s.readyQ = append(s.readyQ, p)
+				s.send()
+			}
+			s.Unlock()
+		case <-p.closeQ:
 			return
 		}
 	}
-	s.Lock()
-	if !s.closed && !p.closed {
-		s.readyQ = append(s.readyQ, p)
-		s.send()
-	}
-	s.Unlock()
 }
 
 func (p *pipe) receiver() {
@@ -165,7 +180,7 @@ func (p *pipe) receiver() {
 				c.receiveTimer.Stop()
 				c.receiveTimer = nil
 			}
-			c.cond.Broadcast()
+			c.notify()
 		} else {
 			// No matching receiver so just drop it.
 			m.Free()
@@ -236,7 +251,7 @@ func (c *reqContext) cancel() {
 		c.receiveTimer.Stop()
 		c.receiveTimer = nil
 	}
-	c.cond.Broadcast()
+	c.notify()
 }
 
 // SendMsgContext implements context-aware send
@@ -279,31 +294,19 @@ func (c *reqContext) SendMsgContext(ctx context.Context, m *protocol.Message) er
 		return nil
 	}
 
-	// Start a goroutine to watch for context cancellation
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			s.Lock()
-			// Just wake up the waiting thread, don't cancel the message
-			c.cond.Broadcast()
-			s.Unlock()
-		case <-done:
-			return
-		}
-	}()
-
 	s.send()
 
-	// This sleeps until we are picked for scheduling.
-	// It is responsible for providing the blocking semantic and
-	// ultimately back-pressure.  Note that we will "continue" if
-	// sending is canceled by a subsequent send.
+	// Wait for the message to be sent, context cancellation, or other events
 	for c.sendMsg == m && ctx.Err() == nil && !c.closed && !(c.failNoPeers && len(s.pipes) == 0) {
-		c.cond.Wait()
+		s.Unlock()
+		select {
+		case <-c.notifyCh:
+			// State changed, re-check conditions
+		case <-ctx.Done():
+			// Context cancelled
+		}
+		s.Lock()
 	}
-
-	close(done) // signal the goroutine to exit
 
 	// Check why we exited the wait loop - order matters!
 	// Check c.closed first because Close() calls cancel() which clears c.sendMsg
@@ -365,31 +368,22 @@ func (c *reqContext) RecvMsgContext(ctx context.Context) (*protocol.Message, err
 	c.receiveWait = true
 	id := c.reqID
 
-	// Start a goroutine to watch for context cancellation
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			s.Lock()
-			// Just wake up the waiting thread, don't cancel
-			c.cond.Broadcast()
-			s.Unlock()
-		case <-done:
-			return
-		}
-	}()
-
 	for id == c.reqID && c.repMsg == nil && ctx.Err() == nil {
-		c.cond.Wait()
+		s.Unlock()
+		select {
+		case <-c.notifyCh:
+			// State changed, re-check conditions
+		case <-ctx.Done():
+			// Context cancelled
+		}
+		s.Lock()
 	}
-
-	close(done) // signal the goroutine to exit
 
 	m := c.repMsg
 	c.reqID = 0
 	c.repMsg = nil
 	c.receiveWait = false
-	c.cond.Broadcast()
+	c.notify()
 	s.Unlock()
 
 	if m == nil {
@@ -573,7 +567,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	}
 	c := &reqContext{
 		s:             s,
-		cond:          sync.NewCond(s),
+		notifyCh:      make(chan struct{}, 1),
 		bestEffort:    s.defCtx.bestEffort,
 		resendTime:    s.defCtx.resendTime,
 		sendExpire:    s.defCtx.sendExpire,
@@ -586,8 +580,10 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 
 func (s *socket) AddPipe(pp protocol.Pipe) error {
 	p := &pipe{
-		p: pp,
-		s: s,
+		p:      pp,
+		s:      s,
+		sendQ:  make(chan *protocol.Message, 1),
+		closeQ: make(chan struct{}),
 	}
 	pp.SetPrivate(p)
 	s.Lock()
@@ -598,12 +594,14 @@ func (s *socket) AddPipe(pp protocol.Pipe) error {
 	s.readyQ = append(s.readyQ, p)
 	s.send()
 	s.pipes[pp.ID()] = p
+	go p.sender()
 	go p.receiver()
 	return nil
 }
 
 func (s *socket) RemovePipe(pp protocol.Pipe) {
 	p := pp.GetPrivate().(*pipe)
+	close(p.closeQ)
 	s.Lock()
 	p.closed = true
 	for i, rp := range s.readyQ {
@@ -652,7 +650,7 @@ func NewProtocol() protocol.Protocol {
 	}
 	s.defCtx = &reqContext{
 		s:          s,
-		cond:       sync.NewCond(s),
+		notifyCh:   make(chan struct{}, 1),
 		resendTime: time.Minute,
 	}
 	s.contexts[s.defCtx] = struct{}{}
