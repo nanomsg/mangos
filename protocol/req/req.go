@@ -17,7 +17,9 @@
 package req
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,7 +41,7 @@ type pipe struct {
 	closed bool
 }
 
-type context struct {
+type reqContext struct {
 	s             *socket
 	cond          *sync.Cond
 	resendTime    time.Duration     // tunable resend time
@@ -62,12 +64,12 @@ type context struct {
 
 type socket struct {
 	sync.Mutex
-	defCtx   *context              // default context
-	contexts map[*context]struct{} // all contexts (set)
-	ctxByID  map[uint32]*context   // contexts by request ID
+	defCtx   *reqContext              // default context
+	contexts map[*reqContext]struct{} // all contexts (set)
+	ctxByID  map[uint32]*reqContext   // contexts by request ID
 	nextID   uint32                // next request ID
 	closed   bool                  // true if we are closed
-	sendQ    []*context            // contexts waiting to send
+	sendQ    []*reqContext            // contexts waiting to send
 	readyQ   []*pipe               // pipes available for sending
 	pipes    map[uint32]*pipe      // all pipes
 }
@@ -103,7 +105,7 @@ func (s *socket) send() {
 	}
 }
 
-func (p *pipe) sendCtx(_ *context, m *protocol.Message) {
+func (p *pipe) sendCtx(_ *reqContext, m *protocol.Message) {
 	s := p.s
 
 	// Send this message.  If an error occurs, we examine the
@@ -178,7 +180,7 @@ func (p *pipe) Close() {
 	_ = p.p.Close()
 }
 
-func (c *context) resendMessage(id uint32) {
+func (c *reqContext) resendMessage(id uint32) {
 	s := c.s
 	s.Lock()
 	defer s.Unlock()
@@ -191,7 +193,7 @@ func (c *context) resendMessage(id uint32) {
 	}
 }
 
-func (c *context) cancelSend() {
+func (c *reqContext) cancelSend() {
 	s := c.s
 	if c.queued {
 		c.queued = false
@@ -204,7 +206,7 @@ func (c *context) cancelSend() {
 	}
 }
 
-func (c *context) cancel() {
+func (c *reqContext) cancel() {
 	s := c.s
 	c.cancelSend()
 	if c.reqID != 0 {
@@ -218,6 +220,9 @@ func (c *context) cancel() {
 	if c.reqMsg != nil {
 		c.reqMsg.Free()
 		c.reqMsg = nil
+	}
+	if c.sendMsg != nil {
+		c.sendMsg = nil
 	}
 	if c.resendTimer != nil {
 		c.resendTimer.Stop()
@@ -234,8 +239,8 @@ func (c *context) cancel() {
 	c.cond.Broadcast()
 }
 
-func (c *context) SendMsg(m *protocol.Message) error {
-
+// SendMsgContext implements context-aware send
+func (c *reqContext) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	s := c.s
 
 	id := atomic.AddUint32(&s.nextID, 1)
@@ -246,12 +251,13 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		byte(id>>24), byte(id>>16), byte(id>>8), byte(id))
 
 	s.Lock()
-	defer s.Unlock()
 	if s.closed || c.closed {
+		s.Unlock()
 		return protocol.ErrClosed
 	}
 
 	if c.failNoPeers && len(s.pipes) == 0 {
+		s.Unlock()
 		return protocol.ErrNoPeers
 	}
 	c.cancel() // this cancels any pending send or receive calls
@@ -269,20 +275,23 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		// This means that if the message cannot be delivered
 		// immediately, it will still get a chance later.
 		s.send()
+		s.Unlock()
 		return nil
 	}
 
-	expired := false
-	if c.sendExpire > 0 {
-		c.sendTimer = time.AfterFunc(c.sendExpire, func() {
+	// Start a goroutine to watch for context cancellation
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
 			s.Lock()
-			if c.sendMsg == m {
-				expired = true
-				c.cancel() // also does a wake-up
-			}
+			// Just wake up the waiting thread, don't cancel the message
+			c.cond.Broadcast()
 			s.Unlock()
-		})
-	}
+		case <-done:
+			return
+		}
+	}()
 
 	s.send()
 
@@ -290,68 +299,110 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	// It is responsible for providing the blocking semantic and
 	// ultimately back-pressure.  Note that we will "continue" if
 	// sending is canceled by a subsequent send.
-	for c.sendMsg == m && !expired && !c.closed && !(c.failNoPeers && len(s.pipes) == 0) {
+	for c.sendMsg == m && ctx.Err() == nil && !c.closed && !(c.failNoPeers && len(s.pipes) == 0) {
 		c.cond.Wait()
 	}
+
+	close(done) // signal the goroutine to exit
+
+	// Check why we exited the wait loop - order matters!
+	// Check c.closed first because Close() calls cancel() which clears c.sendMsg
+	if c.closed {
+		s.Unlock()
+		return protocol.ErrClosed
+	}
+
 	if c.sendMsg == m {
+		// Message was not sent - clean up and determine error
 		c.cancelSend()
 		c.sendMsg = nil
 		c.reqID = 0
-		if c.closed {
-			return protocol.ErrClosed
-		}
+		s.Unlock()
+
 		if c.failNoPeers && len(s.pipes) == 0 {
 			return protocol.ErrNoPeers
 		}
+		// Check if context was cancelled
+		if ctx.Err() != nil {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return protocol.ErrSendTimeout
+			}
+			return ctx.Err()
+		}
 		return protocol.ErrSendTimeout
 	}
+
+	s.Unlock()
 	return nil
 }
 
-func (c *context) RecvMsg() (*protocol.Message, error) {
+func (c *reqContext) SendMsg(m *protocol.Message) error {
+	ctx := context.Background()
+	if c.sendExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.sendExpire)
+		defer cancel()
+	}
+	return c.SendMsgContext(ctx, m)
+}
+
+// RecvMsgContext implements context-aware receive using a goroutine to monitor ctx.Done()
+func (c *reqContext) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	s := c.s
 	s.Lock()
-	defer s.Unlock()
 	if s.closed || c.closed {
+		s.Unlock()
 		return nil, protocol.ErrClosed
 	}
 	if c.failNoPeers && len(s.pipes) == 0 {
+		s.Unlock()
 		return nil, protocol.ErrNoPeers
 	}
 	if c.receiveWait || c.reqID == 0 {
+		s.Unlock()
 		return nil, protocol.ErrProtoState
 	}
 	c.receiveWait = true
 	id := c.reqID
-	expired := false
 
-	if c.receiveExpire > 0 {
-		c.receiveTimer = time.AfterFunc(c.receiveExpire, func() {
+	// Start a goroutine to watch for context cancellation
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
 			s.Lock()
-			if c.reqID == id {
-				expired = true
-				c.cancel()
-			}
+			// Just wake up the waiting thread, don't cancel
+			c.cond.Broadcast()
 			s.Unlock()
-		})
-	}
+		case <-done:
+			return
+		}
+	}()
 
-	for id == c.reqID && c.repMsg == nil {
+	for id == c.reqID && c.repMsg == nil && ctx.Err() == nil {
 		c.cond.Wait()
 	}
+
+	close(done) // signal the goroutine to exit
 
 	m := c.repMsg
 	c.reqID = 0
 	c.repMsg = nil
 	c.receiveWait = false
 	c.cond.Broadcast()
+	s.Unlock()
 
 	if m == nil {
 		if c.closed {
 			return nil, protocol.ErrClosed
 		}
-		if expired {
-			return nil, protocol.ErrRecvTimeout
+		// Check if context was cancelled
+		if ctx.Err() != nil {
+			// Return ErrRecvTimeout for deadline exceeded, otherwise return context error
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, protocol.ErrRecvTimeout
+			}
+			return nil, ctx.Err()
 		}
 		if c.failNoPeers && len(s.pipes) == 0 {
 			return nil, protocol.ErrNoPeers
@@ -361,7 +412,18 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	return m, nil
 }
 
-func (c *context) SetOption(name string, value interface{}) error {
+// RecvMsg wraps RecvMsgContext
+func (c *reqContext) RecvMsg() (*protocol.Message, error) {
+	ctx := context.Background()
+	if c.receiveExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.receiveExpire)
+		defer cancel()
+	}
+	return c.RecvMsgContext(ctx)
+}
+
+func (c *reqContext) SetOption(name string, value interface{}) error {
 	switch name {
 	case protocol.OptionRetryTime:
 		if v, ok := value.(time.Duration); ok {
@@ -413,7 +475,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	return protocol.ErrBadOption
 }
 
-func (c *context) GetOption(option string) (interface{}, error) {
+func (c *reqContext) GetOption(option string) (interface{}, error) {
 	switch option {
 	case protocol.OptionRetryTime:
 		c.s.Lock()
@@ -445,7 +507,7 @@ func (c *context) GetOption(option string) (interface{}, error) {
 	return nil, protocol.ErrBadOption
 }
 
-func (c *context) Close() error {
+func (c *reqContext) Close() error {
 	s := c.s
 	c.s.Lock()
 	defer c.s.Unlock()
@@ -474,8 +536,16 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	return s.defCtx.SendMsg(m)
 }
 
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return s.defCtx.SendMsgContext(ctx, m)
+}
+
 func (s *socket) RecvMsg() (*protocol.Message, error) {
 	return s.defCtx.RecvMsg()
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	return s.defCtx.RecvMsgContext(ctx)
 }
 
 func (s *socket) Close() error {
@@ -501,7 +571,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	if s.closed {
 		return nil, protocol.ErrClosed
 	}
-	c := &context{
+	c := &reqContext{
 		s:             s,
 		cond:          sync.NewCond(s),
 		bestEffort:    s.defCtx.bestEffort,
@@ -576,11 +646,11 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		nextID:   uint32(time.Now().UnixNano()), // quasi-random
-		contexts: make(map[*context]struct{}),
-		ctxByID:  make(map[uint32]*context),
+		contexts: make(map[*reqContext]struct{}),
+		ctxByID:  make(map[uint32]*reqContext),
 		pipes:    make(map[uint32]*pipe),
 	}
-	s.defCtx = &context{
+	s.defCtx = &reqContext{
 		s:          s,
 		cond:       sync.NewCond(s),
 		resendTime: time.Minute,

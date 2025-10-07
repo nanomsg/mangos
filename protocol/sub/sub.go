@@ -24,6 +24,8 @@ package sub
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -39,8 +41,8 @@ const (
 )
 
 type socket struct {
-	master *context
-	ctxs   map[*context]struct{}
+	master *subContext
+	ctxs   map[*subContext]struct{}
 	closed bool
 	sync.Mutex
 }
@@ -50,7 +52,7 @@ type pipe struct {
 	p protocol.Pipe
 }
 
-type context struct {
+type subContext struct {
 	recvQLen   int
 	recvQ      chan *protocol.Message
 	closeQ     chan struct{}
@@ -63,27 +65,31 @@ type context struct {
 
 const defaultQLen = 128
 
-func (*context) SendMsg(*protocol.Message) error {
+func (*subContext) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
-func (c *context) RecvMsg() (*protocol.Message, error) {
+func (*subContext) SendMsgContext(context.Context, *protocol.Message) error {
+	return protocol.ErrProtoOp
+}
 
+// RecvMsgContext is the internal implementation that uses context for cancellation.
+func (c *subContext) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	s := c.s
-	var timeQ <-chan time.Time
 	s.Lock()
 	recvQ := c.recvQ
 	sizeQ := c.sizeQ
 	closeQ := c.closeQ
-	if c.recvExpire > 0 {
-		timeQ = time.After(c.recvExpire)
-	}
 	s.Unlock()
 
 	for {
 		select {
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
+		case <-ctx.Done():
+			// Return ErrRecvTimeout for deadline exceeded, otherwise return context error
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, protocol.ErrRecvTimeout
+			}
+			return nil, ctx.Err()
 		case <-closeQ:
 			return nil, protocol.ErrClosed
 		case <-sizeQ:
@@ -99,7 +105,19 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	}
 }
 
-func (c *context) Close() error {
+// RecvMsg wraps RecvMsgContext, applying the socket's receive timeout if configured.
+func (c *subContext) RecvMsg() (*protocol.Message, error) {
+	ctx := context.Background()
+	if c.recvExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.recvExpire)
+		defer cancel()
+	}
+
+	return c.RecvMsgContext(ctx)
+}
+
+func (c *subContext) Close() error {
 	s := c.s
 	s.Lock()
 	if c.closed {
@@ -182,7 +200,7 @@ func (s *socket) Close() error {
 		s.Unlock()
 		return protocol.ErrClosed
 	}
-	ctxs := make([]*context, 0, len(s.ctxs))
+	ctxs := make([]*subContext, 0, len(s.ctxs))
 	for c := range s.ctxs {
 		ctxs = append(ctxs, c)
 	}
@@ -198,7 +216,7 @@ func (p *pipe) close() {
 	_ = p.p.Close()
 }
 
-func (c *context) matches(m *protocol.Message) bool {
+func (c *subContext) matches(m *protocol.Message) bool {
 	for _, sub := range c.subs {
 		if bytes.HasPrefix(m.Body, sub) {
 			return true
@@ -208,7 +226,7 @@ func (c *context) matches(m *protocol.Message) bool {
 
 }
 
-func (c *context) subscribe(topic []byte) error {
+func (c *subContext) subscribe(topic []byte) error {
 	for _, sub := range c.subs {
 		if bytes.Equal(sub, topic) {
 			// Already present
@@ -221,7 +239,7 @@ func (c *context) subscribe(topic []byte) error {
 	return nil
 }
 
-func (c *context) unsubscribe(topic []byte) error {
+func (c *subContext) unsubscribe(topic []byte) error {
 	for i, sub := range c.subs {
 		if !bytes.Equal(sub, topic) {
 			continue
@@ -257,7 +275,7 @@ func (c *context) unsubscribe(topic []byte) error {
 	return protocol.ErrBadValue
 }
 
-func (c *context) SetOption(name string, value interface{}) error {
+func (c *subContext) SetOption(name string, value interface{}) error {
 	s := c.s
 
 	var fn func([]byte) error
@@ -312,7 +330,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	return fn(vb)
 }
 
-func (c *context) GetOption(name string) (interface{}, error) {
+func (c *subContext) GetOption(name string) (interface{}, error) {
 	switch name {
 	case protocol.OptionReadQLen:
 		c.s.Lock()
@@ -332,13 +350,21 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	return s.master.RecvMsg()
 }
 
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	return s.master.RecvMsgContext(ctx)
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return protocol.ErrProtoOp
+}
+
 func (s *socket) OpenContext() (protocol.Context, error) {
 	s.Lock()
 	defer s.Unlock()
 	if s.closed {
 		return nil, protocol.ErrClosed
 	}
-	c := &context{
+	c := &subContext{
 		s:          s,
 		closeQ:     make(chan struct{}),
 		sizeQ:      make(chan struct{}),
@@ -376,9 +402,9 @@ func (s *socket) Info() protocol.Info {
 // NewProtocol returns a new protocol implementation.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
-		ctxs: make(map[*context]struct{}),
+		ctxs: make(map[*subContext]struct{}),
 	}
-	s.master = &context{
+	s.master = &subContext{
 		s:        s,
 		recvQ:    make(chan *protocol.Message, defaultQLen),
 		closeQ:   make(chan struct{}),
