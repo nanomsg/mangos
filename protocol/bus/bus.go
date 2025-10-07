@@ -17,6 +17,8 @@
 package bus
 
 import (
+	"context"
+
 	"go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/xbus"
 )
@@ -41,20 +43,28 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 	return s.Protocol.GetOption(name)
 }
 
+func (s *socket) SendMsg(m *protocol.Message) error {
+	return s.SendMsgContext(context.Background(), m)
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	if len(m.Header) > 0 {
+		m.Header = m.Header[:0]
+	}
+	return s.Protocol.SendMsgContext(ctx, m)
+}
+
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	m, e := s.Protocol.RecvMsg()
+	return s.RecvMsgContext(context.Background())
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	m, e := s.Protocol.RecvMsgContext(ctx)
 	if m != nil {
 		// Strip the raw mode header, as we don't use it in cooked mode
 		m.Header = m.Header[:0]
 	}
 	return m, e
-}
-
-func (s *socket) SendMsg(m *protocol.Message) error {
-	if len(m.Header) > 0 {
-		m.Header = m.Header[:0]
-	}
-	return s.Protocol.SendMsg(m)
 }
 
 // NewProtocol returns a new protocol implementation.

@@ -18,14 +18,13 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ nservers=20
-//   $ nclients=10
-//   $ ./raw server $url $nservers & pid=$! && sleep 1
-//   $ ./raw client $url $nclients
-//   $ kill $pid
-//
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$ nservers=20
+//	$ nclients=10
+//	$ ./raw server $url $nservers & pid=$! && sleep 1
+//	$ ./raw client $url $nclients
+//	$ kill $pid
 package main
 
 import (

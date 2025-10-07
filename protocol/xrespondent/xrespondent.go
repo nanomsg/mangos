@@ -17,7 +17,9 @@
 package xrespondent
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"sync"
 	"time"
 
@@ -70,7 +72,10 @@ func init() {
 // have headers... the first 4 bytes are the identity of the pipe
 // we should send to.
 func (s *socket) SendMsg(m *protocol.Message) error {
+	return s.SendMsgContext(context.Background(), m)
+}
 
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	s.Lock()
 	if s.closed {
 		s.Unlock()
@@ -93,56 +98,85 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		m.Free()
 		return nil
 	}
+	sendExpire := s.sendExpire
 	bestEffort := s.bestEffort
-	tq := nilQ
-	if bestEffort {
-		tq = closedQ
-	} else if s.sendExpire > 0 {
-		tq = time.After(s.sendExpire)
-	}
 	s.Unlock()
 
+	// Apply timeout if configured and no deadline already set
+	if sendExpire > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, sendExpire)
+			defer cancel()
+		}
+	}
+
+	if bestEffort {
+		select {
+		case p.sendQ <- m:
+			return nil
+		case <-p.closeQ:
+			m.Free()
+			return nil
+		default:
+			m.Free()
+			return nil
+		}
+	}
+
 	select {
+	case <-ctx.Done():
+		// restore the header
+		m.Header = hdr
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return protocol.ErrSendTimeout
+		}
+		return ctx.Err()
 	case p.sendQ <- m:
 		return nil
 	case <-p.closeQ:
 		m.Free()
 		return nil // No way to return the message
-	case <-tq:
-		if bestEffort {
-			m.Free()
-			return nil
-		}
-		// restore the header
-		m.Header = hdr
-		return protocol.ErrSendTimeout
 	}
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	timeQ := nilQ
+	return s.RecvMsgContext(context.Background())
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	s.Lock()
-	if s.recvExpire > 0 {
-		timeQ = time.After(s.recvExpire)
-	}
-	recvQ := s.recvQ
-	sizeQ := s.sizeQ
-	closeQ := s.closeQ
+	recvExpire := s.recvExpire
 	s.Unlock()
 
+	// Apply timeout if configured and no deadline already set
+	if recvExpire > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, recvExpire)
+			defer cancel()
+		}
+	}
+
 	for {
+		s.Lock()
+		recvQ := s.recvQ
+		sizeQ := s.sizeQ
+		closeQ := s.closeQ
+		s.Unlock()
+
 		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, protocol.ErrRecvTimeout
+			}
+			return nil, ctx.Err()
 		case <-closeQ:
 			return nil, protocol.ErrClosed
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
 		case m := <-recvQ:
 			return m, nil
 		case <-sizeQ:
-			s.Lock()
-			recvQ = s.recvQ
-			sizeQ = s.sizeQ
-			s.Unlock()
+			continue
 		}
 	}
 }
