@@ -8,8 +8,8 @@ import (
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol/pull"
 	"go.nanomsg.org/mangos/v3/protocol/push"
-	"go.nanomsg.org/mangos/v3/protocol/req"
 	"go.nanomsg.org/mangos/v3/protocol/rep"
+	"go.nanomsg.org/mangos/v3/protocol/req"
 	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 )
 

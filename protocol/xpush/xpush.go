@@ -283,7 +283,7 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	s.cv.Broadcast() 
+	s.cv.Broadcast()
 	s.Unlock()
 	close(s.closeQ)
 	return nil
@@ -346,7 +346,7 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		closeQ:   make(chan struct{}),
-		noPeerQ: make(chan struct{}),
+		noPeerQ:  make(chan struct{}),
 		sendQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
 		pipes:    make(map[uint32]*pipe),

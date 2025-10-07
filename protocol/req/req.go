@@ -67,11 +67,11 @@ type socket struct {
 	defCtx   *reqContext              // default context
 	contexts map[*reqContext]struct{} // all contexts (set)
 	ctxByID  map[uint32]*reqContext   // contexts by request ID
-	nextID   uint32                // next request ID
-	closed   bool                  // true if we are closed
+	nextID   uint32                   // next request ID
+	closed   bool                     // true if we are closed
 	sendQ    []*reqContext            // contexts waiting to send
-	readyQ   []*pipe               // pipes available for sending
-	pipes    map[uint32]*pipe      // all pipes
+	readyQ   []*pipe                  // pipes available for sending
+	pipes    map[uint32]*pipe         // all pipes
 }
 
 func (s *socket) send() {

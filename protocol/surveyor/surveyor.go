@@ -69,14 +69,13 @@ type surveyorContext struct {
 type socket struct {
 	master   *surveyorContext              // default context
 	ctxs     map[*surveyorContext]struct{} // all contexts
-	surveys  map[uint32]*survey    // contexts by survey ID
-	pipes    map[uint32]*pipe      // all pipes by pipe ID
-	nextID   uint32                // next survey ID
-	closed   bool                  // true if closed
-	sendQLen int                   // send Q depth
+	surveys  map[uint32]*survey            // contexts by survey ID
+	pipes    map[uint32]*pipe              // all pipes by pipe ID
+	nextID   uint32                        // next survey ID
+	closed   bool                          // true if closed
+	sendQLen int                           // send Q depth
 	sync.Mutex
 }
-
 
 func (s *survey) cancel(err error) {
 
