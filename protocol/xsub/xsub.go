@@ -63,22 +63,28 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	timeQ := nilQ
 	for {
 		s.Lock()
-		if s.recvExpire > 0 {
+		if s.recvExpire != 0 {
 			timeQ = time.After(s.recvExpire)
 		}
 		closeQ := s.closeQ
 		sizeQ := s.sizeQ
 		recvQ := s.recvQ
 		s.Unlock()
+
 		select {
-		case <-closeQ:
-			return nil, protocol.ErrClosed
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
-		case <-sizeQ:
-			continue
 		case m := <-recvQ:
 			return m, nil
+		default:
+			select {
+			case <-closeQ:
+				return nil, protocol.ErrClosed
+			case <-timeQ:
+				return nil, protocol.ErrRecvTimeout
+			case <-sizeQ:
+				continue
+			case m := <-recvQ:
+				return m, nil
+			}
 		}
 	}
 }
