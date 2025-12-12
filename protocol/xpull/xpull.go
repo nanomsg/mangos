@@ -17,6 +17,8 @@
 package xpull
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -58,31 +60,46 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
-func (s *socket) RecvMsg() (*protocol.Message, error) {
-	// For now this uses a simple unified queue for the entire
-	// socket.  Later we can look at moving this to priority queues
-	// based on socket pipes.
-	tq := nilQ
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return protocol.ErrProtoOp
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	for {
 		s.Lock()
-		if s.recvExpire > 0 {
-			tq = time.After(s.recvExpire)
-		}
 		cq := s.closeQ
 		rq := s.recvQ
 		zq := s.sizeQ
 		s.Unlock()
 		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, protocol.ErrRecvTimeout
+			}
+			return nil, ctx.Err()
 		case <-cq:
 			return nil, protocol.ErrClosed
-		case <-tq:
-			return nil, protocol.ErrRecvTimeout
 		case <-zq:
 			continue
 		case m := <-rq:
 			return m, nil
 		}
 	}
+}
+
+func (s *socket) RecvMsg() (*protocol.Message, error) {
+	ctx := context.Background()
+	s.Lock()
+	recvExpire := s.recvExpire
+	s.Unlock()
+
+	if recvExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, recvExpire)
+		defer cancel()
+	}
+
+	return s.RecvMsgContext(ctx)
 }
 
 func (s *socket) SetOption(name string, value interface{}) error {

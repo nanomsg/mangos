@@ -15,6 +15,8 @@
 package test
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -52,38 +54,54 @@ func (s *mockSock) Close() error {
 	}
 }
 
-func (s *mockSock) SendMsg(m *protocol.Message) error {
-	var timerQ <-chan time.Time
-	s.lock.Lock()
-	if exp := s.sendExpire; exp > 0 {
-		timerQ = time.After(exp)
-	}
-	s.lock.Unlock()
+func (s *mockSock) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	select {
 	case s.sendQ <- m:
 		return nil
 	case <-s.closeQ:
 		return protocol.ErrClosed
-	case <-timerQ:
-		return protocol.ErrSendTimeout
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return protocol.ErrSendTimeout
+		}
+		return ctx.Err()
 	}
 }
 
-func (s *mockSock) RecvMsg() (*protocol.Message, error) {
-	var timerQ <-chan time.Time
-	s.lock.Lock()
-	if exp := s.recvExpire; exp > 0 {
-		timerQ = time.After(exp)
+func (s *mockSock) SendMsg(m *protocol.Message) error {
+	ctx := context.Background()
+	if s.sendExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.sendExpire)
+		defer cancel()
 	}
-	s.lock.Unlock()
+
+	return s.SendMsgContext(ctx, m)
+}
+
+func (s *mockSock) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	select {
 	case m := <-s.recvQ:
 		return m, nil
 	case <-s.closeQ:
 		return nil, protocol.ErrClosed
-	case <-timerQ:
-		return nil, protocol.ErrRecvTimeout
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, protocol.ErrRecvTimeout
+		}
+		return nil, ctx.Err()
 	}
+}
+
+func (s *mockSock) RecvMsg() (*protocol.Message, error) {
+	ctx := context.Background()
+	if s.recvExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.recvExpire)
+		defer cancel()
+	}
+
+	return s.RecvMsgContext(ctx)
 }
 
 func (s *mockSock) GetOption(name string) (interface{}, error) {

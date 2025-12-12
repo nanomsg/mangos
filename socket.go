@@ -14,6 +14,8 @@
 
 package mangos
 
+import "context"
+
 // Socket is the main access handle applications use to access the SP
 // system.  It is an abstraction of an application's "connection" to a
 // messaging topology.  Applications can have more than one Socket open
@@ -44,6 +46,27 @@ type Socket interface {
 	// RecvMsg receives a complete message, including the message header,
 	// which is useful for protocols in raw mode.
 	RecvMsg() (*Message, error)
+
+	// RecvMsgContext receives a complete message, including the message header.
+	// It will block until a message is received, the context is canceled, or
+	// the context deadline expires. When the context is canceled or times out,
+	// the error returned will be ctx.Err().
+	RecvMsgContext(context.Context) (*Message, error)
+
+	// RecvContext receives a complete message. It will block until a message
+	// is received, the context is canceled, or the context deadline expires.
+	// When the context is canceled or times out, the error returned will be ctx.Err().
+	RecvContext(context.Context) ([]byte, error)
+
+	// SendMsgContext sends a message. It will block until the message can be
+	// queued, the context is canceled, or the context deadline expires.
+	// When the context is canceled or times out, the error returned will be ctx.Err().
+	SendMsgContext(context.Context, *Message) error
+
+	// SendContext sends a message. It will block until the message can be
+	// queued, the context is canceled, or the context deadline expires.
+	// When the context is canceled or times out, the error returned will be ctx.Err().
+	SendContext(context.Context, []byte) error
 
 	// Dial connects a remote endpoint to the Socket.  The function
 	// returns immediately, and an asynchronous goroutine is started to
@@ -118,4 +141,25 @@ type Context interface {
 	// RecvMsg receives a complete message, including the message header,
 	// which is useful for protocols in raw mode.
 	RecvMsg() (*Message, error)
+
+	// RecvMsgContext receives a complete message, including the message header.
+	// It will block until a message is received, the context is canceled, or
+	// the context deadline expires. When the context is canceled or times out,
+	// the error returned will be ctx.Err().
+	RecvMsgContext(context.Context) (*Message, error)
+
+	// RecvContext receives a complete message. It will block until a message
+	// is received, the context is canceled, or the context deadline expires.
+	// When the context is canceled or times out, the error returned will be ctx.Err().
+	RecvContext(context.Context) ([]byte, error)
+
+	// SendMsgContext sends a message. It will block until the message can be
+	// queued, the context is canceled, or the context deadline expires.
+	// When the context is canceled or times out, the error returned will be ctx.Err().
+	SendMsgContext(context.Context, *Message) error
+
+	// SendContext sends a message. It will block until the message can be
+	// queued, the context is canceled, or the context deadline expires.
+	// When the context is canceled or times out, the error returned will be ctx.Err().
+	SendContext(context.Context, []byte) error
 }

@@ -17,15 +17,14 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ ./survey server $url server & server=$!
-//   $ ./survey client $url client0 & client0=$!
-//   $ ./survey client $url client1 & client1=$!
-//   $ ./survey client $url client2 & client2=$!
-//   $ sleep 5
-//   $ kill $server $client0 $client1 $client2
-//
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$ ./survey server $url server & server=$!
+//	$ ./survey client $url client0 & client0=$!
+//	$ ./survey client $url client1 & client1=$!
+//	$ ./survey client $url client2 & client2=$!
+//	$ sleep 5
+//	$ kill $server $client0 $client1 $client2
 package main
 
 import (

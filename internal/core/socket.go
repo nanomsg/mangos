@@ -15,6 +15,7 @@
 package core
 
 import (
+	"context"
 	"strings"
 	"sync"
 	"time"
@@ -51,7 +52,7 @@ type socket struct {
 	pipehook  mangos.PipeEventHook
 }
 
-type context struct {
+type protoContext struct {
 	mangos.ProtocolContext
 }
 
@@ -72,7 +73,7 @@ func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 
 	p.lock.Lock()
 	if p.closing {
-		p.lock.Lock()
+		p.lock.Unlock()
 		return
 	}
 	if s.proto.AddPipe(p) != nil {
@@ -152,13 +153,31 @@ func (s *socket) Close() error {
 	return err
 }
 
-func (ctx context) Send(b []byte) error {
+func (pc *protoContext) Send(b []byte) error {
 	msg := mangos.NewMessage(len(b))
 	msg.Body = append(msg.Body, b...)
-	return ctx.SendMsg(msg)
+	return pc.SendMsg(msg)
 }
-func (ctx context) Recv() ([]byte, error) {
-	msg, err := ctx.RecvMsg()
+
+func (pc *protoContext) Recv() ([]byte, error) {
+	msg, err := pc.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, 0, len(msg.Body))
+	b = append(b, msg.Body...)
+	msg.Free()
+	return b, nil
+}
+
+func (pc *protoContext) SendContext(ctx context.Context, b []byte) error {
+	msg := mangos.NewMessage(len(b))
+	msg.Body = append(msg.Body, b...)
+	return pc.SendMsgContext(ctx, msg)
+}
+
+func (pc *protoContext) RecvContext(ctx context.Context) ([]byte, error) {
+	msg, err := pc.RecvMsgContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +192,15 @@ func (s *socket) OpenContext() (mangos.Context, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &context{c}, nil
+	return &protoContext{ProtocolContext: c}, nil
 }
 
 func (s *socket) SendMsg(msg *Message) error {
 	return s.proto.SendMsg(msg)
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, msg *Message) error {
+	return s.proto.SendMsgContext(ctx, msg)
 }
 
 func (s *socket) Send(b []byte) error {
@@ -186,12 +209,33 @@ func (s *socket) Send(b []byte) error {
 	return s.SendMsg(msg)
 }
 
+func (s *socket) SendContext(ctx context.Context, b []byte) error {
+	msg := mangos.NewMessage(len(b))
+	msg.Body = append(msg.Body, b...)
+	return s.SendMsgContext(ctx, msg)
+}
+
 func (s *socket) RecvMsg() (*Message, error) {
 	return s.proto.RecvMsg()
 }
 
+func (s *socket) RecvMsgContext(ctx context.Context) (*Message, error) {
+	return s.proto.RecvMsgContext(ctx)
+}
+
 func (s *socket) Recv() ([]byte, error) {
 	msg, err := s.RecvMsg()
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, 0, len(msg.Body))
+	b = append(b, msg.Body...)
+	msg.Free()
+	return b, nil
+}
+
+func (s *socket) RecvContext(ctx context.Context) ([]byte, error) {
+	msg, err := s.RecvMsgContext(ctx)
 	if err != nil {
 		return nil, err
 	}

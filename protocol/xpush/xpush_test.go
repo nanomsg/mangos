@@ -240,10 +240,10 @@ func TestXPushFastFailNoPeerDisconnect(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	go func() {
-		time.Sleep(time.Millisecond*20)
+		time.Sleep(time.Millisecond * 20)
 		MustSucceed(t, p.Close())
 	}()
 
-	MustBeError(t ,s.Send([]byte("three")), mangos.ErrNoPeers)
+	MustBeError(t, s.Send([]byte("three")), mangos.ErrNoPeers)
 	MustSucceed(t, s.Close())
 }

@@ -16,6 +16,8 @@
 package xpush
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -70,43 +72,7 @@ func init() {
 // ID at the end of the header, plus any leading backtrace information
 // coming from a paired REP socket.
 func (s *socket) SendMsg(m *protocol.Message) error {
-	s.Lock()
-	bestEffort := s.bestEffort
-	tq := nilQ
-	if bestEffort {
-		tq = closedQ
-	} else if s.sendExpire > 0 {
-		tq = time.After(s.sendExpire)
-	}
-	if s.closed {
-		s.Unlock()
-		return protocol.ErrClosed
-	}
-	if s.failNoPeers && len(s.pipes) == 0 {
-		s.Unlock()
-		return protocol.ErrNoPeers
-	}
-	pq := s.noPeerQ
-	s.Unlock()
-
-	select {
-	case <-pq:
-		return protocol.ErrNoPeers
-	case s.sendQ <- m:
-	case <-s.closeQ:
-		return protocol.ErrClosed
-	case <-tq:
-		if bestEffort {
-			m.Free()
-			return nil
-		}
-		return protocol.ErrSendTimeout
-	}
-
-	s.Lock()
-	s.cv.Signal()
-	s.Unlock()
-	return nil
+	return s.SendMsgContext(context.Background(), m)
 }
 
 func (s *socket) sender() {
@@ -125,6 +91,62 @@ func (s *socket) sender() {
 		s.readyQ = s.readyQ[1:]
 		go p.send(m)
 	}
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	s.Lock()
+	sendExpire := s.sendExpire
+	bestEffort := s.bestEffort
+	if s.closed {
+		s.Unlock()
+		return protocol.ErrClosed
+	}
+	if s.failNoPeers && len(s.pipes) == 0 {
+		s.Unlock()
+		return protocol.ErrNoPeers
+	}
+	pq := s.noPeerQ
+	s.Unlock()
+
+	// Apply timeout if configured and no deadline already set
+	if sendExpire > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, sendExpire)
+			defer cancel()
+		}
+	}
+
+	if bestEffort {
+		select {
+		case s.sendQ <- m:
+		default:
+			m.Free()
+			return nil
+		}
+	} else {
+		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return protocol.ErrSendTimeout
+			}
+			return ctx.Err()
+		case <-pq:
+			return protocol.ErrNoPeers
+		case s.sendQ <- m:
+		case <-s.closeQ:
+			return protocol.ErrClosed
+		}
+	}
+
+	s.Lock()
+	s.cv.Signal()
+	s.Unlock()
+	return nil
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	return s.RecvMsg()
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
@@ -261,7 +283,7 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	s.cv.Broadcast() 
+	s.cv.Broadcast()
 	s.Unlock()
 	close(s.closeQ)
 	return nil
@@ -324,7 +346,7 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		closeQ:   make(chan struct{}),
-		noPeerQ: make(chan struct{}),
+		noPeerQ:  make(chan struct{}),
 		sendQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
 		pipes:    make(map[uint32]*pipe),
