@@ -16,6 +16,7 @@
 
 url=tcp://127.0.0.1:40899
 ./pair node0 $url & node0=$!
+sleep 1  # Wait for node0 to start listening
 ./pair node1 $url & node1=$!
 sleep 3
 kill $node0 $node1
