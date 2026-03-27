@@ -93,17 +93,22 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	// based on socket pipes.
 	tq := nilQ
 	s.Lock()
-	if s.recvExpire > 0 {
+	if s.recvExpire != 0 {
 		tq = time.After(s.recvExpire)
 	}
 	s.Unlock()
 	select {
-	case <-s.closeq:
-		return nil, protocol.ErrClosed
-	case <-tq:
-		return nil, protocol.ErrRecvTimeout
 	case m := <-s.recvq:
 		return m, nil
+	default:
+		select {
+		case <-s.closeq:
+			return nil, protocol.ErrClosed
+		case <-tq:
+			return nil, protocol.ErrRecvTimeout
+		case m := <-s.recvq:
+			return m, nil
+		}
 	}
 }
 
