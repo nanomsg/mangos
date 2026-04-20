@@ -494,7 +494,6 @@ func TestReqSendNoPeerDisconnect(t *testing.T) {
 	MustSucceed(t, s.Close())
 }
 
-
 func TestReqRecvNoPeer(t *testing.T) {
 	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
 
@@ -511,7 +510,7 @@ func TestReqRecvNoPeer(t *testing.T) {
 	MustSucceed(t, s.Send([]byte("one"))) // sent by the socket, picked up by rep socket
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, p.Close())
-	time.Sleep(time.Millisecond*20)
+	time.Sleep(time.Millisecond * 20)
 	MustNotRecv(t, s, mangos.ErrNoPeers)
 	MustSucceed(t, s.Close())
 }
@@ -531,7 +530,7 @@ func TestReqRecvNoPeerDisconnect(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, s.Send([]byte("one"))) // sent by the socket, picked up by rep socket
 	go func() {
-		time.Sleep(time.Millisecond*10)
+		time.Sleep(time.Millisecond * 10)
 		MustSucceed(t, p.Close())
 	}()
 	MustNotRecv(t, s, mangos.ErrNoPeers)
