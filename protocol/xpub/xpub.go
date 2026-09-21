@@ -17,6 +17,7 @@
 package xpub
 
 import (
+	"context"
 	"sync"
 
 	"go.nanomsg.org/mangos/v3/protocol"
@@ -65,6 +66,14 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	s.Unlock()
 	m.Free()
 	return nil
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return s.SendMsg(m)
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	return s.RecvMsg()
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {

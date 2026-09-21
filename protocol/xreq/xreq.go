@@ -17,6 +17,8 @@
 package xreq
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -68,20 +70,46 @@ func init() {
 // ID at the end of the header, plus any leading backtrace information
 // coming from a paired REP socket.
 func (s *socket) SendMsg(m *protocol.Message) error {
+	return s.SendMsgContext(context.Background(), m)
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	s.Lock()
+	sendExpire := s.sendExpire
 	bestEffort := s.bestEffort
-	timeQ := nilQ
-	if bestEffort {
-		timeQ = closedQ
-	} else if s.sendExpire > 0 {
-		timeQ = time.After(s.sendExpire)
-	}
 	sendQ := s.sendQ
 	sizeQ := s.sizeQ
 	closeQ := s.closeQ
 	s.Unlock()
 
+	// Apply timeout if configured and no deadline already set
+	if sendExpire > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, sendExpire)
+			defer cancel()
+		}
+	}
+
+	if bestEffort {
+		select {
+		case sendQ <- m:
+			return nil
+		case <-sizeQ:
+			m.Free()
+			return nil
+		default:
+			m.Free()
+			return nil
+		}
+	}
+
 	select {
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return protocol.ErrSendTimeout
+		}
+		return ctx.Err()
 	case sendQ <- m:
 		return nil
 	case <-sizeQ:
@@ -89,31 +117,41 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 		return nil
 	case <-closeQ:
 		return protocol.ErrClosed
-	case <-timeQ:
-		if bestEffort {
-			m.Free()
-			return nil
-		}
-		return protocol.ErrSendTimeout
 	}
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	for {
-		timeQ := nilQ
-		s.Lock()
-		if s.recvExpire > 0 {
-			timeQ = time.After(s.recvExpire)
+	return s.RecvMsgContext(context.Background())
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	s.Lock()
+	recvExpire := s.recvExpire
+	s.Unlock()
+
+	// Apply timeout if configured and no deadline already set
+	if recvExpire > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, recvExpire)
+			defer cancel()
 		}
+	}
+
+	for {
+		s.Lock()
 		sizeQ := s.sizeQ
 		recvQ := s.recvQ
 		closeQ := s.closeQ
 		s.Unlock()
 		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, protocol.ErrRecvTimeout
+			}
+			return nil, ctx.Err()
 		case <-closeQ:
 			return nil, protocol.ErrClosed
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
 		case m := <-recvQ:
 			return m, nil
 		case <-sizeQ:

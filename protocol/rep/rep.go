@@ -17,6 +17,8 @@
 package rep
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -48,12 +50,12 @@ type socket struct {
 	ttl      int
 	sendQLen int
 	recvQ    chan recvQEntry
-	contexts map[*context]struct{}
-	master   *context
+	contexts map[*repContext]struct{}
+	master   *repContext
 	sync.Mutex
 }
 
-type context struct {
+type repContext struct {
 	s          *socket
 	closed     bool
 	recvWait   bool
@@ -65,19 +67,9 @@ type context struct {
 	backtrace  []byte
 }
 
-// closedQ represents a non-blocking time channel.
-var closedQ <-chan time.Time
+const defaultQLen = 128
 
-// nilQ represents a nil time channel (blocks forever)
-var nilQ <-chan time.Time
-
-func init() {
-	tq := make(chan time.Time)
-	closedQ = tq
-	close(tq)
-}
-
-func (c *context) RecvMsg() (*protocol.Message, error) {
+func (c *repContext) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	s := c.s
 	s.Lock()
 
@@ -92,13 +84,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	c.recvWait = true
 
 	cq := c.closeQ
-	wq := nilQ
-	expireTime := c.recvExpire
 	s.Unlock()
-
-	if expireTime > 0 {
-		wq = time.After(expireTime)
-	}
 
 	var err error
 	var m *protocol.Message
@@ -107,8 +93,12 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	select {
 	case entry := <-s.recvQ:
 		m, p = entry.m, entry.p
-	case <-wq:
-		err = protocol.ErrRecvTimeout
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			err = protocol.ErrRecvTimeout
+		} else {
+			err = ctx.Err()
+		}
 	case <-cq:
 		err = protocol.ErrClosed
 	}
@@ -125,7 +115,18 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	return m, err
 }
 
-func (c *context) SendMsg(m *protocol.Message) error {
+func (c *repContext) RecvMsg() (*protocol.Message, error) {
+	ctx := context.Background()
+	if c.recvExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.recvExpire)
+		defer cancel()
+	}
+
+	return c.RecvMsgContext(ctx)
+}
+
+func (c *repContext) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	r := c.s
 	r.Lock()
 
@@ -141,17 +142,23 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	c.recvPipe = nil
 
 	bestEffort := c.bestEffort
-	timeQ := nilQ
-	if bestEffort {
-		timeQ = closedQ
-	} else if c.sendExpire > 0 {
-		timeQ = time.After(c.sendExpire)
-	}
-
 	m.Header = c.backtrace
 	c.backtrace = nil
 	cq := c.closeQ
 	r.Unlock()
+
+	if bestEffort {
+		// Best effort - non-blocking send
+		select {
+		case p.sendQ <- m:
+			return nil
+		default:
+			// No way to report to caller, so just discard
+			// the message.
+			m.Free()
+			return nil
+		}
+	}
 
 	select {
 	case <-cq:
@@ -162,22 +169,29 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		// Just discard the message.
 		m.Free()
 		return nil
-	case <-timeQ:
-		if bestEffort {
-			// No way to report to caller, so just discard
-			// the message.
-			m.Free()
-			return nil
-		}
+	case <-ctx.Done():
 		m.Header = nil
-		return protocol.ErrSendTimeout
-
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return protocol.ErrSendTimeout
+		}
+		return ctx.Err()
 	case p.sendQ <- m:
 		return nil
 	}
 }
 
-func (c *context) Close() error {
+func (c *repContext) SendMsg(m *protocol.Message) error {
+	ctx := context.Background()
+	if c.sendExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.sendExpire)
+		defer cancel()
+	}
+
+	return c.SendMsgContext(ctx, m)
+}
+
+func (c *repContext) Close() error {
 	s := c.s
 	s.Lock()
 	if c.closed {
@@ -191,7 +205,7 @@ func (c *context) Close() error {
 	return nil
 }
 
-func (c *context) GetOption(name string) (interface{}, error) {
+func (c *repContext) GetOption(name string) (interface{}, error) {
 	switch name {
 	case protocol.OptionBestEffort:
 		c.s.Lock()
@@ -216,7 +230,7 @@ func (c *context) GetOption(name string) (interface{}, error) {
 	}
 }
 
-func (c *context) SetOption(name string, v interface{}) error {
+func (c *repContext) SetOption(name string, v interface{}) error {
 	switch name {
 	case protocol.OptionBestEffort:
 		if val, ok := v.(bool); ok {
@@ -320,7 +334,7 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	var contexts []*context
+	var contexts []*repContext
 	for c := range s.contexts {
 		contexts = append(contexts, c)
 	}
@@ -415,7 +429,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	if s.closed {
 		return nil, protocol.ErrClosed
 	}
-	c := &context{
+	c := &repContext{
 		s:      s,
 		closeQ: make(chan struct{}),
 	}
@@ -427,17 +441,25 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 	return s.master.RecvMsg()
 }
 
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	return s.master.RecvMsgContext(ctx)
+}
+
 func (s *socket) SendMsg(m *protocol.Message) error {
 	return s.master.SendMsg(m)
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return s.master.SendMsgContext(ctx, m)
 }
 
 // NewProtocol allocates a protocol state for the REP protocol.
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		ttl:      8,
-		contexts: make(map[*context]struct{}),
+		contexts: make(map[*repContext]struct{}),
 		recvQ:    make(chan recvQEntry), // unbuffered!
-		master: &context{
+		master: &repContext{
 			closeQ: make(chan struct{}),
 		},
 	}

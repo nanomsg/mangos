@@ -22,6 +22,8 @@
 package star
 
 import (
+	"context"
+
 	"go.nanomsg.org/mangos/v3/protocol"
 	"go.nanomsg.org/mangos/v3/protocol/xstar"
 )
@@ -47,8 +49,12 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 }
 
 func (s *socket) SendMsg(m *protocol.Message) error {
+	return s.SendMsgContext(context.Background(), m)
+}
+
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	m.Header = make([]byte, 4)
-	err := s.Protocol.SendMsg(m)
+	err := s.Protocol.SendMsgContext(ctx, m)
 	if err != nil {
 		m.Header = m.Header[:0]
 	}
@@ -56,7 +62,11 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
-	m, err := s.Protocol.RecvMsg()
+	return s.RecvMsgContext(context.Background())
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	m, err := s.Protocol.RecvMsgContext(ctx)
 	if err == nil && m != nil {
 		m.Header = m.Header[:0]
 	}

@@ -22,5 +22,4 @@
 // Surveyor/Respondent, etc.
 //
 // For more information, see www.nanomsg.org.
-//
 package mangos

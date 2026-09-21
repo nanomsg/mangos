@@ -17,6 +17,8 @@
 package xsub
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -56,25 +58,45 @@ func (s *socket) SendMsg(*protocol.Message) error {
 	return protocol.ErrProtoOp
 }
 
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return s.SendMsg(m)
+}
+
 func (s *socket) RecvMsg() (*protocol.Message, error) {
+	return s.RecvMsgContext(context.Background())
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	// For now this uses a simple unified queue for the entire
 	// socket.  Later we can look at moving this to priority queues
 	// based on socket pipes.
-	timeQ := nilQ
+	s.Lock()
+	recvExpire := s.recvExpire
+	s.Unlock()
+
+	// Apply timeout if configured and no deadline already set
+	if recvExpire > 0 {
+		if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, recvExpire)
+			defer cancel()
+		}
+	}
+
 	for {
 		s.Lock()
-		if s.recvExpire > 0 {
-			timeQ = time.After(s.recvExpire)
-		}
 		closeQ := s.closeQ
 		sizeQ := s.sizeQ
 		recvQ := s.recvQ
 		s.Unlock()
 		select {
+		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, protocol.ErrRecvTimeout
+			}
+			return nil, ctx.Err()
 		case <-closeQ:
 			return nil, protocol.ErrClosed
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
 		case <-sizeQ:
 			continue
 		case m := <-recvQ:

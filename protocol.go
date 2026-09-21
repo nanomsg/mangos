@@ -14,6 +14,8 @@
 
 package mangos
 
+import "context"
+
 // ProtocolPipe represents the handle that a Protocol implementation has
 // to the underlying stream transport.  It can be thought of as one side
 // of a TCP, IPC, or other type of connection.
@@ -66,6 +68,15 @@ type ProtocolContext interface {
 	// RecvMsg receives a complete message, including the message header,
 	// which is useful for protocols in raw mode.
 	RecvMsg() (*Message, error)
+
+	// RecvMsgContext receives a complete message, including the message header.
+	// It will block until a message is received, the context is canceled, or
+	// the context deadline expires.
+	RecvMsgContext(context.Context) (*Message, error)
+
+	// SendMsgContext sends a message. It will block until the message can be
+	// queued, the context is canceled, or the context deadline expires.
+	SendMsgContext(context.Context, *Message) error
 
 	// GetOption is used to retrieve the current value of an option.
 	// If the protocol doesn't recognize the option, EBadOption should

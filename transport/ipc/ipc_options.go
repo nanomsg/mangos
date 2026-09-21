@@ -54,4 +54,3 @@ const (
 	// Listener is started.
 	OptionOutputBufferSize = "WIN-IPC-OUTPUT-BUFFER-SIZE"
 )
-

@@ -17,7 +17,9 @@
 package surveyor
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,6 +36,7 @@ const (
 )
 
 const defaultSurveyTime = time.Second
+const defaultQLen = 128
 
 type pipe struct {
 	s      *socket
@@ -47,13 +50,13 @@ type survey struct {
 	recvQ  chan *protocol.Message
 	active bool
 	id     uint32
-	ctx    *context
+	ctx    *surveyorContext
 	sock   *socket
 	err    error
 	once   sync.Once
 }
 
-type context struct {
+type surveyorContext struct {
 	s          *socket
 	closed     bool
 	closeQ     chan struct{}
@@ -64,21 +67,15 @@ type context struct {
 }
 
 type socket struct {
-	master   *context              // default context
-	ctxs     map[*context]struct{} // all contexts
-	surveys  map[uint32]*survey    // contexts by survey ID
-	pipes    map[uint32]*pipe      // all pipes by pipe ID
-	nextID   uint32                // next survey ID
-	closed   bool                  // true if closed
-	sendQLen int                   // send Q depth
+	master   *surveyorContext              // default context
+	ctxs     map[*surveyorContext]struct{} // all contexts
+	surveys  map[uint32]*survey            // contexts by survey ID
+	pipes    map[uint32]*pipe              // all pipes by pipe ID
+	nextID   uint32                        // next survey ID
+	closed   bool                          // true if closed
+	sendQLen int                           // send Q depth
 	sync.Mutex
 }
-
-var (
-	nilQ <-chan time.Time
-)
-
-const defaultQLen = 128
 
 func (s *survey) cancel(err error) {
 
@@ -115,7 +112,7 @@ func (s *survey) start(qLen int, expire time.Duration) {
 	})
 }
 
-func (c *context) SendMsg(m *protocol.Message) error {
+func (c *surveyorContext) SendMsgContext(ctx context.Context, m *protocol.Message) error {
 	s := c.s
 
 	newsurv := &survey{
@@ -158,7 +155,11 @@ func (c *context) SendMsg(m *protocol.Message) error {
 	return nil
 }
 
-func (c *context) RecvMsg() (*protocol.Message, error) {
+func (c *surveyorContext) SendMsg(m *protocol.Message) error {
+	return c.SendMsgContext(context.Background(), m)
+}
+
+func (c *surveyorContext) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
 	s := c.s
 
 	s.Lock()
@@ -167,10 +168,6 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 		return nil, protocol.ErrClosed
 	}
 	surv := c.surv
-	timeq := nilQ
-	if c.recvExpire > 0 {
-		timeq = time.After(c.recvExpire)
-	}
 	s.Unlock()
 
 	if surv == nil {
@@ -188,12 +185,26 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 		}
 		return m, nil
 
-	case <-timeq:
-		return nil, protocol.ErrRecvTimeout
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, protocol.ErrRecvTimeout
+		}
+		return nil, ctx.Err()
 	}
 }
 
-func (c *context) close() {
+func (c *surveyorContext) RecvMsg() (*protocol.Message, error) {
+	ctx := context.Background()
+	if c.recvExpire > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.recvExpire)
+		defer cancel()
+	}
+
+	return c.RecvMsgContext(ctx)
+}
+
+func (c *surveyorContext) close() {
 	if !c.closed {
 		c.closed = true
 		close(c.closeQ)
@@ -204,7 +215,7 @@ func (c *context) close() {
 	}
 }
 
-func (c *context) Close() error {
+func (c *surveyorContext) Close() error {
 	c.s.Lock()
 	defer c.s.Unlock()
 	if c.closed {
@@ -214,7 +225,7 @@ func (c *context) Close() error {
 	return nil
 }
 
-func (c *context) SetOption(name string, value interface{}) error {
+func (c *surveyorContext) SetOption(name string, value interface{}) error {
 	switch name {
 	case protocol.OptionSurveyTime:
 		if v, ok := value.(time.Duration); ok {
@@ -248,7 +259,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	return protocol.ErrBadOption
 }
 
-func (c *context) GetOption(option string) (interface{}, error) {
+func (c *surveyorContext) GetOption(option string) (interface{}, error) {
 	switch option {
 	case protocol.OptionSurveyTime:
 		c.s.Lock()
@@ -330,7 +341,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	if s.closed {
 		return nil, protocol.ErrClosed
 	}
-	c := &context{
+	c := &surveyorContext{
 		s:          s,
 		closeQ:     make(chan struct{}),
 		survExpire: s.master.survExpire,
@@ -341,8 +352,16 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	return c, nil
 }
 
+func (s *socket) SendMsgContext(ctx context.Context, m *protocol.Message) error {
+	return s.master.SendMsgContext(ctx, m)
+}
+
 func (s *socket) SendMsg(m *protocol.Message) error {
 	return s.master.SendMsg(m)
+}
+
+func (s *socket) RecvMsgContext(ctx context.Context) (*protocol.Message, error) {
+	return s.master.RecvMsgContext(ctx)
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
@@ -433,11 +452,11 @@ func NewProtocol() protocol.Protocol {
 	s := &socket{
 		pipes:    make(map[uint32]*pipe),
 		surveys:  make(map[uint32]*survey),
-		ctxs:     make(map[*context]struct{}),
+		ctxs:     make(map[*surveyorContext]struct{}),
 		sendQLen: defaultQLen,
 		nextID:   uint32(time.Now().UnixNano()), // quasi-random
 	}
-	s.master = &context{
+	s.master = &surveyorContext{
 		s:          s,
 		closeQ:     make(chan struct{}),
 		recvQLen:   defaultQLen,
@@ -447,7 +466,7 @@ func NewProtocol() protocol.Protocol {
 	return s
 }
 
-// NewSocket allocates a new Socket using the RESPONDENT protocol.
+// NewSocket allocates a new Socket using the SURVEYOR protocol.
 func NewSocket() (protocol.Socket, error) {
 	return protocol.MakeSocket(NewProtocol()), nil
 }
