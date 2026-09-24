@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -230,6 +230,25 @@ func TestSubRecvResizeContinue(t *testing.T) {
 	MustRecvString(t, s, "ping")
 	wg.Wait()
 	MustBeTrue(t, pass)
+}
+
+func TestSubRecvNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	defer MustClose(t, s)
+	p := GetSocket(t, pub.NewSocket)
+	defer MustClose(t, p)
+
+	MustSucceed(t, s.SetOption(OptionRecvDeadline, time.Duration(-1)))
+	MustSucceed(t, s.SetOption(OptionReadQLen, 10))
+	MustSucceed(t, s.SetOption(OptionSubscribe, []byte{}))
+
+	ConnectPair(t, s, p)
+
+	start := time.Now()
+	m, e := s.Recv()
+	MustBeNil(t, m)
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeTrue(t, time.Since(start) < time.Second)
 }
 
 func TestSubContextOpen(t *testing.T) {

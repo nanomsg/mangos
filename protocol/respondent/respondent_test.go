@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -264,6 +264,15 @@ func TestRespondentRecvExpire(t *testing.T) {
 	MustSucceed(t, s.Close())
 }
 
+func TestRespondentRecvNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Duration(-1)))
+	v, e := s.RecvMsg()
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeNil(t, v)
+	MustSucceed(t, s.Close())
+}
+
 func TestRespondentSendState(t *testing.T) {
 	s := GetSocket(t, NewSocket)
 	MustBeError(t, s.Send([]byte{}), mangos.ErrProtoState)
@@ -290,6 +299,43 @@ func TestRespondentBestEffortSend(t *testing.T) {
 		MustSucceed(t, e)
 		MustNotBeNil(t, m)
 		MustSucceed(t, s.SendMsg(m))
+		// NB: We never ask the peer to receive it -- this ensures we
+		// encounter backpressure.
+	}
+	MustSucceed(t, s.Close())
+	MustSucceed(t, p.Close())
+}
+
+func TestRespondentSendNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	p := GetSocket(t, xsurveyor.NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 1))
+	MustSucceed(t, p.SetOption(mangos.OptionReadQLen, 1))
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Duration(-1)))
+
+	ConnectPair(t, s, p)
+	for i := 0; i < 100; i++ {
+		// We have to make a raw message when using xsurveyor.  We
+		// use xsurveyor because normal surveyor will simply discard
+		// messages for surveys it doesn't have outstanding.
+		m := mangos.NewMessage(0)
+		m.Header = make([]byte, 4)
+		binary.BigEndian.PutUint32(m.Header, uint32(i)|0x80000000)
+		MustSucceed(t, p.SendMsg(m))
+		m, e := s.RecvMsg()
+		MustSucceed(t, e)
+		MustNotBeNil(t, m)
+		start := time.Now()
+		e = s.SendMsg(m)
+		if e != nil {
+			MustBeError(t, e, mangos.ErrSendTimeout)
+			m.Free()
+			MustBeTrue(t, time.Since(start) < time.Second)
+			break
+		} else if i > 20 {
+			MustBeError(t, e, mangos.ErrSendTimeout)
+		}
+
 		// NB: We never ask the peer to receive it -- this ensures we
 		// encounter backpressure.
 	}

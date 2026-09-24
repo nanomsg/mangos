@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2020 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -102,6 +102,8 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 
 		if expTime > 0 {
 			tq = time.After(expTime)
+		} else if expTime < 0 {
+			tq = closedQ
 		}
 
 		select {
@@ -147,6 +149,8 @@ func (c *context) SendMsg(m *protocol.Message) error {
 		tq = closedQ
 	} else if c.sendExpire > 0 {
 		tq = time.After(c.sendExpire)
+	} else if c.sendExpire < 0 {
+		tq = closedQ
 	}
 
 	m.Header = bt
@@ -220,7 +224,7 @@ func (c *context) GetOption(name string) (interface{}, error) {
 func (c *context) SetOption(name string, v interface{}) error {
 	switch name {
 	case protocol.OptionSendDeadline:
-		if val, ok := v.(time.Duration); ok && val.Nanoseconds() > 0 {
+		if val, ok := v.(time.Duration); ok {
 			c.s.Lock()
 			c.sendExpire = val
 			c.s.Unlock()
@@ -229,7 +233,7 @@ func (c *context) SetOption(name string, v interface{}) error {
 		return protocol.ErrBadValue
 
 	case protocol.OptionRecvDeadline:
-		if val, ok := v.(time.Duration); ok && val.Nanoseconds() > 0 {
+		if val, ok := v.(time.Duration); ok {
 			c.s.Lock()
 			c.recvExpire = val
 			c.s.Unlock()
