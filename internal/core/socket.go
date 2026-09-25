@@ -72,7 +72,8 @@ func (s *socket) addPipe(tp transport.Pipe, d *dialer, l *listener) {
 
 	p.lock.Lock()
 	if p.closing {
-		p.lock.Lock()
+		p.lock.Unlock()
+		s.pipes.Remove(p)
 		return
 	}
 	if s.proto.AddPipe(p) != nil {
