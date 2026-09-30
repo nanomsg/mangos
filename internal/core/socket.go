@@ -39,11 +39,12 @@ type socket struct {
 
 	sync.Mutex
 
-	closed        bool          // true if Socket was closed at API level
-	reconnMinTime time.Duration // reconnect time after error or disconnect
-	reconnMaxTime time.Duration // max reconnect interval
-	maxRxSize     int           // max recv size
-	dialAsynch    bool          // asynchronous dialing?
+	closed               bool          // true if Socket was closed at API level
+	reconnMinTime        time.Duration // reconnect time after error or disconnect
+	reconnMaxTime        time.Duration // max reconnect interval
+	reconnBackoffOnClose bool          // whether closing pipe should cause dialer to backoff
+	maxRxSize            int           // max recv size
+	dialAsynch           bool          // asynchronous dialing?
 
 	listeners []*listener
 	dialers   []*dialer
@@ -236,18 +237,21 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 		return nil, err
 	}
 	d := &dialer{
-		d:             td,
-		s:             s,
-		reconnMinTime: s.reconnMinTime,
-		reconnMaxTime: s.reconnMaxTime,
-		asynch:        s.dialAsynch,
-		addr:          addr,
+		d:                    td,
+		s:                    s,
+		reconnMinTime:        s.reconnMinTime,
+		reconnMaxTime:        s.reconnMaxTime,
+		reconnBackoffOnClose: s.reconnBackoffOnClose,
+		asynch:               s.dialAsynch,
+		addr:                 addr,
 	}
 	for n, v := range options {
 		switch n {
 		case mangos.OptionReconnectTime:
 			fallthrough
 		case mangos.OptionMaxReconnectTime:
+			fallthrough
+		case mangos.OptionReconnectBackoffOnClose:
 			fallthrough
 		case mangos.OptionDialAsynch:
 			if err := d.SetOption(n, v); err != nil {
@@ -359,6 +363,12 @@ func (s *socket) SetOption(name string, value interface{}) error {
 		} else {
 			return mangos.ErrBadValue
 		}
+	case mangos.OptionReconnectBackoffOnClose:
+		if v, ok := value.(bool); ok {
+			s.reconnBackoffOnClose = v
+		} else {
+			return mangos.ErrBadValue
+		}
 	case mangos.OptionDialAsynch:
 		if v, ok := value.(bool); ok {
 			s.dialAsynch = v
@@ -392,6 +402,8 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 		return s.reconnMinTime, nil
 	case mangos.OptionMaxReconnectTime:
 		return s.reconnMaxTime, nil
+	case mangos.OptionReconnectBackoffOnClose:
+		return s.reconnBackoffOnClose, nil
 	case mangos.OptionDialAsynch:
 		return s.dialAsynch, nil
 	}

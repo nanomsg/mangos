@@ -87,70 +87,83 @@ func TestPipeHook(t *testing.T) {
 }
 
 func TestPipeHookReject(t *testing.T) {
-	self := GetSocket(t, pair.NewSocket)
-	defer MustClose(t, self)
-	peer := GetSocket(t, pair.NewSocket)
+	tests := []struct {
+		name string
 
-	type event struct {
-		cnt map[mangos.PipeEvent]int
-		p   mangos.Pipe
+		backoffOnClose bool
+
+		minAttempts int
+		maxAttempts int
+	}{
+		{
+			name:        "Default",
+			minAttempts: 9,
+			maxAttempts: 12,
+		},
+		{
+			name:           "Backoff",
+			backoffOnClose: true,
+			minAttempts:    4,
+			maxAttempts:    8,
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			self := GetSocket(t, pair.NewSocket)
+			defer MustClose(t, self)
+			peer := GetSocket(t, pair.NewSocket)
+			defer MustClose(t, peer)
 
-	var lock sync.Mutex
-	events := make(map[mangos.Pipe]*event)
-
-	hook := func(ev mangos.PipeEvent, p mangos.Pipe) {
-		lock.Lock()
-		defer lock.Unlock()
-		if item, ok := events[p]; ok {
-			item.cnt[ev]++
-		} else {
-			cnt := make(map[mangos.PipeEvent]int)
-			cnt[ev] = 1
-			events[p] = &event{
-				cnt: cnt,
-				p:   p,
+			type event struct {
+				cnt map[mangos.PipeEvent]int
+				p   mangos.Pipe
 			}
-		}
-		if ev == mangos.PipeEventAttaching {
-			_ = p.Close()
-		}
+
+			var lock sync.Mutex
+			events := make(map[mangos.Pipe]*event)
+
+			hook := func(ev mangos.PipeEvent, p mangos.Pipe) {
+				lock.Lock()
+				defer lock.Unlock()
+				if item, ok := events[p]; ok {
+					item.cnt[ev]++
+				} else {
+					cnt := make(map[mangos.PipeEvent]int)
+					cnt[ev] = 1
+					events[p] = &event{
+						cnt: cnt,
+						p:   p,
+					}
+				}
+				if ev == mangos.PipeEventAttaching {
+					_ = p.Close()
+				}
+			}
+
+			MustSucceed(t, self.SetOption(mangos.OptionReconnectTime, time.Millisecond*10))
+			MustSucceed(t, self.SetOption(mangos.OptionMaxReconnectTime, time.Millisecond*100))
+			MustSucceed(t, self.SetOption(mangos.OptionDialAsynch, true))
+			MustSucceed(t, self.SetOption(mangos.OptionReconnectBackoffOnClose, tt.backoffOnClose))
+			self.SetPipeEventHook(hook)
+
+			addr := AddrTestInp()
+			MustSucceed(t, peer.Listen(addr))
+			MustSucceed(t, self.Dial(addr))
+
+			time.Sleep(time.Millisecond * 110)
+
+			lock.Lock()
+			for p, item := range events {
+				MustBeTrue(t, p == item.p)
+				MustBeTrue(t, item.cnt[mangos.PipeEventAttaching] == 1)
+				MustBeTrue(t, item.cnt[mangos.PipeEventAttached] == 0)
+				MustBeTrue(t, item.cnt[mangos.PipeEventDetached] == 0)
+			}
+
+			MustBeTrue(t, len(events) >= tt.minAttempts)
+			MustBeTrue(t, len(events) <= tt.maxAttempts)
+
+			lock.Unlock()
+		})
 	}
-
-	MustSucceed(t, self.SetOption(mangos.OptionReconnectTime, time.Millisecond*10))
-	MustSucceed(t, self.SetOption(mangos.OptionMaxReconnectTime, time.Millisecond*20))
-	MustSucceed(t, self.SetOption(mangos.OptionDialAsynch, true))
-	self.SetPipeEventHook(hook)
-
-	addr := AddrTestInp()
-	MustSucceed(t, peer.Listen(addr))
-	MustSucceed(t, self.Dial(addr))
-
-	time.Sleep(time.Millisecond * 100)
-	lock.Lock()
-	pass := 0
-	for p, item := range events {
-		MustBeTrue(t, p == item.p)
-		MustBeTrue(t, item.cnt[mangos.PipeEventAttaching] == 1)
-		MustBeTrue(t, item.cnt[mangos.PipeEventAttached] == 0)
-		MustBeTrue(t, item.cnt[mangos.PipeEventDetached] == 0)
-		pass++
-	}
-	MustBeTrue(t, pass > 2)
-	lock.Unlock()
-
-	MustClose(t, peer)
-	time.Sleep(time.Millisecond * 100)
-
-	lock.Lock()
-	pass = 0
-	for p, item := range events {
-		MustBeTrue(t, p == item.p)
-		MustBeTrue(t, item.cnt[mangos.PipeEventAttaching] == 1)
-		MustBeTrue(t, item.cnt[mangos.PipeEventAttached] == 0)
-		MustBeTrue(t, item.cnt[mangos.PipeEventDetached] == 0)
-		pass++
-	}
-	MustBeTrue(t, pass > 2)
-	lock.Unlock()
 }

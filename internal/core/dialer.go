@@ -26,17 +26,18 @@ import (
 
 type dialer struct {
 	sync.Mutex
-	d             transport.Dialer
-	s             *socket
-	addr          string
-	closed        bool
-	active        bool
-	asynch        bool
-	redialer      *time.Timer
-	reconnTime    time.Duration
-	reconnMinTime time.Duration
-	reconnMaxTime time.Duration
-	closeq        chan struct{}
+	d                    transport.Dialer
+	s                    *socket
+	addr                 string
+	closed               bool
+	active               bool
+	asynch               bool
+	redialer             *time.Timer
+	reconnTime           time.Duration
+	reconnMinTime        time.Duration
+	reconnMaxTime        time.Duration
+	reconnBackoffOnClose bool
+	closeq               chan struct{}
 }
 
 func (d *dialer) Dial() error {
@@ -53,7 +54,7 @@ func (d *dialer) Dial() error {
 	d.active = true
 	d.reconnTime = d.reconnMinTime
 	if d.asynch {
-		go d.redial()
+		go func() { _ = d.dial(true) }()
 		d.Unlock()
 		return nil
 	}
@@ -86,6 +87,11 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 		v := d.reconnMaxTime
 		d.Unlock()
 		return v, nil
+	case mangos.OptionReconnectBackoffOnClose:
+		d.Lock()
+		v := d.reconnBackoffOnClose
+		d.Unlock()
+		return v, nil
 	case mangos.OptionDialAsynch:
 		d.Lock()
 		v := d.asynch
@@ -113,6 +119,14 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 		if v, ok := v.(time.Duration); ok && v >= 0 {
 			d.Lock()
 			d.reconnMaxTime = v
+			d.Unlock()
+			return nil
+		}
+		return mangos.ErrBadValue
+	case mangos.OptionReconnectBackoffOnClose:
+		if v, ok := v.(bool); ok {
+			d.Lock()
+			d.reconnBackoffOnClose = v
 			d.Unlock()
 			return nil
 		}
@@ -151,8 +165,10 @@ func (d *dialer) pipeClosed() {
 	// peer refuses to accept our protocol.  Injecting at least a little
 	// delay should help.
 	d.Lock()
-	time.AfterFunc(d.reconnTime, d.redial)
+	backoff := d.reconnBackoffOnClose
 	d.Unlock()
+
+	d.redial(backoff)
 }
 
 func (d *dialer) dial(redial bool) error {
@@ -172,9 +188,6 @@ func (d *dialer) dial(redial bool) error {
 		return nil
 	}
 
-	d.Lock()
-	defer d.Unlock()
-
 	// We're no longer dialing, so let another reschedule happen, if
 	// appropriate.   This is quite possibly paranoia.  We should only
 	// be in this routine in the following circumstances:
@@ -191,24 +204,34 @@ func (d *dialer) dial(redial bool) error {
 		// Stop redialing, no further action.
 
 	default:
+		d.redial(true)
+	}
+	return err
+}
+
+func (d *dialer) redial(backoff bool) {
+	d.Lock()
+	defer d.Unlock()
+
+	rtime := d.reconnTime
+
+	if backoff {
 		// Exponential backoff, and jitter.  Our backoff grows at
 		// about 1.3x on average, so we don't penalize a failed
 		// connection too badly.
 		minfact := float64(1.1)
 		maxfact := float64(1.5)
 		actfact := rand.Float64()*(maxfact-minfact) + minfact
-		rtime := d.reconnTime
 		if d.reconnMaxTime != 0 {
 			d.reconnTime = time.Duration(actfact * float64(d.reconnTime))
 			if d.reconnTime > d.reconnMaxTime {
 				d.reconnTime = d.reconnMaxTime
 			}
 		}
-		d.redialer = time.AfterFunc(rtime, d.redial)
 	}
-	return err
-}
 
-func (d *dialer) redial() {
-	_ = d.dial(true)
+	d.redialer = time.AfterFunc(
+		rtime,
+		func() { _ = d.dial(true) },
+	)
 }

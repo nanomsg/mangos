@@ -153,6 +153,13 @@ const (
 	// This option must be set before starting any dialers.
 	OptionMaxReconnectTime = "MAX-RECONNECT-TIME"
 
+	// OptionReconnectBackoffOnClose enables reconnect delay backoff
+	// after a connection is closed.  This will only have an affect if
+	// OptionMaxReconnectTime is non-zero and the connection is closed
+	// before being fully established (as that would reset the backoff).
+	// The value is a boolean.  Defaults is false.
+	OptionReconnectBackoffOnClose = "RECONNECT-BACKOFF-ON-CLOSE"
+
 	// OptionBestEffort enables non-blocking send operations on the
 	// socket. Normally (for some socket types), a socket will block if
 	// there are no receivers, or the receivers are unable to keep up
