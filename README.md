@@ -87,8 +87,7 @@ the same support matrix as Go - meaning only the most recent release of Go, and
 the release preceding it are guaranteed support.  Having said that, we generally
 will attempt not to break earlier versions of Go intentionally.
 
-As of this writing, Go versions before 1.22 are not supported (because of dependency
-requirements).
+Go 1.26 or later is required by the Windows named-pipe transport dependency.
 
 ## Examples
 
