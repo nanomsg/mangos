@@ -106,6 +106,7 @@ type listener struct {
 func (l *listener) Listen() error {
 
 	l.lock.Lock()
+	defer l.lock.Unlock()
 	config := &winio.PipeConfig{
 		InputBufferSize:    l.inputBufferSize,
 		OutputBufferSize:   l.outputBufferSize,
@@ -113,10 +114,8 @@ func (l *listener) Listen() error {
 		MessageMode:        false,
 	}
 	if l.closed {
-		l.lock.Unlock()
 		return mangos.ErrClosed
 	}
-	l.lock.Unlock()
 
 	listener, err := winio.ListenPipe("\\\\.\\pipe\\"+l.path, config)
 	if err != nil {
@@ -152,9 +151,12 @@ func (l *listener) Address() string {
 // Accept implements the the PipeListener Accept method.
 func (l *listener) Accept() (mangos.TranPipe, error) {
 
+	l.lock.Lock()
 	if l.listener == nil {
+		l.lock.Unlock()
 		return nil, mangos.ErrClosed
 	}
+	l.lock.Unlock()
 	return l.hs.Wait()
 }
 
@@ -162,8 +164,8 @@ func (l *listener) Accept() (mangos.TranPipe, error) {
 func (l *listener) Close() error {
 	l.once.Do(func() {
 		l.lock.Lock()
+		defer l.lock.Unlock()
 		l.closed = true
-		l.lock.Unlock()
 		if l.listener != nil {
 			_ = l.listener.Close()
 		}

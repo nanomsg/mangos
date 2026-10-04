@@ -56,6 +56,50 @@ func TestWinpipeListenerOptions(t *testing.T) {
 	}
 }
 
+func TestWinpipeListenCloseRace(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+
+	for i := 0; i < 100; i++ {
+		addr := AddrTestWinpipe()
+		l, err := tran.NewListener(addr, sock)
+		MustSucceed(t, err)
+		t.Cleanup(func() { _ = l.Close() })
+
+		start := make(chan struct{})
+		listenDone := make(chan error, 1)
+		closeDone := make(chan error, 1)
+		acceptDone := make(chan error, 1)
+		go func() {
+			<-start
+			listenDone <- l.Listen()
+		}()
+		go func() {
+			<-start
+			closeDone <- l.Close()
+		}()
+		go func() {
+			<-start
+			_, err := l.Accept()
+			acceptDone <- err
+		}()
+		close(start)
+
+		if err := <-listenDone; err != nil {
+			MustBeError(t, err, mangos.ErrClosed)
+		}
+		MustSucceed(t, <-closeDone)
+		MustBeError(t, <-acceptDone, mangos.ErrClosed)
+
+		// Close must release the pipe name even when it races with startup.
+		replacement, err := tran.NewListener(addr, sock)
+		MustSucceed(t, err)
+		t.Cleanup(func() { _ = replacement.Close() })
+		MustSucceed(t, replacement.Listen())
+		MustSucceed(t, replacement.Close())
+	}
+}
+
 type testAddr string
 
 func (a testAddr) testDial() (net.Conn, error) {
