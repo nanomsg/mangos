@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2026 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -56,6 +56,10 @@ func getScratchAddr(tran transport.Transport) string {
 		return AddrTestTCP()
 	case "ipc":
 		return AddrTestIPC()
+	case "unix":
+		return AddrTestUnix()
+	case "winpipe":
+		return AddrTestWinpipe()
 	case "tls+tcp":
 		return AddrTestTLS()
 	case "ws":

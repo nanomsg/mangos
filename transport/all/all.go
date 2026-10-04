@@ -1,4 +1,4 @@
-// Copyright 2018 The Mangos Authors
+// Copyright 2026 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -25,6 +25,8 @@ import (
 	_ "go.nanomsg.org/mangos/v3/transport/ipc"
 	_ "go.nanomsg.org/mangos/v3/transport/tcp"
 	_ "go.nanomsg.org/mangos/v3/transport/tlstcp"
+	_ "go.nanomsg.org/mangos/v3/transport/unix"
+	_ "go.nanomsg.org/mangos/v3/transport/winpipe"
 	_ "go.nanomsg.org/mangos/v3/transport/ws"
 	_ "go.nanomsg.org/mangos/v3/transport/wss"
 )

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !nacl && !plan9 && !wasm
-// +build !nacl,!plan9,!wasm
+//go:build !plan9 && !js
+// +build !plan9,!js
 
-package ipc
+package unix
 
 import (
 	"io/ioutil"
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 		panic("Failed to determine working directory")
 	}
 
-	dir, err := ioutil.TempDir("", "ipctest")
+	dir, err := ioutil.TempDir("", "unixtest")
 	if err != nil {
 		panic("Failed to create directory")
 	}
@@ -51,48 +51,48 @@ func TestMain(m *testing.M) {
 	os.Exit(v)
 }
 
-func TestIpcRecvMax(t *testing.T) {
+func TestUnixRecvMax(t *testing.T) {
 	test.TranVerifyMaxRecvSize(t, tran, nil, nil)
 }
 
-func TestIpcOptions(t *testing.T) {
+func TestUnixOptions(t *testing.T) {
 	test.TranVerifyInvalidOption(t, tran)
 	test.TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
 }
 
-func TestIpcScheme(t *testing.T) {
+func TestUnixScheme(t *testing.T) {
 	test.TranVerifyScheme(t, tran)
 }
-func TestIpcAcceptWithoutListen(t *testing.T) {
+func TestUnixAcceptWithoutListen(t *testing.T) {
 	test.TranVerifyAcceptWithoutListen(t, tran)
 }
-func TestIpcListenAndAccept(t *testing.T) {
+func TestUnixListenAndAccept(t *testing.T) {
 	test.TranVerifyListenAndAccept(t, tran, nil, nil)
 }
-func TestIpcDuplicateListen(t *testing.T) {
+func TestUnixDuplicateListen(t *testing.T) {
 	test.TranVerifyDuplicateListen(t, tran, nil)
 }
-func TestIpcConnectionRefused(t *testing.T) {
+func TestUnixConnectionRefused(t *testing.T) {
 	test.TranVerifyConnectionRefused(t, tran, nil)
 }
-func TestIpcHandshake(t *testing.T) {
+func TestUnixHandshake(t *testing.T) {
 	test.TranVerifyHandshakeFail(t, tran, nil, nil)
 }
-func TestIpcSendRecv(t *testing.T) {
+func TestUnixSendRecv(t *testing.T) {
 	test.TranVerifySendRecv(t, tran, nil, nil)
 }
-func TestIpcListenerClosed(t *testing.T) {
+func TestUnixListenerClosed(t *testing.T) {
 	test.TranVerifyListenerClosed(t, tran, nil)
 }
-func TestIpcMessageSize(t *testing.T) {
+func TestUnixMessageSize(t *testing.T) {
 	test.TranVerifyMessageSizes(t, tran, nil, nil)
 }
-func TestIpcMessageHeader(t *testing.T) {
+func TestUnixMessageHeader(t *testing.T) {
 	test.TranVerifyMessageHeader(t, tran, nil, nil)
 }
-func TestIpcVerifyPipeAddresses(t *testing.T) {
+func TestUnixVerifyPipeAddresses(t *testing.T) {
 	test.TranVerifyPipeAddresses(t, tran, nil, nil)
 }
-func TestIpcVerifyPipeOptions(t *testing.T) {
+func TestUnixVerifyPipeOptions(t *testing.T) {
 	test.TranVerifyPipeOptions2(t, tran, nil, nil)
 }

@@ -1,4 +1,4 @@
-// Copyright 2019 The Mangos Authors
+// Copyright 2026 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -38,6 +38,16 @@ func NextPort() uint32 {
 func AddrTestIPC() string {
 	temp := filepath.ToSlash(os.TempDir())
 	return fmt.Sprintf("ipc://%s/mangostest%d", temp, NextPort())
+}
+
+// AddrTestUnix returns a test AF_UNIX socket address in the temporary directory.
+func AddrTestUnix() string {
+	return "unix://" + AddrTestIPC()[len("ipc://"):]
+}
+
+// AddrTestWinpipe returns a test Windows named pipe address.
+func AddrTestWinpipe() string {
+	return fmt.Sprintf("winpipe://mangostest%d", NextPort())
 }
 
 // AddrTestWSS returns a websocket over TLS address.

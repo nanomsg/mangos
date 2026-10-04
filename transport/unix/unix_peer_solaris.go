@@ -1,7 +1,7 @@
 //go:build solaris && cgo
 // +build solaris,cgo
 
-// Copyright 2020 The Mangos Authors
+// Copyright 2026 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ipc
+package unix
 
 import (
 	"net"

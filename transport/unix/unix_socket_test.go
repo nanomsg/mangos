@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !plan9 && !windows && !js
-// +build !plan9,!windows,!js
+//go:build !plan9 && !js
+// +build !plan9,!js
 
-package ipc
+package unix
 
 import (
+	"errors"
 	"net"
 	"os"
-	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -28,12 +29,53 @@ import (
 	. "go.nanomsg.org/mangos/v3/internal/test"
 )
 
-func TestIpcStaleListen(t *testing.T) {
-	addr1 := AddrTestIPC()
-	name := addr1[len("ipc://"):]
+func TestIsSyscallError(t *testing.T) {
+
+	MustBeFalse(t, isSyscallError(errors.New("nope"), syscall.ENOENT))
+	MustBeFalse(t, isSyscallError(&net.OpError{
+		Op:     "test",
+		Net:    "none",
+		Source: nil,
+		Addr:   nil,
+		Err:    mangos.ErrClosed,
+	}, syscall.ENOENT))
+	MustBeFalse(t, isSyscallError(&net.OpError{
+		Op:     "test",
+		Net:    "none",
+		Source: nil,
+		Addr:   nil,
+		Err: &os.SyscallError{
+			Syscall: "none",
+			Err:     syscall.EINVAL,
+		},
+	}, syscall.ENOENT))
+	MustBeFalse(t, isSyscallError(&net.OpError{
+		Op:     "test",
+		Net:    "none",
+		Source: nil,
+		Addr:   nil,
+		Err: &os.SyscallError{
+			Syscall: "none",
+			Err:     mangos.ErrNotRaw,
+		},
+	}, syscall.ENOENT))
+	MustBeTrue(t, isSyscallError(&net.OpError{
+		Op:     "test",
+		Net:    "none",
+		Source: nil,
+		Addr:   nil,
+		Err: &os.SyscallError{
+			Syscall: "none",
+			Err:     syscall.ENOENT,
+		},
+	}, syscall.ENOENT))
+}
+
+func TestUnixStaleListen(t *testing.T) {
+	addr1 := AddrTestUnix()
+	name := addr1[len("unix://"):]
 	defer func() {
 		_ = os.Remove(name)
-		_ = os.Remove(name + ".hold")
 	}()
 
 	uaddr, _ := net.ResolveUnixAddr("unix", name)
@@ -41,11 +83,8 @@ func TestIpcStaleListen(t *testing.T) {
 
 	MustSucceed(t, err)
 
-	// We rename it so that closing won't unlink the socket.
-	// This lets us leave a stale socket behind.
-	MustSucceed(t, os.Rename(name, name+".hold"))
+	sock.SetUnlinkOnClose(false)
 	MustSucceed(t, sock.Close())
-	MustSucceed(t, os.Rename(name+".hold", name))
 
 	// Clean up the stale link.
 	self := GetMockSocket()
@@ -54,9 +93,9 @@ func TestIpcStaleListen(t *testing.T) {
 	defer MustClose(t, self)
 }
 
-func TestIpcBusyListen(t *testing.T) {
-	addr1 := AddrTestIPC()
-	name := addr1[len("ipc://"):]
+func TestUnixBusyListen(t *testing.T) {
+	addr1 := AddrTestUnix()
+	name := addr1[len("unix://"):]
 
 	uaddr, _ := net.ResolveUnixAddr("unix", name)
 	sock, err := net.ListenUnix("unix", uaddr)
@@ -72,9 +111,9 @@ func TestIpcBusyListen(t *testing.T) {
 	defer MustClose(t, self)
 }
 
-func TestIpcFileConflictListen(t *testing.T) {
-	addr1 := AddrTestIPC()
-	name := addr1[len("ipc://"):]
+func TestUnixFileConflictListen(t *testing.T) {
+	addr1 := AddrTestUnix()
+	name := addr1[len("unix://"):]
 
 	file, err := os.Create(name)
 	MustSucceed(t, err)
@@ -93,13 +132,13 @@ func TestIpcFileConflictListen(t *testing.T) {
 type testAddr string
 
 func (a testAddr) testDial() (net.Conn, error) {
-	return net.Dial("unix", string(a)[len("ipc://"):])
+	return net.Dial("unix", string(a)[len("unix://"):])
 }
 
-func TestIpcAbortHandshake(t *testing.T) {
+func TestUnixAbortHandshake(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	addr := AddrTestIPC()
+	addr := AddrTestUnix()
 	l, e := sock.NewListener(addr, nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
@@ -108,30 +147,30 @@ func TestIpcAbortHandshake(t *testing.T) {
 	MustSucceed(t, c.Close())
 }
 
-func TestIpcBadHandshake(t *testing.T) {
+func TestUnixBadHandshake(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	addr := AddrTestIPC()
+	addr := AddrTestUnix()
 	l, e := sock.NewListener(addr, nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
 	TranSendConnBadHandshakes(t, testAddr(addr).testDial)
 }
 
-func TestIpcBadRecv(t *testing.T) {
+func TestUnixBadRecv(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	addr := AddrTestIPC()
+	addr := AddrTestUnix()
 	l, e := sock.NewListener(addr, nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
 	TranSendBadMessages(t, sock.Info().Peer, true, testAddr(addr).testDial)
 }
 
-func TestIpcSendAbort(t *testing.T) {
+func TestUnixSendAbort(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	addr := AddrTestIPC()
+	addr := AddrTestUnix()
 	l, e := sock.NewListener(addr, nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
@@ -141,26 +180,4 @@ func TestIpcSendAbort(t *testing.T) {
 	MustSend(t, sock, make([]byte, 1024*1024))
 	time.Sleep(time.Millisecond * 100)
 	MustSucceed(t, c.Close())
-}
-
-func TestIpcListenerOptions(t *testing.T) {
-	sock := GetMockSocket()
-	defer MustClose(t, sock)
-	addr := AddrTestIPC()
-	l, e := tran.NewListener(addr, sock)
-	MustSucceed(t, e)
-
-	MustBeError(t, l.SetOption(OptionIpcSocketOwner, true), mangos.ErrBadValue)
-	MustBeError(t, l.SetOption(OptionIpcSocketGroup, true), mangos.ErrBadValue)
-	MustBeError(t, l.SetOption(OptionIpcSocketPermissions, true), mangos.ErrBadValue)
-	MustBeError(t, l.SetOption(OptionIpcSocketPermissions, os.ModeDir), mangos.ErrBadValue)
-	MustSucceed(t, l.SetOption(OptionIpcSocketPermissions, uint32(0642)))
-	MustSucceed(t, l.SetOption(OptionIpcSocketPermissions, os.FileMode(0642)))
-	MustSucceed(t, l.SetOption(OptionIpcSocketOwner, 0))
-	MustSucceed(t, l.SetOption(OptionIpcSocketGroup, 0))
-
-	MustSucceed(t, l.Listen())
-	i, e := os.Stat(strings.TrimPrefix(addr, "ipc://"))
-	MustSucceed(t, e)
-	MustBeTrue(t, i.Mode()&os.ModePerm == 0642)
 }

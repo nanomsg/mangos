@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !nacl && !plan9 && !wasm
-// +build !nacl,!plan9,!wasm
+//go:build windows
+// +build windows
 
-package ipc
+package winpipe
 
 import (
 	"io/ioutil"
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 		panic("Failed to determine working directory")
 	}
 
-	dir, err := ioutil.TempDir("", "ipctest")
+	dir, err := ioutil.TempDir("", "winpipetest")
 	if err != nil {
 		panic("Failed to create directory")
 	}
@@ -51,48 +51,48 @@ func TestMain(m *testing.M) {
 	os.Exit(v)
 }
 
-func TestIpcRecvMax(t *testing.T) {
+func TestWinpipeRecvMax(t *testing.T) {
 	test.TranVerifyMaxRecvSize(t, tran, nil, nil)
 }
 
-func TestIpcOptions(t *testing.T) {
+func TestWinpipeOptions(t *testing.T) {
 	test.TranVerifyInvalidOption(t, tran)
 	test.TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
 }
 
-func TestIpcScheme(t *testing.T) {
+func TestWinpipeScheme(t *testing.T) {
 	test.TranVerifyScheme(t, tran)
 }
-func TestIpcAcceptWithoutListen(t *testing.T) {
+func TestWinpipeAcceptWithoutListen(t *testing.T) {
 	test.TranVerifyAcceptWithoutListen(t, tran)
 }
-func TestIpcListenAndAccept(t *testing.T) {
+func TestWinpipeListenAndAccept(t *testing.T) {
 	test.TranVerifyListenAndAccept(t, tran, nil, nil)
 }
-func TestIpcDuplicateListen(t *testing.T) {
+func TestWinpipeDuplicateListen(t *testing.T) {
 	test.TranVerifyDuplicateListen(t, tran, nil)
 }
-func TestIpcConnectionRefused(t *testing.T) {
+func TestWinpipeConnectionRefused(t *testing.T) {
 	test.TranVerifyConnectionRefused(t, tran, nil)
 }
-func TestIpcHandshake(t *testing.T) {
+func TestWinpipeHandshake(t *testing.T) {
 	test.TranVerifyHandshakeFail(t, tran, nil, nil)
 }
-func TestIpcSendRecv(t *testing.T) {
+func TestWinpipeSendRecv(t *testing.T) {
 	test.TranVerifySendRecv(t, tran, nil, nil)
 }
-func TestIpcListenerClosed(t *testing.T) {
+func TestWinpipeListenerClosed(t *testing.T) {
 	test.TranVerifyListenerClosed(t, tran, nil)
 }
-func TestIpcMessageSize(t *testing.T) {
+func TestWinpipeMessageSize(t *testing.T) {
 	test.TranVerifyMessageSizes(t, tran, nil, nil)
 }
-func TestIpcMessageHeader(t *testing.T) {
+func TestWinpipeMessageHeader(t *testing.T) {
 	test.TranVerifyMessageHeader(t, tran, nil, nil)
 }
-func TestIpcVerifyPipeAddresses(t *testing.T) {
+func TestWinpipeVerifyPipeAddresses(t *testing.T) {
 	test.TranVerifyPipeAddresses(t, tran, nil, nil)
 }
-func TestIpcVerifyPipeOptions(t *testing.T) {
+func TestWinpipeVerifyPipeOptions(t *testing.T) {
 	test.TranVerifyPipeOptions2(t, tran, nil, nil)
 }
