@@ -1,4 +1,4 @@
-// Copyright 2020 The Mangos Authors
+// Copyright 2026 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use file except in compliance with the License.
@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build solaris && cgo
-// +build solaris,cgo
+//go:build linux
+// +build linux
 
-package ipc
+package unix
 
 import (
 	"os"
@@ -26,12 +26,12 @@ import (
 	. "go.nanomsg.org/mangos/v3/internal/test"
 )
 
-func TestIpcPeerIdSolaris(t *testing.T) {
+func TestUnixPeerIdLinux(t *testing.T) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
 	defer MustClose(t, sock1)
 	defer MustClose(t, sock2)
-	addr := AddrTestIPC()
+	addr := AddrTestUnix()
 	l, e := sock1.NewListener(addr, nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
@@ -60,10 +60,4 @@ func TestIpcPeerIdSolaris(t *testing.T) {
 	gid, ok := v.(int)
 	MustBeTrue(t, ok)
 	MustBeTrue(t, gid == os.Getgid())
-
-	v, err = p.GetOption(mangos.OptionPeerZone)
-	MustSucceed(t, err)
-	zid, ok := v.(int)
-	MustBeTrue(t, ok)
-	MustBeTrue(t, zid == getZone())
 }

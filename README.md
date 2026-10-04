@@ -40,7 +40,17 @@ At present, all the Req/Rep, Pub/Sub, Pair, Bus, Push/Pull, and
 Surveyor/Respondent patterns are supported.
 This project also supports an experimental protocol called Star.
 
-Supported transports include TCP, inproc, IPC, WebSocket, WebSocket/TLS and TLS.
+Supported transports include TCP, inproc, UNIX domain sockets, Windows named
+pipes, WebSocket, WebSocket/TLS and TLS.
+
+Use `unix://PATH` for AF_UNIX sockets on POSIX systems or Windows systems with
+AF_UNIX support, and `winpipe://NAME` for Windows named pipes. The `ipc://`
+scheme remains a platform alias: it uses UNIX domain sockets on POSIX and named
+pipes on Windows. Applications using `ipc://` continue to work unchanged.
+Import `transport/unix` or `transport/winpipe` to enable the explicit transport,
+`transport/ipc` to enable the platform alias, or `transport/all` to enable all
+available transports. The options in `transport/ipc` remain compatible with
+the corresponding options in `transport/unix` and `transport/winpipe`.
 
 Basic interoperability with nanomsg and NNG has been verified (you can do
 so yourself with `nanocat` and `macat`) for all protocols and transports
@@ -94,6 +104,6 @@ Enjoy!
 
 ---
 
-Copyright 2025 The Mangos Authors
+Copyright 2026 The Mangos Authors
 
 mangos&trade;, Nanomsg&trade; and NNG&trade; are [trademarks](http://nanomsg.org/trademarks.html) of Garrett D'Amore.
