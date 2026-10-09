@@ -1,5 +1,5 @@
-github.com/Microsoft/go-winio v0.6.3-0.20260925173824-7e8af9b09c4b h1:/qT6tBD3/Q4Lib91UTNVeJWKRF2KamV272r0bH2HXbI=
-github.com/Microsoft/go-winio v0.6.3-0.20260925173824-7e8af9b09c4b/go.mod h1:ma0QpxizD4fyyzJ1C7MIblymTD2Nxz5Mho/3CepwIZg=
+github.com/Microsoft/go-winio v0.6.3 h1:M/52tsoyTfwaxajLnXZm7PqkbMGRH8iSWP+8fcg9MQ4=
+github.com/Microsoft/go-winio v0.6.3/go.mod h1:ma0QpxizD4fyyzJ1C7MIblymTD2Nxz5Mho/3CepwIZg=
 github.com/gdamore/optopia v0.2.0 h1:2t3+oyTrJ9e0jxmXqeacws1SFKu4eIrg+U87GjtlA8M=
 github.com/gdamore/optopia v0.2.0/go.mod h1:YKYEwo5C1Pa617H7NlPcmQXl+vG6YnSSNB44n8dNL0Q=
 github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg=
