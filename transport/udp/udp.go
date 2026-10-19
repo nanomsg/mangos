@@ -414,7 +414,11 @@ func (l *listener) handlePacket(b []byte, remote *net.UDPAddr) {
 			l.sendDisc(remote, discNoBuf)
 			return
 		}
-		p = newPipe(l.proto, l.maxRecv, l.conn.LocalAddr(), remote, func(data []byte) (int, error) { return l.conn.WriteToUDP(data, remote) }, nil)
+		// Keep the socket alive for this pipe's send function.  The listener
+		// clears l.conn once its final pipe is removed, so the closure must not
+		// consult l.conn after dropping l.mu.
+		conn := l.conn
+		p = newPipe(l.proto, l.maxRecv, conn.LocalAddr(), remote, func(data []byte) (int, error) { return conn.WriteToUDP(data, remote) }, nil)
 		p.sendMax = int(h.length)
 		p.setRefresh(h.refresh)
 		p.remove = l.remove
@@ -561,6 +565,10 @@ func (p *pipe) refreshDialer() {
 		t := time.NewTimer(p.refreshInterval())
 		select {
 		case <-t.C:
+			if p.expired(time.Now()) {
+				_ = p.Close()
+				return
+			}
 			if p.sendCReq() != nil {
 				return
 			}
