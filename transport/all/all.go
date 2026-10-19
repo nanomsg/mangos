@@ -25,6 +25,7 @@ import (
 	_ "go.nanomsg.org/mangos/v3/transport/ipc"
 	_ "go.nanomsg.org/mangos/v3/transport/tcp"
 	_ "go.nanomsg.org/mangos/v3/transport/tlstcp"
+	_ "go.nanomsg.org/mangos/v3/transport/udp"
 	_ "go.nanomsg.org/mangos/v3/transport/unix"
 	_ "go.nanomsg.org/mangos/v3/transport/winpipe"
 	_ "go.nanomsg.org/mangos/v3/transport/ws"
