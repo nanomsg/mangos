@@ -17,9 +17,9 @@ package ws
 import (
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"testing"
-	"time"
 
 	"go.nanomsg.org/mangos/v3/protocol/rep"
 	"go.nanomsg.org/mangos/v3/protocol/req"
@@ -29,17 +29,11 @@ func TestWebsockPath(t *testing.T) {
 	sockReq, _ := req.NewSocket()
 	sockRep, _ := rep.NewSocket()
 	tran := Transport
-	l, e := tran.NewListener("ws://127.0.0.1:3335/mysock", sockReq)
+	l, e := tran.NewListener("ws://127.0.0.1:0/mysock", sockReq)
 	if e != nil {
 		t.Errorf("Failed new Listener: %v", e)
 		return
 	}
-	d, e := tran.NewDialer("ws://127.0.0.1:3335/boguspath", sockRep)
-	if e != nil {
-		t.Errorf("Failed new Dialer: %v", e)
-		return
-	}
-
 	if e = l.Listen(); e != nil {
 		t.Errorf("Listen failed")
 		return
@@ -47,6 +41,11 @@ func TestWebsockPath(t *testing.T) {
 	defer func() {
 		_ = l.Close()
 	}()
+	d, e := tran.NewDialer(l.Address()[:len(l.Address())-len("mysock")]+"boguspath", sockRep)
+	if e != nil {
+		t.Errorf("Failed new Dialer: %v", e)
+		return
+	}
 	p, e := d.Dial()
 	if p != nil {
 		defer func() {
@@ -69,7 +68,7 @@ func TestWebsockMux(t *testing.T) {
 	sockReq, _ := req.NewSocket()
 	sockRep, _ := rep.NewSocket()
 	tran := Transport
-	l, e := tran.NewListener("ws://127.0.0.1:3336/mysock", sockReq)
+	l, e := tran.NewListener("ws://127.0.0.1:0/mysock", sockReq)
 	if e != nil {
 		t.Errorf("Failed new Listener: %v", e)
 		return
@@ -80,12 +79,6 @@ func TestWebsockMux(t *testing.T) {
 	}
 	mux := muxi.(*http.ServeMux)
 	mux.HandleFunc("/bogus", bogusHandler)
-	d, e := tran.NewDialer("ws://127.0.0.1:3336/bogus", sockRep)
-	if e != nil {
-		t.Errorf("Failed new Dialer: %v", e)
-		return
-	}
-
 	if e = l.Listen(); e != nil {
 		t.Errorf("Listen failed")
 		return
@@ -93,6 +86,12 @@ func TestWebsockMux(t *testing.T) {
 	defer func() {
 		_ = l.Close()
 	}()
+	addr := l.Address()
+	d, e := tran.NewDialer(addr[:len(addr)-len("mysock")]+"bogus", sockRep)
+	if e != nil {
+		t.Errorf("Failed new Dialer: %v", e)
+		return
+	}
 
 	p, e := d.Dial()
 	if p != nil {
@@ -106,12 +105,13 @@ func TestWebsockMux(t *testing.T) {
 	}
 
 	// Now let's try to use http client.
-	resp, err := http.Get("http://127.0.0.1:3336/bogus")
+	resp, err := http.Get("http://" + addr[len("ws://"):len(addr)-len("mysock")] + "bogus")
 
 	if err != nil {
 		t.Errorf("Get of boguspath failed: %v", err)
 		return
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		t.Errorf("Response code wrong: %d", resp.StatusCode)
@@ -134,7 +134,7 @@ func TestWebsockHandler(t *testing.T) {
 	sockReq, _ := req.NewSocket()
 	sockRep, _ := rep.NewSocket()
 	tran := Transport
-	l, e := tran.NewListener("ws://127.0.0.1:3337/mysock", sockReq)
+	l, e := tran.NewListener("ws://127.0.0.1:0/mysock", sockReq)
 	if e != nil {
 		t.Errorf("Failed new Listener: %v", e)
 		return
@@ -149,17 +149,19 @@ func TestWebsockHandler(t *testing.T) {
 	mux.HandleFunc("/bogus", bogusHandler)
 	mux.Handle("/mysock", handler)
 
-	// Note that we are *counting* on this to die gracefully when our
-	// program exits. There appears to be no way to shutdown http
-	// instances gracefully.
-	go func() {
-		_ = http.ListenAndServe("127.0.0.1:3337", mux)
+	server, e := net.Listen("tcp", "127.0.0.1:0")
+	if e != nil {
+		t.Errorf("Failed to create HTTP listener: %v", e)
+		return
+	}
+	defer func() {
+		_ = server.Close()
 	}()
-
-	// Give the server a chance to startup, as we are running it asynch
-	time.Sleep(time.Second / 10)
-
-	d, e := tran.NewDialer("ws://127.0.0.1:3337/bogus", sockRep)
+	go func() {
+		_ = http.Serve(server, mux)
+	}()
+	addr := "ws://" + server.Addr().String()
+	d, e := tran.NewDialer(addr+"/bogus", sockRep)
 	if e != nil {
 		t.Errorf("Failed new Dialer: %v", e)
 		return
@@ -181,12 +183,13 @@ func TestWebsockHandler(t *testing.T) {
 	}
 
 	// Now let's try to use http client.
-	resp, err := http.Get("http://127.0.0.1:3337/bogus")
+	resp, err := http.Get("http://" + server.Addr().String() + "/bogus")
 
 	if err != nil {
 		t.Errorf("Get of boguspath failed: %v", err)
 		return
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		t.Errorf("Response code wrong: %d", resp.StatusCode)
