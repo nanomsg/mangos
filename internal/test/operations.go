@@ -83,7 +83,7 @@ func ConnectPairVia(t *testing.T, addr string, s1, s2 mangos.Socket, o1, o2 map[
 			wg2.Done()
 		}
 	})
-	MustSucceed(t, s1.ListenOptions(addr, o1))
+	addr = listen(t, s1, addr, o1)
 	MustSucceed(t, s2.SetOption(mangos.OptionDialAsynch, true))
 	MustSucceed(t, s2.DialOptions(addr, o2))
 
@@ -91,6 +91,15 @@ func ConnectPairVia(t *testing.T, addr string, s1, s2 mangos.Socket, o1, o2 map[
 	wg2.Wait()
 	s1.SetPipeEventHook(h1)
 	s2.SetPipeEventHook(h2)
+}
+
+// listen starts a listener and returns its address.  For transports that use
+// port zero, the returned address includes the port selected by the OS.
+func listen(t *testing.T, s mangos.Socket, addr string, options map[string]interface{}) string {
+	l, err := s.NewListener(addr, options)
+	MustSucceed(t, err)
+	MustSucceed(t, l.Listen())
+	return l.Address()
 }
 
 // ConnectPair is like ConnectPairVia but uses inproc.

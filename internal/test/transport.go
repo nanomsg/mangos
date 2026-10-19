@@ -53,7 +53,7 @@ func getScratchAddr(tran transport.Transport) string {
 	case "inproc":
 		return AddrTestInp()
 	case "tcp":
-		return AddrTestTCP()
+		return "tcp://127.0.0.1:0"
 	case "ipc":
 		return AddrTestIPC()
 	case "unix":
@@ -61,11 +61,11 @@ func getScratchAddr(tran transport.Transport) string {
 	case "winpipe":
 		return AddrTestWinpipe()
 	case "tls+tcp":
-		return AddrTestTLS()
+		return "tls+tcp://127.0.0.1:0"
 	case "ws":
-		return AddrTestWS()
+		return "ws://127.0.0.1:0/"
 	case "wss":
-		return AddrTestWSS()
+		return "wss://127.0.0.1:0/"
 	}
 	return "unknown://"
 }
@@ -275,8 +275,8 @@ func TranVerifyDuplicateListen(t *testing.T, tran transport.Transport, opts map[
 	defer MustClose(t, sock2)
 	addr := getScratchAddr(tran)
 	l1, _ := sock1.NewListener(addr, opts)
-	l2, _ := sock2.NewListener(addr, opts)
 	MustSucceed(t, l1.Listen())
+	l2, _ := sock2.NewListener(l1.Address(), opts)
 	MustFail(t, l2.Listen()) // Cannot validate ErrAddrInUse because Windows
 }
 
@@ -287,11 +287,11 @@ func TranVerifyListenAndAccept(t *testing.T, tran transport.Transport, dOpts, lO
 	defer MustClose(t, s1)
 	defer MustClose(t, s2)
 	addr := getScratchAddr(tran)
-	d, e := s1.NewDialer(addr, dOpts)
-	MustSucceed(t, e)
 	l, e := s2.NewListener(addr, lOpts)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
+	d, e := s1.NewDialer(l.Address(), dOpts)
+	MustSucceed(t, e)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -356,11 +356,11 @@ func TranVerifyHandshakeFail(t *testing.T, tran transport.Transport, dOpts, lOpt
 	defer MustClose(t, s1)
 	defer MustClose(t, s2)
 	addr := getScratchAddr(tran)
-	d, e := s1.NewDialer(addr, dOpts)
-	MustSucceed(t, e)
 	l, e := s2.NewListener(addr, lOpts)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
+	d, e := s1.NewDialer(l.Address(), dOpts)
+	MustSucceed(t, e)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -389,12 +389,11 @@ func TranVerifySendRecv(t *testing.T, tran transport.Transport, dOpts, lOpts map
 	MustSucceed(t, tx.SetOption(mangos.OptionSendDeadline, time.Second))
 
 	addr := getScratchAddr(tran)
-	d, e := tx.NewDialer(addr, dOpts)
-	MustSucceed(t, e)
 	l, e := rx.NewListener(addr, lOpts)
 	MustSucceed(t, e)
-
 	MustSucceed(t, l.Listen())
+	d, e := tx.NewDialer(l.Address(), dOpts)
+	MustSucceed(t, e)
 	MustSucceed(t, d.Dial())
 
 	for i := 0; i < 10; i++ {
@@ -456,7 +455,7 @@ func TranVerifyPipeOptions(t *testing.T, tran transport.Transport, dOpts, lOpts 
 	MustSucceed(t, rx.SetOption(mangos.OptionSendDeadline, time.Second))
 	MustSucceed(t, tx.SetOption(mangos.OptionSendDeadline, time.Second))
 
-	MustSucceed(t, rx.ListenOptions(addr, lOpts))
+	addr = listen(t, rx, addr, lOpts)
 	MustSucceed(t, tx.DialOptions(addr, dOpts))
 
 	MustSendString(t, tx, "hello")
@@ -577,7 +576,7 @@ func TranVerifyDialNoCert(t *testing.T, tran transport.Transport) {
 	addr := getScratchAddr(tran)
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
-	MustSucceed(t, sock.ListenOptions(addr, opts))
+	addr = listen(t, sock, addr, opts)
 
 	// Unfortunately the tls package doesn't allow us to distinguish
 	// the various errors.
@@ -592,7 +591,7 @@ func TranVerifyDialInsecure(t *testing.T, tran transport.Transport) {
 	addr := getScratchAddr(tran)
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
-	MustSucceed(t, sock.ListenOptions(addr, opts))
+	addr = listen(t, sock, addr, opts)
 
 	opts = make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = &tls.Config{}
@@ -616,7 +615,7 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
-	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	addr = listen(t, sock1, addr, lOpts)
 	MustSucceed(t, sock2.DialOptions(addr, dOpts))
 
 	for i := 0; i < 20; i++ {
@@ -662,7 +661,7 @@ func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpt
 	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
-	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	addr = listen(t, sock1, addr, lOpts)
 	MustSucceed(t, sock2.DialOptions(addr, dOpts))
 
 	m := mangos.NewMessage(0)
@@ -684,7 +683,7 @@ func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpt
 	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
-	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	addr = listen(t, sock1, addr, lOpts)
 	MustSucceed(t, sock2.DialOptions(addr, dOpts))
 
 	m := mangos.NewMessage(0)
@@ -740,7 +739,7 @@ func TranVerifyPipeOptions2(t *testing.T, tran transport.Transport, dOpts, lOpts
 	MustSucceed(t, sock1.SetOption(mangos.OptionSendDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, sock2.SetOption(mangos.OptionSendDeadline, time.Second))
-	MustSucceed(t, sock1.ListenOptions(addr, lOpts))
+	addr = listen(t, sock1, addr, lOpts)
 	MustSucceed(t, sock2.DialOptions(addr, dOpts))
 
 	m := mangos.NewMessage(0)
