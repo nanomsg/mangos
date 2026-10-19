@@ -259,6 +259,25 @@ func TestDialerHonorsNegotiatedRefresh(t *testing.T) {
 	}
 }
 
+func TestDialerExpiresWithoutPeerRefresh(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	proto := sock.Info()
+	p := newPipe(proto, udpMaxPayload, &net.UDPAddr{}, &net.UDPAddr{}, func(b []byte) (int, error) {
+		return len(b), nil
+	}, nil)
+	p.mu.Lock()
+	p.refresh = time.Millisecond
+	p.expires = time.Now().Add(-time.Millisecond)
+	p.mu.Unlock()
+	go p.refreshDialer()
+	select {
+	case <-p.closeq:
+	case <-time.After(time.Second):
+		t.Fatal("dialer pipe did not expire")
+	}
+}
+
 func TestOversizeInboundDataClosesPipe(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
