@@ -282,6 +282,8 @@ func (c *context) SendMsg(m *protocol.Message) error {
 			}
 			s.Unlock()
 		})
+	} else if c.sendExpire < 0 {
+		expired = true
 	}
 
 	s.send()
@@ -337,6 +339,10 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	}
 
 	for id == c.reqID && c.repMsg == nil {
+		if c.recvExpire < 0 {
+			c.cancel()
+			return nil, protocol.ErrRecvTimeout
+		}
 		c.cond.Wait()
 	}
 
