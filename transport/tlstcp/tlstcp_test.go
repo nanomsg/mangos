@@ -21,6 +21,7 @@ import (
 
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/internal/test"
+	"go.nanomsg.org/mangos/v3/protocol/pair"
 )
 
 var tran = Transport
@@ -66,6 +67,53 @@ func TestTlsTcpConnectionRefused(t *testing.T) {
 }
 func TestTlsTcpHandshake(t *testing.T) {
 	test.TranVerifyHandshakeFail(t, tran, dOpts, lOpts)
+}
+
+func TestTlsConnStateAtPipeEvent(t *testing.T) {
+	server := test.GetSocket(t, pair.NewSocket)
+	defer test.MustClose(t, server)
+	client := test.GetSocket(t, pair.NewSocket)
+	defer test.MustClose(t, client)
+	serverConfig := test.GetTLSConfig(t, true).Clone()
+	serverConfig.ClientAuth = tls.RequireAnyClientCert
+	listenerOpts := map[string]interface{}{
+		mangos.OptionTLSConfig: serverConfig,
+	}
+
+	type result struct {
+		state tls.ConnectionState
+		ok    bool
+	}
+	states := make(chan result, 1)
+	server.SetPipeEventHook(func(ev mangos.PipeEvent, p mangos.Pipe) {
+		if ev != mangos.PipeEventAttaching {
+			return
+		}
+		state, ok := func() (tls.ConnectionState, bool) {
+			v, err := p.GetOption(mangos.OptionTLSConnState)
+			if err != nil {
+				return tls.ConnectionState{}, false
+			}
+			state, ok := v.(tls.ConnectionState)
+			return state, ok
+		}()
+		states <- result{state: state, ok: ok}
+	})
+
+	listener, err := server.NewListener(test.AddrTestTLS(), listenerOpts)
+	test.MustSucceed(t, err)
+	test.MustSucceed(t, listener.Listen())
+	test.MustSucceed(t, client.DialOptions(listener.Address(), dOpts))
+
+	select {
+	case result := <-states:
+		test.MustBeTrue(t, result.ok)
+		test.MustBeTrue(t, result.state.HandshakeComplete)
+		test.MustBeTrue(t, result.state.Version != 0)
+		test.MustBeTrue(t, len(result.state.PeerCertificates) != 0)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for pipe event")
+	}
 }
 func TestTlsTcpSendRecv(t *testing.T) {
 	test.TranVerifySendRecv(t, tran, dOpts, lOpts)

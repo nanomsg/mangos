@@ -159,6 +159,7 @@ type listener struct {
 	config      *tls.Config
 	hs          transport.Handshaker
 	closeQ      chan struct{}
+	pending     map[*tls.Conn]struct{}
 	once        sync.Once
 	lock        sync.Mutex
 }
@@ -173,6 +174,7 @@ func (l *listener) Listen() error {
 	l.lock.Lock()
 	config := l.config
 	if config == nil {
+		l.lock.Unlock()
 		return mangos.ErrTLSNoConfig
 	}
 	if config.GetCertificate == nil && (config.Certificates == nil || len(config.Certificates) == 0) {
@@ -202,18 +204,52 @@ func (l *listener) Listen() error {
 				}
 			}
 
-			tc := conn.(*tls.Conn)
-			p := transport.NewConnPipe(conn, l.proto)
-			l.lock.Lock()
-			p.SetOption(mangos.OptionMaxRecvSize, l.maxRecvSize)
-			p.SetOption(mangos.OptionTLSConnState, tc.ConnectionState())
-			l.lock.Unlock()
-
-			l.hs.Start(p)
+			// The TLS handshake must complete before this connection is
+			// made into a Pipe.  In particular, applications use pipe event
+			// hooks to examine the TLS connection state before accepting a
+			// pipe.  Do this in a separate goroutine so a peer that never
+			// completes TLS cannot prevent later connections from being
+			// accepted.
+			go l.start(conn.(*tls.Conn))
 		}
 	}()
 
 	return nil
+}
+
+func (l *listener) start(conn *tls.Conn) {
+	l.lock.Lock()
+	select {
+	case <-l.closeQ:
+		l.lock.Unlock()
+		_ = conn.Close()
+		return
+	default:
+	}
+	l.pending[conn] = struct{}{}
+	l.lock.Unlock()
+
+	defer func() {
+		l.lock.Lock()
+		delete(l.pending, conn)
+		l.lock.Unlock()
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), transport.DefaultHandshakeTimeout)
+	err := conn.HandshakeContext(ctx)
+	cancel()
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+
+	p := transport.NewConnPipe(conn, l.proto)
+	l.lock.Lock()
+	p.SetOption(mangos.OptionMaxRecvSize, l.maxRecvSize)
+	p.SetOption(mangos.OptionTLSConnState, conn.ConnectionState())
+	l.lock.Unlock()
+
+	l.hs.Start(p)
 }
 
 func (l *listener) Address() string {
@@ -232,11 +268,16 @@ func (l *listener) Accept() (transport.Pipe, error) {
 
 func (l *listener) Close() error {
 	l.once.Do(func() {
+		close(l.closeQ)
+		l.lock.Lock()
 		if l.l != nil {
 			_ = l.l.Close()
 		}
+		for conn := range l.pending {
+			_ = conn.Close()
+		}
+		l.lock.Unlock()
 		l.hs.Close()
-		close(l.closeQ)
 	})
 	return nil
 }
@@ -336,8 +377,9 @@ func (t tlsTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, e
 // NewListener implements the Transport NewListener method.
 func (t tlsTran) NewListener(addr string, sock mangos.Socket) (transport.Listener, error) {
 	l := &listener{
-		proto:  sock.Info(),
-		closeQ: make(chan struct{}),
+		proto:   sock.Info(),
+		closeQ:  make(chan struct{}),
+		pending: make(map[*tls.Conn]struct{}),
 	}
 
 	var err error
