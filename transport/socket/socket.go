@@ -63,9 +63,9 @@ func (l *listener) Listen() error {
 
 func (l *listener) start(c net.Conn) {
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	closed := l.closed
 	maxRecv := l.maxRecv
-	l.mu.Unlock()
 	if closed {
 		_ = c.Close()
 		return
