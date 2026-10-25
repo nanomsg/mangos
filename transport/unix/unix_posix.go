@@ -36,13 +36,13 @@ func isSocket(path string) bool {
 	return err == nil && st.Mode()&os.ModeType == os.ModeSocket
 }
 
-func (l *listener) setPermissions() {
+func (l *listener) setPermissions(path string) {
 	// Best effort: socket permissions are not enforced on all POSIX systems.
 	if l.chown {
-		_ = os.Chown(l.addr.String(), l.owner, l.group)
+		_ = os.Chown(path, l.owner, l.group)
 	}
 	if l.chmod {
-		_ = os.Chmod(l.addr.String(), os.FileMode(l.mode))
+		_ = os.Chmod(path, os.FileMode(l.mode))
 	}
 }
 

@@ -137,8 +137,8 @@ func (l *listener) Listen() error {
 		if err != nil {
 			return err
 		}
-		l.setPermissions()
 	}
+	l.setPermissions(listener.Addr().String())
 
 	l.listener = listener
 	go func() {

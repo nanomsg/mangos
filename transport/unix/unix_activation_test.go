@@ -42,10 +42,16 @@ func TestUnixSocketActivation(t *testing.T) {
 	MustSucceed(t, err)
 	MustSucceed(t, file.Close())
 	// SetOption consumes fd.
-	l, err := sock.NewListener("unix://ignored", map[string]interface{}{mangos.OptionListenFD: fd})
+	l, err := sock.NewListener("unix://ignored", map[string]interface{}{
+		mangos.OptionListenFD:   fd,
+		OptionSocketPermissions: uint32(0600),
+	})
 	MustSucceed(t, err)
 	MustSucceed(t, base.Close())
 	MustSucceed(t, l.Listen())
+	info, err := os.Stat(name)
+	MustSucceed(t, err)
+	MustBeTrue(t, info.Mode()&os.ModePerm == 0600)
 
 	conn, err := net.Dial("unix", name)
 	MustSucceed(t, err)

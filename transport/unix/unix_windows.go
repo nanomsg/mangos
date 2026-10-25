@@ -49,7 +49,7 @@ func isSocket(path string) bool {
 	return data.FileAttributes&windows.FILE_ATTRIBUTE_REPARSE_POINT != 0 && data.Reserved0 == afUnixTag
 }
 
-func (l *listener) setPermissions() {}
+func (l *listener) setPermissions(string) {}
 
 func (l *listener) setOption(string, interface{}) error {
 	// POSIX ownership and permissions do not apply to Windows AF_UNIX sockets.
