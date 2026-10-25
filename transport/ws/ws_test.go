@@ -84,8 +84,10 @@ func TestWsResolverChange(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
-	addr := AddrTestWS()
-	MustSucceed(t, sock.Listen(addr))
+	l, e := sock.NewListener(GetScratchAddr(tran), nil)
+	MustSucceed(t, e)
+	MustSucceed(t, l.Listen())
+	addr := l.Address()
 
 	d, e := tran.NewDialer(addr, sock)
 	MustSucceed(t, e)
@@ -117,10 +119,10 @@ func TestWsSendAbort(t *testing.T) {
 	wd := &websocket.Dialer{}
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	addr := AddrTestWS()
-	l, e := sock.NewListener(addr, nil)
+	l, e := sock.NewListener(GetScratchAddr(tran), nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
+	addr := l.Address()
 
 	wd.Subprotocols = []string{sock.Info().PeerName + ".sp.nanomsg.org"}
 	ws, _, e := wd.Dial(addr, nil)
@@ -151,21 +153,21 @@ func TestWsCheckOriginDisabled(t *testing.T) {
 	defer MustClose(t, sock)
 	peer := GetMockSocket()
 	defer MustClose(t, peer)
-	addr := AddrTestWS()
-	l, e := sock.NewListener(addr, nil)
+	l, e := sock.NewListener(GetScratchAddr(tran), nil)
+	MustSucceed(t, e)
 	MustSucceed(t, l.SetOption(OptionWebSocketCheckOrigin, false))
 	MustSucceed(t, l.Listen())
+	addr := l.Address()
 	MustSucceed(t, peer.Dial(addr))
-	MustSucceed(t, e)
 }
 
 func TestWsBadWsVersion(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	addr := AddrTestWS()
-	l, e := sock.NewListener(addr, nil)
+	l, e := sock.NewListener(GetScratchAddr(tran), nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
+	addr := l.Address()
 
 	url := "http://" + addr[len("ws://"):]
 	req, e := http.NewRequest("GET", url, strings.NewReader(""))
@@ -187,11 +189,13 @@ func TestWsCloseOneOfTwo(t *testing.T) {
 	peer := GetMockSocket()
 	defer MustClose(t, peer)
 
-	addr := AddrTestWS()
+	addr := GetScratchAddr(tran)
 	addr1 := addr + "redline"
 	l1, e := sock1.NewListener(addr1, nil)
 	MustSucceed(t, e)
 	MustSucceed(t, l1.Listen())
+	addr1 = l1.Address()
+	addr = strings.TrimSuffix(addr1, "redline")
 
 	muxi, e := l1.GetOption(OptionWebSocketMux)
 	if e != nil {
@@ -221,7 +225,6 @@ func TestWsCloseOneOfTwo(t *testing.T) {
 }
 
 func TestWsClosePending(t *testing.T) {
-	addr := AddrTestWS()
 	sock1 := GetMockSocket()
 	defer MustClose(t, sock1)
 	sock2 := GetMockSocket()
@@ -229,9 +232,10 @@ func TestWsClosePending(t *testing.T) {
 	sock3 := GetMockSocket()
 	defer MustClose(t, sock3)
 
-	l, e := Transport.NewListener(addr, sock1)
+	l, e := Transport.NewListener(GetScratchAddr(tran), sock1)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
+	addr := l.Address()
 
 	// We don't *accept* them.
 
