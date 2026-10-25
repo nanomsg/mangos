@@ -61,6 +61,11 @@ const (
 	// connections from any origin.
 	OptionWebSocketCheckOrigin = "WEBSOCKET-CHECKORIGIN"
 
+	// OptionWebSocketFollowRedirects controls whether the Dialer follows HTTP
+	// redirects during the WebSocket handshake. By default, redirects are
+	// rejected and reported as mangos.ErrBadProto.
+	OptionWebSocketFollowRedirects = "WEBSOCKET-FOLLOWREDIRECTS"
+
 	// Transport is a transport.Transport for WebSocket
 	Transport = wsTran(0)
 )
@@ -91,7 +96,7 @@ func (o options) set(name string, val interface{}) error {
 			return nil
 		}
 		return mangos.ErrBadValue
-	case OptionWebSocketCheckOrigin:
+	case OptionWebSocketCheckOrigin, OptionWebSocketFollowRedirects:
 		if v, ok := val.(bool); ok {
 			o[name] = v
 			return nil
@@ -199,11 +204,18 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	httpTransport := &http.Transport{
 		ForceAttemptHTTP2: false,
 	}
+	defer httpTransport.CloseIdleConnections()
 	if v, ok := d.opts[mangos.OptionTLSConfig]; ok {
 		httpTransport.TLSClientConfig = v.(*tls.Config)
 	}
+	httpClient := &http.Client{Transport: httpTransport}
+	if follow, _ := d.opts.get(OptionWebSocketFollowRedirects); !follow.(bool) {
+		httpClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
 	wd := &websocket.DialOptions{
-		HTTPClient:   &http.Client{Transport: httpTransport},
+		HTTPClient:   httpClient,
 		Subprotocols: []string{d.proto.PeerName + ".sp.nanomsg.org"},
 	}
 
@@ -512,6 +524,7 @@ func (wsTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, erro
 
 	d.opts[mangos.OptionNoDelay] = true
 	d.opts[mangos.OptionMaxRecvSize] = 0
+	d.opts[OptionWebSocketFollowRedirects] = false
 
 	return d, nil
 }
@@ -533,6 +546,7 @@ func (wsTran) listener(addr string, sock mangos.Socket) (*listener, error) {
 		opts:  make(map[string]interface{}),
 	}
 	l.opts[mangos.OptionMaxRecvSize] = 0
+	l.opts[OptionWebSocketFollowRedirects] = false
 	l.cv.L = &l.lock
 	l.acceptOpts.Subprotocols = []string{l.proto.SelfName + ".sp.nanomsg.org"}
 

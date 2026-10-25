@@ -17,6 +17,7 @@ package ws
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +35,7 @@ func TestWsOptions(t *testing.T) {
 	TranVerifyIntOption(t, tran, mangos.OptionMaxRecvSize)
 	TranVerifyNoDelayOption(t, tran)
 	TranVerifyBoolOption(t, tran, OptionWebSocketCheckOrigin)
+	TranVerifyBoolOption(t, tran, OptionWebSocketFollowRedirects)
 }
 
 func TestWsScheme(t *testing.T) {
@@ -158,6 +160,38 @@ func TestWsCheckOriginDisabled(t *testing.T) {
 	MustSucceed(t, l.Listen())
 	MustSucceed(t, peer.Dial(addr))
 	MustSucceed(t, e)
+}
+
+func TestWsRedirects(t *testing.T) {
+	clientSock := GetMockSocket()
+	defer MustClose(t, clientSock)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "/target", http.StatusTemporaryRedirect)
+			return
+		}
+		ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			Subprotocols: []string{clientSock.Info().PeerName + ".sp.nanomsg.org"},
+		})
+		if err != nil {
+			t.Errorf("accept redirected WebSocket: %v", err)
+			return
+		}
+		defer ws.CloseNow()
+	}))
+	defer server.Close()
+
+	addr := "ws" + strings.TrimPrefix(server.URL, "http") + "/redirect"
+	d, e := Transport.NewDialer(addr, clientSock)
+	MustSucceed(t, e)
+	_, e = d.Dial()
+	MustBeError(t, e, mangos.ErrBadProto)
+
+	MustSucceed(t, d.SetOption(OptionWebSocketFollowRedirects, true))
+	p, e := d.Dial()
+	MustSucceed(t, e)
+	MustSucceed(t, p.Close())
 }
 
 func TestWsBadWsVersion(t *testing.T) {
