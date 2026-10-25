@@ -53,7 +53,7 @@ func TestTcpSocketActivationRejectsOtherListener(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
-	name := os.TempDir() + "/mangos-tcp-activation.sock"
+	name := AddrTestUnix()[len("unix://"):]
 	_ = os.Remove(name)
 	base, err := net.Listen("unix", name)
 	MustSucceed(t, err)
