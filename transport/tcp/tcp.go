@@ -45,7 +45,13 @@ type dialer struct {
 }
 
 func (d *dialer) Dial() (_ transport.Pipe, err error) {
-	conn, err := d.d.Dial("tcp", d.addr)
+	addr, err := transport.ResolveTCPAddr(d.addr)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), transport.DefaultDialTimeout)
+	defer cancel()
+	conn, err := d.d.DialContext(ctx, "tcp", addr.String())
 	if err != nil {
 		return nil, err
 	}

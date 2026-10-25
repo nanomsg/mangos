@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,8 +52,29 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	maxRecvSize := d.maxRecvSize
 	d.lock.Unlock()
 
-	conn, err := tls.DialWithDialer(d.d, "tcp", d.addr, config)
+	addr, err := transport.ResolveTCPAddr(d.addr)
 	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), transport.DefaultDialTimeout)
+	rawConn, err := d.d.DialContext(ctx, "tcp", addr.String())
+	cancel()
+	if err != nil {
+		return nil, err
+	}
+	if config == nil {
+		config = &tls.Config{}
+	}
+	if config.ServerName == "" {
+		config = config.Clone()
+		config.ServerName = d.addr[:strings.LastIndex(d.addr, ":")]
+	}
+	conn := tls.Client(rawConn, config)
+	ctx, cancel = context.WithTimeout(context.Background(), transport.DefaultHandshakeTimeout)
+	err = conn.HandshakeContext(ctx)
+	cancel()
+	if err != nil {
+		_ = rawConn.Close()
 		return nil, err
 	}
 	p := transport.NewConnPipe(conn, d.proto)

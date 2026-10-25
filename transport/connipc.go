@@ -24,10 +24,11 @@ import (
 func NewConnPipeIPC(c net.Conn, proto ProtocolInfo) ConnPipe {
 	p := &connipc{
 		conn: conn{
-			c:       c,
-			proto:   proto,
-			options: make(map[string]interface{}),
-			maxrx:   0,
+			c:                c,
+			proto:            proto,
+			handshakeTimeout: DefaultHandshakeTimeout,
+			options:          make(map[string]interface{}),
+			maxrx:            0,
 		},
 	}
 	p.options[mangos.OptionMaxRecvSize] = 0

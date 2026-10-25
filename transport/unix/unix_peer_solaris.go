@@ -50,14 +50,16 @@ import (
 import "C"
 
 func getPeer(c *net.UnixConn, pipe transport.ConnPipe) {
-	if f, err := c.File(); err == nil {
-		mc := &C.mycred_t{}
-		if C.getucred(C.int(f.Fd()), mc) == 0 {
-			pipe.SetOption(mangos.OptionPeerPID, int(mc.pid))
-			pipe.SetOption(mangos.OptionPeerUID, int(mc.uid))
-			pipe.SetOption(mangos.OptionPeerGID, int(mc.gid))
-			pipe.SetOption(mangos.OptionPeerZone, int(mc.zid))
-		}
+	if sc, err := c.SyscallConn(); err == nil {
+		sc.Control(func(fd uintptr) {
+			mc := &C.mycred_t{}
+			if C.getucred(C.int(fd), mc) == 0 {
+				pipe.SetOption(mangos.OptionPeerPID, int(mc.pid))
+				pipe.SetOption(mangos.OptionPeerUID, int(mc.uid))
+				pipe.SetOption(mangos.OptionPeerGID, int(mc.gid))
+				pipe.SetOption(mangos.OptionPeerZone, int(mc.zid))
+			}
+		})
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"go.nanomsg.org/mangos/v3"
 )
@@ -27,13 +28,23 @@ import (
 // assumption is that transports using this have similar wire protocols,
 // and conn is meant to be used as a building block.
 type conn struct {
-	c       net.Conn
-	proto   ProtocolInfo
-	open    bool
-	options map[string]interface{}
-	maxrx   int
+	c                net.Conn
+	proto            ProtocolInfo
+	open             bool
+	closed           bool
+	handshakeTimeout time.Duration
+	options          map[string]interface{}
+	maxrx            int
 	sync.Mutex
 }
+
+// DefaultDialTimeout bounds TCP connection establishment after DNS resolution.
+const DefaultDialTimeout = 10 * time.Second
+
+// DefaultHandshakeTimeout bounds protocol negotiation after a transport
+// connection is established.  It prevents a peer that never sends a header
+// from retaining a handshaker goroutine indefinitely.
+const DefaultHandshakeTimeout = 10 * time.Second
 
 // connipc is *almost* like a regular conn, but the IPC protocol insists
 // on stuffing a leading byte (valued 1) in front of messages.  This is for
@@ -92,12 +103,14 @@ func (p *conn) Send(msg *Message) error {
 // Close implements the Pipe Close method.
 func (p *conn) Close() error {
 	p.Lock()
-	defer p.Unlock()
-	if p.open {
-		p.open = false
-		return p.c.Close()
+	if p.closed {
+		p.Unlock()
+		return nil
 	}
-	return nil
+	p.closed = true
+	p.open = false
+	p.Unlock()
+	return p.c.Close()
 }
 
 func (p *conn) GetOption(n string) (interface{}, error) {
@@ -139,9 +152,10 @@ type ConnPipe interface {
 // SP messages once the lower layer connection is established.
 func NewConnPipe(c net.Conn, proto ProtocolInfo) ConnPipe {
 	p := &conn{
-		c:       c,
-		proto:   proto,
-		options: make(map[string]interface{}),
+		c:                c,
+		proto:            proto,
+		handshakeTimeout: DefaultHandshakeTimeout,
+		options:          make(map[string]interface{}),
 	}
 
 	p.options[mangos.OptionMaxRecvSize] = 0
@@ -166,6 +180,13 @@ type connHeader struct {
 // As a side effect, the peer's protocol number is stored in the conn.
 // Also, various properties are initialized.
 func (p *conn) handshake() error {
+	if p.handshakeTimeout > 0 {
+		if err := p.c.SetDeadline(time.Now().Add(p.handshakeTimeout)); err != nil {
+			return err
+		}
+		defer func() { _ = p.c.SetDeadline(time.Time{}) }()
+	}
+
 	var err error
 
 	h := connHeader{S: 'S', P: 'P', Proto: p.proto.Self}
@@ -190,6 +211,11 @@ func (p *conn) handshake() error {
 	if h.Proto != p.proto.Peer {
 		_ = p.c.Close()
 		return mangos.ErrBadProto
+	}
+	p.Lock()
+	defer p.Unlock()
+	if p.closed {
+		return mangos.ErrClosed
 	}
 	p.open = true
 	return nil
