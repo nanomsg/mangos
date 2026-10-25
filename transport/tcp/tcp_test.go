@@ -73,6 +73,15 @@ func TestTcpListenerClosed(t *testing.T) {
 	TranVerifyListenerClosed(t, tran, nil)
 }
 
+func TestTcpSocketActivationAfterClose(t *testing.T) {
+	sock := GetMockSocket()
+	defer MustClose(t, sock)
+	l, err := tran.NewListener(AddrTestTCP(), sock)
+	MustSucceed(t, err)
+	MustSucceed(t, l.Close())
+	MustBeError(t, l.SetOption(mangos.OptionListenFD, 3), mangos.ErrClosed)
+}
+
 func TestTcpResolverChange(t *testing.T) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)

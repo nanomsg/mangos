@@ -205,6 +205,7 @@ func (l *listener) Address() string {
 
 func (l *listener) Close() error {
 	l.once.Do(func() {
+		l.lock.Lock()
 		close(l.closeq)
 		if l.l != nil {
 			_ = l.l.Close()
@@ -212,6 +213,7 @@ func (l *listener) Close() error {
 		if l.activated != nil {
 			_ = l.activated.Close()
 		}
+		l.lock.Unlock()
 		l.handshaker.Close()
 	})
 	return nil
@@ -223,6 +225,11 @@ func (l *listener) SetOption(n string, v interface{}) error {
 
 	switch n {
 	case mangos.OptionListenFD:
+		select {
+		case <-l.closeq:
+			return mangos.ErrClosed
+		default:
+		}
 		fd, ok := v.(int)
 		if !ok {
 			return mangos.ErrBadValue
