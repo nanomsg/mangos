@@ -131,6 +131,7 @@ type listener struct {
 	bound       net.Addr
 	proto       transport.ProtocolInfo
 	l           net.Listener
+	activated   net.Listener
 	lc          net.ListenConfig
 	maxRecvSize int
 	handshaker  transport.Handshaker
@@ -153,9 +154,20 @@ func (l *listener) Listen() (err error) {
 		return mangos.ErrClosed
 	default:
 	}
-	l.l, err = l.lc.Listen(context.Background(), "tcp", l.addr)
+	l.lock.Lock()
+	if l.l != nil {
+		l.lock.Unlock()
+		return mangos.ErrAddrInUse
+	}
+	if l.activated != nil {
+		l.l = l.activated
+		l.activated = nil
+	} else {
+		l.l, err = l.lc.Listen(context.Background(), "tcp", l.addr)
+	}
+	l.lock.Unlock()
 	if err != nil {
-		return
+		return err
 	}
 	l.bound = l.l.Addr()
 	go func() {
@@ -197,6 +209,9 @@ func (l *listener) Close() error {
 		if l.l != nil {
 			_ = l.l.Close()
 		}
+		if l.activated != nil {
+			_ = l.activated.Close()
+		}
 		l.handshaker.Close()
 	})
 	return nil
@@ -207,6 +222,24 @@ func (l *listener) SetOption(n string, v interface{}) error {
 	defer l.lock.Unlock()
 
 	switch n {
+	case mangos.OptionListenFD:
+		fd, ok := v.(int)
+		if !ok {
+			return mangos.ErrBadValue
+		}
+		if l.l != nil || l.activated != nil {
+			return mangos.ErrBadValue
+		}
+		ln, err := transport.FileListener(fd)
+		if err != nil {
+			return err
+		}
+		if _, ok := ln.(*net.TCPListener); !ok {
+			_ = ln.Close()
+			return mangos.ErrBadValue
+		}
+		l.activated = ln
+		return nil
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
 			l.maxRecvSize = b

@@ -187,6 +187,19 @@ const (
 	// This is available on pipes that are using TLS.
 	OptionTLSConnState = "TLS-STATE"
 
+	// OptionListenFD supplies an already listening stream socket to a
+	// listener.  It is intended for socket activation systems such as
+	// systemd.  The value is an int file descriptor; ownership is transferred
+	// to the listener.  It must be set before Listen is called.
+	//
+	// TCP, TLS-over-TCP, and Unix domain socket listeners support this option.
+	OptionListenFD = "LISTEN-FD"
+
+	// OptionSocketFD supplies a connected stream socket to a socket://
+	// listener.  The value is an int file descriptor; ownership is transferred
+	// to the listener.  It can be set more than once to attach multiple peers.
+	OptionSocketFD = "SOCKET-FD"
+
 	// OptionHTTPRequest conveys an *http.Request.  This read-only option
 	// only exists for Pipes using websocket connections.
 	OptionHTTPRequest = "HTTP-REQUEST"

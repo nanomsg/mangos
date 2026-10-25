@@ -97,6 +97,7 @@ type listener struct {
 	addr       *net.UnixAddr
 	proto      transport.ProtocolInfo
 	listener   *net.UnixListener
+	activated  *net.UnixListener
 	hs         transport.Handshaker
 	closeQ     chan struct{}
 	closed     bool
@@ -120,20 +121,24 @@ func (l *listener) Listen() error {
 		return mangos.ErrClosed
 	default:
 	}
-	listener, err := net.ListenUnix("unix", l.addr)
-
-	if err != nil && isAddrInUse(err) {
-		l.removeStaleSocket()
+	var err error
+	listener := l.activated
+	l.activated = nil
+	if listener == nil {
 		listener, err = net.ListenUnix("unix", l.addr)
-		if isAddrInUse(err) {
-			err = mangos.ErrAddrInUse
-		}
-	}
-	if err != nil {
-		return err
-	}
 
-	l.setPermissions()
+		if err != nil && isAddrInUse(err) {
+			l.removeStaleSocket()
+			listener, err = net.ListenUnix("unix", l.addr)
+			if isAddrInUse(err) {
+				err = mangos.ErrAddrInUse
+			}
+		}
+		if err != nil {
+			return err
+		}
+		l.setPermissions()
+	}
 
 	l.listener = listener
 	go func() {
@@ -159,6 +164,11 @@ func (l *listener) Listen() error {
 }
 
 func (l *listener) Address() string {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+	if l.listener != nil {
+		return "unix://" + l.listener.Addr().String()
+	}
 	return "unix://" + l.addr.String()
 }
 
@@ -181,6 +191,9 @@ func (l *listener) Close() error {
 		if l.listener != nil {
 			_ = l.listener.Close()
 		}
+		if l.activated != nil {
+			_ = l.activated.Close()
+		}
 		l.hs.Close()
 		close(l.closeQ)
 		l.lock.Unlock()
@@ -194,6 +207,25 @@ func (l *listener) SetOption(n string, v interface{}) error {
 	defer l.lock.Unlock()
 
 	switch n {
+	case mangos.OptionListenFD:
+		fd, ok := v.(int)
+		if !ok {
+			return mangos.ErrBadValue
+		}
+		if l.listener != nil || l.activated != nil {
+			return mangos.ErrBadValue
+		}
+		ln, err := transport.FileListener(fd)
+		if err != nil {
+			return err
+		}
+		unixListener, ok := ln.(*net.UnixListener)
+		if !ok {
+			_ = ln.Close()
+			return mangos.ErrBadValue
+		}
+		l.activated = unixListener
+		return nil
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
 			l.maxRcvSize = b

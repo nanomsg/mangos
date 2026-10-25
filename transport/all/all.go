@@ -23,6 +23,7 @@ import (
 	// import transports
 	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 	_ "go.nanomsg.org/mangos/v3/transport/ipc"
+	_ "go.nanomsg.org/mangos/v3/transport/socket"
 	_ "go.nanomsg.org/mangos/v3/transport/tcp"
 	_ "go.nanomsg.org/mangos/v3/transport/tlstcp"
 	_ "go.nanomsg.org/mangos/v3/transport/udp"
