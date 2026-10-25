@@ -84,6 +84,15 @@ func TestUnixSendRecv(t *testing.T) {
 func TestUnixListenerClosed(t *testing.T) {
 	test.TranVerifyListenerClosed(t, tran, nil)
 }
+
+func TestUnixSocketActivationAfterClose(t *testing.T) {
+	sock := test.GetMockSocket()
+	defer test.MustClose(t, sock)
+	l, err := tran.NewListener(test.AddrTestUnix(), sock)
+	test.MustSucceed(t, err)
+	test.MustSucceed(t, l.Close())
+	test.MustBeError(t, l.SetOption(mangos.OptionListenFD, 3), mangos.ErrClosed)
+}
 func TestUnixMessageSize(t *testing.T) {
 	test.TranVerifyMessageSizes(t, tran, nil, nil)
 }

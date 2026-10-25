@@ -208,6 +208,9 @@ func (l *listener) SetOption(n string, v interface{}) error {
 
 	switch n {
 	case mangos.OptionListenFD:
+		if l.closed {
+			return mangos.ErrClosed
+		}
 		fd, ok := v.(int)
 		if !ok {
 			return mangos.ErrBadValue

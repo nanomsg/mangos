@@ -135,6 +135,15 @@ func TestTlsTcpListenerClosed(t *testing.T) {
 	test.TranVerifyListenerClosed(t, tran, lOpts)
 }
 
+func TestTlsTcpSocketActivationAfterClose(t *testing.T) {
+	sock := test.GetMockSocket()
+	defer test.MustClose(t, sock)
+	l, err := tran.NewListener(test.AddrTestTLS(), sock)
+	test.MustSucceed(t, err)
+	test.MustSucceed(t, l.Close())
+	test.MustBeError(t, l.SetOption(mangos.OptionListenFD, 3), mangos.ErrClosed)
+}
+
 func TestTlsTcpResolverChange(t *testing.T) {
 	sock := test.GetMockSocket()
 	defer test.MustClose(t, sock)
