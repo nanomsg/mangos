@@ -34,7 +34,7 @@ type tranOption interface {
 }
 
 func getTranPair(t *testing.T, tran transport.Transport) (mangos.Dialer, mangos.Listener, mangos.Socket, mangos.Socket) {
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	s1 := GetMockSocket()
 	s2 := GetMockSocket()
 	d, e := s1.NewDialer(addr, nil)
@@ -46,7 +46,9 @@ func getTranPair(t *testing.T, tran transport.Transport) (mangos.Dialer, mangos.
 	return d, l, s1, s2
 }
 
-func getScratchAddr(tran transport.Transport) string {
+// GetScratchAddr returns a temporary address for the transport. Network
+// transports use port zero so the OS selects an available port.
+func GetScratchAddr(tran transport.Transport) string {
 	switch tran.Scheme() {
 	case "mock":
 		return "mock://mock"
@@ -247,7 +249,7 @@ func TranVerifyScheme(t *testing.T, tran transport.Transport) {
 	MustBeError(t, e, mangos.ErrBadTran)
 	MustBeTrue(t, l == nil)
 
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	d, e = tran.NewDialer(addr, sock)
 	MustSucceed(t, e)
 	MustNotBeNil(t, d)
@@ -263,7 +265,7 @@ func TranVerifyScheme(t *testing.T, tran transport.Transport) {
 func TranVerifyConnectionRefused(t *testing.T, tran transport.Transport, opts map[string]interface{}) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	d, _ := sock.NewDialer(getScratchAddr(tran), opts)
+	d, _ := sock.NewDialer(GetScratchAddr(tran), opts)
 	MustFail(t, d.Dial()) // Windows won't let us validate properly
 }
 
@@ -273,7 +275,7 @@ func TranVerifyDuplicateListen(t *testing.T, tran transport.Transport, opts map[
 	defer MustClose(t, sock1)
 	sock2 := GetMockSocket()
 	defer MustClose(t, sock2)
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	l1, _ := sock1.NewListener(addr, opts)
 	MustSucceed(t, l1.Listen())
 	l2, _ := sock2.NewListener(l1.Address(), opts)
@@ -286,7 +288,7 @@ func TranVerifyListenAndAccept(t *testing.T, tran transport.Transport, dOpts, lO
 	s2 := GetMockSocket()
 	defer MustClose(t, s1)
 	defer MustClose(t, s2)
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	l, e := s2.NewListener(addr, lOpts)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
@@ -311,7 +313,7 @@ func TranVerifyListenAndAccept(t *testing.T, tran transport.Transport, dOpts, lO
 func TranVerifyAcceptWithoutListen(t *testing.T, tran transport.Transport) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
-	l, e := tran.NewListener(getScratchAddr(tran), sock)
+	l, e := tran.NewListener(GetScratchAddr(tran), sock)
 	MustSucceed(t, e)
 	_, e = l.Accept()
 	MustBeError(t, e, mangos.ErrClosed)
@@ -321,7 +323,7 @@ func TranVerifyAcceptWithoutListen(t *testing.T, tran transport.Transport) {
 func TranVerifyMaxRecvSize(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
 	VerifyOptionMaxRecvSize(t, NewMockSocket)
 
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	tx := GetMockSocket()
 	rx := GetMockSocket()
 	defer MustClose(t, tx)
@@ -355,7 +357,7 @@ func TranVerifyHandshakeFail(t *testing.T, tran transport.Transport, dOpts, lOpt
 	s2 := GetMockSocketEx(2, "mock2")
 	defer MustClose(t, s1)
 	defer MustClose(t, s2)
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	l, e := s2.NewListener(addr, lOpts)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
@@ -388,7 +390,7 @@ func TranVerifySendRecv(t *testing.T, tran transport.Transport, dOpts, lOpts map
 	MustSucceed(t, rx.SetOption(mangos.OptionSendDeadline, time.Second))
 	MustSucceed(t, tx.SetOption(mangos.OptionSendDeadline, time.Second))
 
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	l, e := rx.NewListener(addr, lOpts)
 	MustSucceed(t, e)
 	MustSucceed(t, l.Listen())
@@ -449,7 +451,7 @@ func TranVerifyPipeOptions(t *testing.T, tran transport.Transport, dOpts, lOpts 
 	defer MustClose(t, tx)
 	defer MustClose(t, rx)
 
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	MustSucceed(t, rx.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, tx.SetOption(mangos.OptionRecvDeadline, time.Second))
 	MustSucceed(t, rx.SetOption(mangos.OptionSendDeadline, time.Second))
@@ -533,7 +535,7 @@ func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[s
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
-	l, e := tran.NewListener(getScratchAddr(tran), sock)
+	l, e := tran.NewListener(GetScratchAddr(tran), sock)
 	MustSucceed(t, e)
 	for key, val := range opts {
 		MustSucceed(t, l.SetOption(key, val))
@@ -544,7 +546,7 @@ func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[s
 	MustBeError(t, e, mangos.ErrClosed)
 	_ = l.Close() // this might succeed or fail, we don't care.
 
-	l, e = tran.NewListener(getScratchAddr(tran), sock)
+	l, e = tran.NewListener(GetScratchAddr(tran), sock)
 	MustSucceed(t, e)
 	for key, val := range opts {
 		MustSucceed(t, l.SetOption(key, val))
@@ -555,7 +557,7 @@ func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[s
 	MustBeError(t, e, mangos.ErrClosed)
 
 	// Now async
-	l, e = tran.NewListener(getScratchAddr(tran), sock)
+	l, e = tran.NewListener(GetScratchAddr(tran), sock)
 	MustSucceed(t, e)
 	for key, val := range opts {
 		MustSucceed(t, l.SetOption(key, val))
@@ -573,7 +575,7 @@ func TranVerifyDialNoCert(t *testing.T, tran transport.Transport) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
 	addr = listen(t, sock, addr, opts)
@@ -588,7 +590,7 @@ func TranVerifyDialInsecure(t *testing.T, tran transport.Transport) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	opts := make(map[string]interface{})
 	opts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
 	addr = listen(t, sock, addr, opts)
@@ -607,7 +609,7 @@ func TranVerifyDialInsecure(t *testing.T, tran transport.Transport) {
 func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	defer MustClose(t, sock1)
 	defer MustClose(t, sock2)
 
@@ -653,7 +655,7 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	defer MustClose(t, sock1)
 	defer MustClose(t, sock2)
 
@@ -675,7 +677,7 @@ func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpt
 func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	defer MustClose(t, sock1)
 	defer MustClose(t, sock2)
 
@@ -731,7 +733,7 @@ func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpt
 func TranVerifyPipeOptions2(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
-	addr := getScratchAddr(tran)
+	addr := GetScratchAddr(tran)
 	defer MustClose(t, sock1)
 	defer MustClose(t, sock2)
 
