@@ -154,6 +154,7 @@ type listener struct {
 	bound       net.Addr
 	lc          net.ListenConfig
 	l           net.Listener
+	activated   net.Listener
 	maxRecvSize int
 	proto       transport.ProtocolInfo
 	config      *tls.Config
@@ -182,10 +183,14 @@ func (l *listener) Listen() error {
 		return mangos.ErrTLSNoCert
 	}
 
-	inner, err := l.lc.Listen(context.Background(), "tcp", l.addr)
-	if err != nil {
-		l.lock.Unlock()
-		return err
+	inner := l.activated
+	l.activated = nil
+	if inner == nil {
+		inner, err = l.lc.Listen(context.Background(), "tcp", l.addr)
+		if err != nil {
+			l.lock.Unlock()
+			return err
+		}
 	}
 	l.l = tls.NewListener(inner, config)
 	l.bound = l.l.Addr()
@@ -273,6 +278,9 @@ func (l *listener) Close() error {
 		if l.l != nil {
 			_ = l.l.Close()
 		}
+		if l.activated != nil {
+			_ = l.activated.Close()
+		}
 		for conn := range l.pending {
 			_ = conn.Close()
 		}
@@ -286,6 +294,24 @@ func (l *listener) SetOption(n string, v interface{}) error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	switch n {
+	case mangos.OptionListenFD:
+		fd, ok := v.(int)
+		if !ok {
+			return mangos.ErrBadValue
+		}
+		if l.l != nil || l.activated != nil {
+			return mangos.ErrBadValue
+		}
+		ln, err := transport.FileListener(fd)
+		if err != nil {
+			return err
+		}
+		if _, ok := ln.(*net.TCPListener); !ok {
+			_ = ln.Close()
+			return mangos.ErrBadValue
+		}
+		l.activated = ln
+		return nil
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
 			l.maxRecvSize = b

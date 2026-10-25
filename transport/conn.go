@@ -18,11 +18,43 @@ import (
 	"encoding/binary"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"time"
 
 	"go.nanomsg.org/mangos/v3"
 )
+
+// FileConn converts fd to a net.Conn and transfers ownership of fd to the
+// result.  It is useful to transports that accept descriptors supplied by a
+// service manager or inherited from another process.
+func FileConn(fd int) (net.Conn, error) {
+	if fd < 0 {
+		return nil, mangos.ErrBadValue
+	}
+	f := os.NewFile(uintptr(fd), "mangos-connection")
+	c, err := net.FileConn(f)
+	_ = f.Close()
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// FileListener converts fd to a net.Listener and transfers ownership of fd
+// to the result.  The supplied descriptor must already be bound and listening.
+func FileListener(fd int) (net.Listener, error) {
+	if fd < 0 {
+		return nil, mangos.ErrBadValue
+	}
+	f := os.NewFile(uintptr(fd), "mangos-listener")
+	l, err := net.FileListener(f)
+	_ = f.Close()
+	if err != nil {
+		return nil, err
+	}
+	return l, nil
+}
 
 // conn implements the Pipe interface on top of net.Conn.  The
 // assumption is that transports using this have similar wire protocols,
