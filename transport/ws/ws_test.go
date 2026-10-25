@@ -15,12 +15,13 @@
 package ws
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 
 	"go.nanomsg.org/mangos/v3"
 	. "go.nanomsg.org/mangos/v3/internal/test"
@@ -114,7 +115,7 @@ func TestWsMessageHeader(t *testing.T) {
 	TranVerifyMessageHeader(t, tran, nil, nil)
 }
 func TestWsSendAbort(t *testing.T) {
-	wd := &websocket.Dialer{}
+	wd := &websocket.DialOptions{}
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 	addr := AddrTestWS()
@@ -123,11 +124,11 @@ func TestWsSendAbort(t *testing.T) {
 	MustSucceed(t, l.Listen())
 
 	wd.Subprotocols = []string{sock.Info().PeerName + ".sp.nanomsg.org"}
-	ws, _, e := wd.Dial(addr, nil)
+	ws, _, e := websocket.Dial(context.Background(), addr, wd)
 	MustSucceed(t, e)
 	MustSend(t, sock, make([]byte, 2*1024*1024)) // TCP window size is 64k
 	time.Sleep(time.Millisecond * 100)
-	MustSucceed(t, ws.Close())
+	MustSucceed(t, ws.CloseNow())
 	MustSend(t, sock, make([]byte, 2*1024*1024)) // TCP window size is 64k
 }
 

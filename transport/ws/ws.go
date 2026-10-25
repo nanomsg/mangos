@@ -17,15 +17,17 @@
 package ws
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strings"
 	"sync"
 
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
 
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/transport"
@@ -42,7 +44,7 @@ const (
 	OptionWebSocketMux = "WEBSOCKET-MUX"
 
 	// OptionWebSocketHandler is used to obtain the underlying
-	// http.Handler (websocket.Server) object, so you can use this
+	// http.Handler object, so you can use this
 	// on your own http.Server instances.  It is a gross error to use
 	// the value returned by this method on an http server if the
 	// server is also started with mangos Listen().  This means that you
@@ -51,27 +53,12 @@ const (
 	OptionWebSocketHandler = "WEBSOCKET-HANDLER"
 
 	// OptionWebSocketCheckOrigin controls the check of the origin of the
-	// underlying Listener (websocket.Upgrader).
-	// Excerpt from https://godoc.org/github.com/gorilla/websocket:
-	// Web browsers allow Javascript applications to open a WebSocket
-	// connection to any host. It's up to the server to enforce an origin
-	// policy using the Origin request header sent by the browser. The
-	// Upgrader calls the function specified in the CheckOrigin field to
-	// check the origin. If the CheckOrigin function returns false, then
-	// the Upgrade method fails the WebSocket handshake with HTTP status
-	// 403. If the CheckOrigin field is nil, then the Upgrader uses a safe
-	// default: fail the handshake if the Origin request header is present
-	// and not equal to the Host request header. An application can allow
-	// connections from any origin by specifying a function that always
-	// returns true:
-	//
-	// var upgrader = websocket.Upgrader{
-	//         CheckOrigin: func(r *http.Request) bool { return true },
-	// }
-	//
-	// The deprecated Upgrade function does not enforce an origin policy.
-	// It's the application's responsibility to check the Origin header
-	// before calling Upgrade.
+	// underlying Listener.
+	// Web browsers allow JavaScript applications to open a WebSocket
+	// connection to any host. It is up to the server to enforce an origin
+	// policy using the Origin request header sent by the browser. By default,
+	// cross-origin requests are rejected. Set this option to false to permit
+	// connections from any origin.
 	OptionWebSocketCheckOrigin = "WEBSOCKET-CHECKORIGIN"
 
 	// Transport is a transport.Transport for WebSocket
@@ -128,14 +115,17 @@ func (o options) set(name string, val interface{}) error {
 
 // wsPipe implements the Pipe interface on a websocket
 type wsPipe struct {
-	ws      *websocket.Conn
+	ws *websocket.Conn
+	// ctx is canceled by Close to interrupt an in-flight WebSocket operation.
+	ctx     context.Context
+	cancel  context.CancelFunc
 	proto   transport.ProtocolInfo
 	addr    string
 	open    bool
 	wg      sync.WaitGroup
 	options map[string]interface{}
 	iswss   bool
-	dtype   int
+	dtype   websocket.MessageType
 	sync.Mutex
 }
 
@@ -144,7 +134,7 @@ type wsTran int
 func (w *wsPipe) Recv() (*mangos.Message, error) {
 
 	// We ignore the message type for receive.
-	_, body, err := w.ws.ReadMessage()
+	_, body, err := w.ws.Read(w.ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +154,7 @@ func (w *wsPipe) Send(m *mangos.Message) error {
 	} else {
 		buf = m.Body
 	}
-	if err := w.ws.WriteMessage(w.dtype, buf); err != nil {
+	if err := w.ws.Write(w.ctx, w.dtype, buf); err != nil {
 		return err
 	}
 	m.Free()
@@ -176,7 +166,8 @@ func (w *wsPipe) Close() error {
 	defer w.Unlock()
 	if w.open {
 		w.open = false
-		_ = w.ws.Close()
+		w.cancel()
+		_ = w.ws.CloseNow()
 		w.wg.Done()
 	}
 	return nil
@@ -199,18 +190,31 @@ type dialer struct {
 func (d *dialer) Dial() (transport.Pipe, error) {
 	var w *wsPipe
 
-	wd := &websocket.Dialer{}
-
-	wd.Subprotocols = []string{d.proto.PeerName + ".sp.nanomsg.org"}
+	var conn net.Conn
+	ctx := httptrace.WithClientTrace(context.Background(), &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			conn = info.Conn
+		},
+	})
+	httpTransport := &http.Transport{
+		ForceAttemptHTTP2: false,
+	}
 	if v, ok := d.opts[mangos.OptionTLSConfig]; ok {
-		wd.TLSClientConfig = v.(*tls.Config)
+		httpTransport.TLSClientConfig = v.(*tls.Config)
+	}
+	wd := &websocket.DialOptions{
+		HTTPClient:   &http.Client{Transport: httpTransport},
+		Subprotocols: []string{d.proto.PeerName + ".sp.nanomsg.org"},
 	}
 
+	pipeCtx, cancel := context.WithCancel(context.Background())
 	w = &wsPipe{
 		addr:    d.addr,
+		ctx:     pipeCtx,
+		cancel:  cancel,
 		proto:   d.proto,
 		open:    true,
-		dtype:   websocket.BinaryMessage,
+		dtype:   websocket.MessageBinary,
 		options: make(map[string]interface{}),
 	}
 
@@ -219,16 +223,21 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err == nil {
 		maxrx, _ = v.(int)
 	}
-	if w.ws, _, err = wd.Dial(d.addr, nil); err != nil {
-		if err == websocket.ErrBadHandshake {
+	var resp *http.Response
+	if w.ws, resp, err = websocket.Dial(ctx, d.addr, wd); err != nil {
+		if resp != nil {
 			return nil, mangos.ErrBadProto
 		}
 		return nil, err
 	}
-	w.ws.SetReadLimit(int64(maxrx))
-	w.options[mangos.OptionLocalAddr] = w.ws.LocalAddr()
-	w.options[mangos.OptionRemoteAddr] = w.ws.RemoteAddr()
-	if tlsConn, ok := w.ws.UnderlyingConn().(*tls.Conn); ok {
+	w.ws.SetReadLimit(wsReadLimit(maxrx))
+	if conn == nil {
+		_ = w.ws.CloseNow()
+		return nil, fmt.Errorf("websocket dial did not expose network connection")
+	}
+	w.options[mangos.OptionLocalAddr] = conn.LocalAddr()
+	w.options[mangos.OptionRemoteAddr] = conn.RemoteAddr()
+	if tlsConn, ok := conn.(*tls.Conn); ok {
 		w.options[mangos.OptionTLSConnState] = tlsConn.ConnectionState()
 	}
 
@@ -245,34 +254,30 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 }
 
 type listener struct {
-	pending  []*wsPipe
-	lock     sync.Mutex
-	cv       sync.Cond
-	running  bool
-	noserve  bool
-	addr     string
-	bound    *net.TCPAddr
-	anon     bool // anonymous port selected
-	closed   bool
-	ug       websocket.Upgrader
-	htsvr    *http.Server
-	mux      *http.ServeMux
-	url      *url.URL
-	listener net.Listener
-	proto    transport.ProtocolInfo
-	opts     options
-	iswss    bool
+	pending    []*wsPipe
+	lock       sync.Mutex
+	cv         sync.Cond
+	running    bool
+	noserve    bool
+	addr       string
+	bound      *net.TCPAddr
+	anon       bool // anonymous port selected
+	closed     bool
+	acceptOpts websocket.AcceptOptions
+	htsvr      *http.Server
+	mux        *http.ServeMux
+	url        *url.URL
+	listener   net.Listener
+	proto      transport.ProtocolInfo
+	opts       options
+	iswss      bool
 }
 
 func (l *listener) SetOption(n string, v interface{}) error {
 	switch n {
 	case OptionWebSocketCheckOrigin:
 		if v, ok := v.(bool); ok {
-			if !v {
-				l.ug.CheckOrigin = func(r *http.Request) bool { return true }
-			} else {
-				l.ug.CheckOrigin = nil
-			}
+			l.acceptOpts.InsecureSkipVerify = !v
 		}
 	}
 	return l.opts.set(n, v)
@@ -379,15 +384,18 @@ func (l *listener) Accept() (transport.Pipe, error) {
 	return w, nil
 }
 
-func (l *listener) handler(ws *websocket.Conn, req *http.Request) {
+func (l *listener) handler(ws *websocket.Conn, localAddr, remoteAddr net.Addr, tlsState *tls.ConnectionState) {
 	l.lock.Lock()
 
+	pipeCtx, cancel := context.WithCancel(context.Background())
 	w := &wsPipe{
 		ws:      ws,
 		addr:    l.addr,
+		ctx:     pipeCtx,
+		cancel:  cancel,
 		proto:   l.proto,
 		open:    true,
-		dtype:   websocket.BinaryMessage,
+		dtype:   websocket.MessageBinary,
 		iswss:   l.iswss,
 		options: make(map[string]interface{}),
 	}
@@ -397,12 +405,16 @@ func (l *listener) handler(ws *websocket.Conn, req *http.Request) {
 		maxRx, _ = v.(int)
 	}
 
-	w.ws.SetReadLimit(int64(maxRx))
-	w.options[mangos.OptionLocalAddr] = ws.LocalAddr()
-	w.options[mangos.OptionRemoteAddr] = ws.RemoteAddr()
+	w.ws.SetReadLimit(wsReadLimit(maxRx))
+	if localAddr != nil {
+		w.options[mangos.OptionLocalAddr] = localAddr
+	}
+	if remoteAddr != nil {
+		w.options[mangos.OptionRemoteAddr] = remoteAddr
+	}
 
-	if req.TLS != nil {
-		w.options[mangos.OptionTLSConnState] = *req.TLS
+	if tlsState != nil {
+		w.options[mangos.OptionTLSConnState] = *tlsState
 	}
 
 	w.wg.Add(1)
@@ -437,13 +449,21 @@ func (l *listener) Close() error {
 func (l *listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	matched := false
-	for _, subProto := range websocket.Subprotocols(r) {
-		if subProto == l.proto.SelfName+".sp.nanomsg.org" {
-			matched = true
+	for _, value := range r.Header.Values("Sec-WebSocket-Protocol") {
+		for _, subProto := range strings.Split(value, ",") {
+			if strings.TrimSpace(subProto) == l.proto.SelfName+".sp.nanomsg.org" {
+				matched = true
+			}
 		}
 	}
 	if !matched {
 		http.Error(w, "SP protocol mis-match", http.StatusBadRequest)
+		return
+	}
+	// Coder WebSocket correctly returns 426 for this case, but retain the
+	// transport's long-standing 400 response for invalid handshake versions.
+	if r.Header.Get("Sec-WebSocket-Version") != "13" {
+		http.Error(w, "unsupported WebSocket version", http.StatusBadRequest)
 		return
 	}
 	l.lock.Lock()
@@ -453,11 +473,14 @@ func (l *listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l.lock.Unlock()
-	ws, err := l.ug.Upgrade(w, r, nil)
+	localAddr, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	remoteAddr, _ := net.ResolveTCPAddr("tcp", r.RemoteAddr)
+	tlsState := r.TLS
+	ws, err := websocket.Accept(w, r, &l.acceptOpts)
 	if err != nil {
 		return
 	}
-	l.handler(ws, r)
+	l.handler(ws, localAddr, remoteAddr, tlsState)
 }
 
 func (l *listener) Address() string {
@@ -511,7 +534,7 @@ func (wsTran) listener(addr string, sock mangos.Socket) (*listener, error) {
 	}
 	l.opts[mangos.OptionMaxRecvSize] = 0
 	l.cv.L = &l.lock
-	l.ug.Subprotocols = []string{l.proto.SelfName + ".sp.nanomsg.org"}
+	l.acceptOpts.Subprotocols = []string{l.proto.SelfName + ".sp.nanomsg.org"}
 
 	if strings.HasPrefix(addr, "wss://") {
 		l.iswss = true
@@ -530,4 +553,11 @@ func (wsTran) listener(addr string, sock mangos.Socket) (*listener, error) {
 	l.htsvr = &http.Server{Addr: l.url.Host, Handler: l.mux}
 
 	return l, nil
+}
+
+func wsReadLimit(limit int) int64 {
+	if limit <= 0 {
+		return -1
+	}
+	return int64(limit)
 }
