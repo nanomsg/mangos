@@ -6,6 +6,15 @@ require (
 	golang.org/x/sys v0.49.0
 )
 
-require github.com/coder/websocket v1.8.15
+require (
+	github.com/coder/websocket v1.8.15
+	github.com/pion/dtls/v4 v4.0.0-rc.7
+	github.com/pion/transport/v5 v5.1.1
+)
+
+require (
+	github.com/pion/logging v0.2.4 // indirect
+	golang.org/x/crypto v0.58.0 // indirect
+)
 
 go 1.26.0

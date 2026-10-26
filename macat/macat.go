@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/gdamore/optopia"
+	pion "github.com/pion/dtls/v4"
 
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/protocol/bus"
@@ -46,6 +47,7 @@ import (
 	"go.nanomsg.org/mangos/v3/protocol/sub"
 	"go.nanomsg.org/mangos/v3/protocol/surveyor"
 	"go.nanomsg.org/mangos/v3/transport/all"
+	"go.nanomsg.org/mangos/v3/transport/dtls"
 )
 
 // Duration is our internal duration, which parses bare numbers as seconds.
@@ -715,6 +717,25 @@ func (a *App) cleanup() {
 	}
 }
 
+func (a *App) dtlsConfig() *dtls.Config {
+	config := &dtls.Config{
+		ClientOptions: []pion.ClientOption{
+			pion.WithRootCAs(a.tlsCfg.RootCAs),
+			pion.WithInsecureSkipVerify(a.tlsCfg.InsecureSkipVerify),
+		},
+		ServerOptions: []pion.ServerOption{pion.WithClientAuth(pion.NoClientCert)},
+	}
+	if len(a.tlsCfg.Certificates) != 0 {
+		config.ClientOptions = append(config.ClientOptions, pion.WithCertificates(a.tlsCfg.Certificates...))
+		config.ServerOptions = append(config.ServerOptions, pion.WithCertificates(a.tlsCfg.Certificates...))
+	}
+	if a.tlsCfg.ClientCAs != nil {
+		config.ServerOptions = append(config.ServerOptions,
+			pion.WithClientCAs(a.tlsCfg.ClientCAs), pion.WithClientAuth(pion.RequireAndVerifyClientCert))
+	}
+	return config
+}
+
 // Run runs the instance of the application.
 func (a *App) Run(args ...string) error {
 
@@ -775,13 +796,17 @@ func (a *App) Run(args ...string) error {
 	for _, addr := range a.bindAddr {
 		var opts = make(map[string]interface{})
 
-		// TLS addresses require a certificate to be supplied.
+		// TLS and DTLS listeners require a certificate to be supplied.
 		if strings.HasPrefix(addr, "tls") ||
-			strings.HasPrefix(addr, "wss") {
+			strings.HasPrefix(addr, "wss") || strings.HasPrefix(addr, "dtls") {
 			if len(a.tlsCfg.Certificates) == 0 {
 				return errors.New("no server cert specified")
 			}
-			opts[mangos.OptionTLSConfig] = &a.tlsCfg
+			if strings.HasPrefix(addr, "dtls") {
+				opts[mangos.OptionDTLSConfig] = a.dtlsConfig()
+			} else {
+				opts[mangos.OptionTLSConfig] = &a.tlsCfg
+			}
 		}
 		err := a.sock.ListenOptions(addr, opts)
 		if err != nil {
@@ -793,11 +818,15 @@ func (a *App) Run(args ...string) error {
 		var opts = make(map[string]interface{})
 
 		if strings.HasPrefix(addr, "tls") ||
-			strings.HasPrefix(addr, "wss") {
+			strings.HasPrefix(addr, "wss") || strings.HasPrefix(addr, "dtls") {
 			if a.tlsCfg.RootCAs == nil && !a.noVerifyTLS {
 				return errors.New("no CA cert specified")
 			}
-			opts[mangos.OptionTLSConfig] = &a.tlsCfg
+			if strings.HasPrefix(addr, "dtls") {
+				opts[mangos.OptionDTLSConfig] = a.dtlsConfig()
+			} else {
+				opts[mangos.OptionTLSConfig] = &a.tlsCfg
+			}
 		}
 		err := a.sock.DialOptions(addr, opts)
 		if err != nil {

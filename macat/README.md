@@ -7,8 +7,14 @@ via the
 for use as a drop‐in replacement for nanocat(1).
 
 Additionally it has a some extra features, to support mangos' additional
-capabilities.  In particular, it supports SSL/TLS, and has a few flags
-related to that.
+capabilities. In particular, it supports TLS and DTLS. Use `dtls://HOST:PORT`,
+`dtls4://HOST:PORT`, or `dtls6://HOST:PORT` with `--bind` or `--connect`.
+Bracket literal IPv6 addresses, for example `dtls6://[::1]:4433`.
+The `--cert`, `--key`, `--cacert`, and `--insecure` flags also apply to DTLS.
+DTLS listeners require a certificate. Supplying `--cacert` on a listener
+requires clients to present a certificate signed by that CA. DTLS messages
+can be lost or reordered; their maximum size is 16,320 bytes, including any
+SP protocol header.
 
 ## SYNOPSIS
 macat <*OPTIONS*>

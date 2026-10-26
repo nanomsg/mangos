@@ -77,6 +77,15 @@ const (
 	// The parameter is a tls.Config pointer.
 	OptionTLSConfig = "TLS-CONFIG"
 
+	// OptionDTLSConfig supplies a *transport/dtls.Config to a DTLS dialer
+	// or listener before it starts. It is separate from OptionTLSConfig
+	// because DTLS uses Pion rather than crypto/tls.
+	OptionDTLSConfig = "DTLS-CONFIG"
+
+	// OptionDTLSConnState returns a transport/dtls.ConnectionState from an
+	// authenticated DTLS pipe. It is available at PipeEventAttaching.
+	OptionDTLSConnState = "DTLS-STATE"
+
 	// OptionWriteQLen is used to set the size, in messages, of the write
 	// queue channel. By default, it's 128. This option cannot be set if
 	// Dial or Listen has been called on the socket.

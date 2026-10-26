@@ -40,8 +40,12 @@ At present, all the Req/Rep, Pub/Sub, Pair, Bus, Push/Pull, and
 Surveyor/Respondent patterns are supported.
 This project also supports an experimental protocol called Star.
 
-Supported transports include TCP, UDP, inproc, UNIX domain sockets, Windows
+Supported transports include TCP, UDP, DTLS, inproc, UNIX domain sockets, Windows
 named pipes, WebSocket, WebSocket/TLS and TLS.
+
+The [DTLS transport](transport/dtls/README.md) supports NNG-compatible
+`dtls://`, `dtls4://`, and `dtls6://` endpoints using Pion DTLS 1.2 and 1.3.
+It uses `mangos.OptionDTLSConfig` for certificates and authentication policy.
 
 Use `unix://PATH` for AF_UNIX sockets on POSIX systems or Windows systems with
 AF_UNIX support, and `winpipe://NAME` for Windows named pipes. The `ipc://`
