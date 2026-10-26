@@ -15,6 +15,7 @@
 package macat
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -32,7 +33,7 @@ import (
 	pion "github.com/pion/dtls/v4"
 	"go.nanomsg.org/mangos/v3"
 	"go.nanomsg.org/mangos/v3/internal/test"
-	"go.nanomsg.org/mangos/v3/protocol/pull"
+	"go.nanomsg.org/mangos/v3/protocol/rep"
 	"go.nanomsg.org/mangos/v3/transport/dtls"
 )
 
@@ -70,9 +71,10 @@ func TestAppDTLS(t *testing.T) {
 			role = "listen"
 		}
 		t.Run(role, func(t *testing.T) {
-			sock := test.GetSocket(t, pull.NewSocket)
+			sock := test.GetSocket(t, rep.NewSocket)
 			defer test.MustClose(t, sock)
 			test.MustSucceed(t, sock.SetOption(mangos.OptionRecvDeadline, 3*time.Second))
+			test.MustSucceed(t, sock.SetOption(mangos.OptionSendDeadline, 3*time.Second))
 			var address string
 			if !listen {
 				config := &dtls.Config{ServerOptions: []pion.ServerOption{pion.WithCertificates(identity)}}
@@ -88,7 +90,13 @@ func TestAppDTLS(t *testing.T) {
 			}
 			app := &App{}
 			app.Initialize()
-			args := []string{"--push", "--data=ping", "--count=1", "--send-timeout=2s"}
+			var output bytes.Buffer
+			app.stdOut = &output
+			// A one-shot PUSH can exit with its message still queued while
+			// a listening endpoint is completing DTLS. Wait for a reply so
+			// completion confirms delivery without relying on cleanup's delay.
+			args := []string{"--req", "--data=ping", "--count=1", "--send-timeout=2s",
+				"--recv-timeout=3s", "--send-interval=3s", "--raw"}
 			if listen {
 				args = append(args, "--bind", address, "--cert", cert, "--key", key)
 			} else {
@@ -112,20 +120,18 @@ func TestAppDTLS(t *testing.T) {
 				if string(message.data) != "ping" {
 					t.Fatalf("received %q", message.data)
 				}
+				test.MustSucceed(t, sock.Send([]byte("pong")))
 			case err := <-result:
-				test.MustSucceed(t, err)
-				message := <-messages
-				test.MustSucceed(t, message.err)
-				if string(message.data) != "ping" {
-					t.Fatalf("received %q", message.data)
-				}
-				return
+				t.Fatalf("macat exited before receiving a reply: %v", err)
 			case <-time.After(3 * time.Second):
 				t.Fatal("timed out waiting for macat")
 			}
 			select {
 			case err := <-result:
 				test.MustSucceed(t, err)
+				if output.String() != "pong" {
+					t.Fatalf("macat received %q", output.String())
+				}
 			case <-time.After(3 * time.Second):
 				t.Fatal("macat did not finish")
 			}
