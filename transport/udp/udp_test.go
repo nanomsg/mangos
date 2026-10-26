@@ -91,39 +91,30 @@ func testUDPSendReceive(t *testing.T, tran udpTran, addr string) {
 		t.Fatalf("received %q, want %q", got.Body, "reply")
 	}
 	got.Free()
+
+	// Both endpoints must be able to send a maximum-sized message, even
+	// on systems whose default UDP send buffer is smaller than a datagram.
+	payload := bytes.Repeat([]byte("x"), udpMaxPayload-len("header:"))
+	want := append([]byte("header:"), payload...)
+	for _, direction := range [][2]mangos.TranPipe{{cp, sp}, {sp, cp}} {
+		msg = mangos.NewMessage(0)
+		msg.Header = append(msg.Header, "header:"...)
+		msg.Body = append(msg.Body, payload...)
+		MustSucceed(t, direction[0].Send(msg))
+		got, err = direction[1].Recv()
+		MustSucceed(t, err)
+		if !bytes.Equal(got.Body, want) {
+			t.Fatalf("maximum-sized message = %d bytes, want %d matching bytes", len(got.Body), len(want))
+		}
+		got.Free()
+	}
 }
 
 func TestUDP6SendReceive(t *testing.T) {
 	if !ipv6Available() {
 		t.Skip("IPv6 loopback is unavailable")
 	}
-	server := GetMockSocket()
-	client := GetMockSocket()
-	defer MustClose(t, server)
-	defer MustClose(t, client)
-
-	l, err := Transport6.NewListener("udp6://[::1]:0", server)
-	MustSucceed(t, err)
-	MustSucceed(t, l.Listen())
-	defer func() { MustSucceed(t, l.Close()) }()
-	d, err := Transport6.NewDialer(l.Address(), client)
-	MustSucceed(t, err)
-	cp, err := d.Dial()
-	MustSucceed(t, err)
-	defer func() { MustSucceed(t, cp.Close()) }()
-	sp, err := l.Accept()
-	MustSucceed(t, err)
-	defer func() { MustSucceed(t, sp.Close()) }()
-
-	msg := mangos.NewMessage(0)
-	msg.Body = append(msg.Body, "ipv6"...)
-	MustSucceed(t, cp.Send(msg))
-	got, err := sp.Recv()
-	MustSucceed(t, err)
-	if string(got.Body) != "ipv6" {
-		t.Fatalf("received %q, want %q", got.Body, "ipv6")
-	}
-	got.Free()
+	testUDPSendReceive(t, Transport6, "udp6://[::1]:0")
 }
 
 func TestUDPSchemeAndOptions(t *testing.T) {

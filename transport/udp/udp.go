@@ -38,6 +38,7 @@ const (
 
 	udpHeaderSize   = 8
 	udpMaxPayload   = 65000
+	udpSocketBuffer = 1 << 20
 	udpMaxPeers     = 1024
 	udpRefresh      = 5 * time.Second
 	udpConnectWait  = 5 * time.Second
@@ -164,6 +165,7 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	if err != nil {
 		return nil, err
 	}
+	setSocketBuffers(c)
 	p := newPipe(d.proto, maxRecv, c.LocalAddr(), c.RemoteAddr(), func(b []byte) (int, error) { return c.Write(b) }, func() error { return c.Close() })
 
 	deadline := time.Now().Add(udpConnectWait)
@@ -257,10 +259,19 @@ func (l *listener) Listen() error {
 	if err != nil {
 		return err
 	}
+	setSocketBuffers(c)
 	l.conn = c
 	go l.readLoop(c)
 	go l.reapLoop()
 	return nil
+}
+
+func setSocketBuffers(c *net.UDPConn) {
+	// Match NNG's buffer requests: allow full-sized datagrams on systems
+	// with small send buffers and absorb receive bursts across peers.
+	// These are best effort; the OS may limit or reject the requested size.
+	_ = c.SetWriteBuffer(udpSocketBuffer)
+	_ = c.SetReadBuffer(udpSocketBuffer)
 }
 
 func (l *listener) Address() string {
