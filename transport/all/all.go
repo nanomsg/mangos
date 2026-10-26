@@ -21,6 +21,7 @@ import (
 	"go.nanomsg.org/mangos/v3"
 
 	// import transports
+	_ "go.nanomsg.org/mangos/v3/transport/dtls"
 	_ "go.nanomsg.org/mangos/v3/transport/inproc"
 	_ "go.nanomsg.org/mangos/v3/transport/ipc"
 	_ "go.nanomsg.org/mangos/v3/transport/socket"
