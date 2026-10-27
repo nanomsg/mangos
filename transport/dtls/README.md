@@ -64,7 +64,12 @@ client certificate by default. For mutual authentication, add
 `pion.WithClientCAs(roots)` to the server options, and
 `pion.WithCertificates(clientCertificate)` to the client options.
 
-The pinned Pion release has two certificate limitations:
+### Certificate limitations
+
+The transport is pinned to Pion `v4.0.0-rc.7`, a prerelease. Its public client
+and server option types are exposed through `Config`; applications configuring
+DTLS depend on that upstream API. The pinned release has two certificate
+limitations:
 
 - For DTLS 1.3 use **ECDSA keys or PSK**. Its CertificateVerify encoder
   rejects RSA-PSS signature schemes. RSA keys work with DTLS 1.2; restrict
@@ -83,7 +88,7 @@ PSK-only endpoints, explicitly select a compatible PSK cipher suite on both
 ends, such as `ciphersuite.TLS_PSK_WITH_AES_128_GCM_SHA256` from Pion's
 `pkg/crypto/ciphersuite` package.
 
-**Versions and connection information**
+### Versions and connection information
 
 Both DTLS 1.2 and 1.3 are enabled by default, and the highest shared version
 is selected. To require DTLS 1.3, add these options to the relevant role:
@@ -112,7 +117,7 @@ Certificate pools and callback state captured by options must remain safe
 for concurrent use. Endpoint configuration and receive limits cannot change
 after startup; attempts return `mangos.ErrProtoState`.
 
-**Message and resource limits**
+### Message and resource limits
 
 Messages can be lost or reordered. DTLS retransmits its handshake, and the
 transport retries NNG connection negotiation, but application messages are
@@ -151,7 +156,7 @@ semantics are not provided by this package. Pion v4 is currently pinned to
 `v4.0.0-rc.7`, a prerelease; applications should account for that dependency
 when choosing a release policy.
 
-**Interoperability tests**
+### Interoperability tests
 
 Ordinary tests use pure Go and include DTLS 1.2/1.3, IPv4/IPv6, mutual
 certificate authentication, PSK, version fallback, full-sized and empty

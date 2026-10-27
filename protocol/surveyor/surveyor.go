@@ -75,8 +75,14 @@ type socket struct {
 }
 
 var (
-	nilQ <-chan time.Time
+	nilQ    <-chan time.Time
+	closedQ chan time.Time
 )
+
+func init() {
+	closedQ = make(chan time.Time)
+	close(closedQ)
+}
 
 const defaultQLen = 128
 
@@ -170,6 +176,8 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	timeq := nilQ
 	if c.recvExpire > 0 {
 		timeq = time.After(c.recvExpire)
+	} else if c.recvExpire < 0 {
+		timeq = closedQ
 	}
 	s.Unlock()
 
@@ -177,9 +185,6 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 		return nil, protocol.ErrProtoState
 	}
 	select {
-	case <-c.closeQ:
-		return nil, protocol.ErrClosed
-
 	case m := <-surv.recvQ:
 		if m == nil {
 			// Sometimes the recvQ can get closed ahead of
@@ -187,9 +192,22 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 			return nil, surv.err
 		}
 		return m, nil
+	default:
+		select {
+		case <-c.closeQ:
+			return nil, protocol.ErrClosed
 
-	case <-timeq:
-		return nil, protocol.ErrRecvTimeout
+		case m := <-surv.recvQ:
+			if m == nil {
+				// Sometimes the recvQ can get closed ahead of
+				// the closeQ, but the closeQ takes precedence.
+				return nil, surv.err
+			}
+			return m, nil
+
+		case <-timeq:
+			return nil, protocol.ErrRecvTimeout
+		}
 	}
 }
 

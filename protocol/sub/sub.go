@@ -75,26 +75,32 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	recvQ := c.recvQ
 	sizeQ := c.sizeQ
 	closeQ := c.closeQ
-	if c.recvExpire > 0 {
+	if c.recvExpire != 0 {
 		timeQ = time.After(c.recvExpire)
 	}
 	s.Unlock()
 
 	for {
 		select {
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
-		case <-closeQ:
-			return nil, protocol.ErrClosed
-		case <-sizeQ:
-			s.Lock()
-			sizeQ = c.sizeQ
-			recvQ = c.recvQ
-			s.Unlock()
-			continue
 		case m := <-recvQ:
 			m = m.MakeUnique()
 			return m, nil
+		default:
+			select {
+			case <-timeQ:
+				return nil, protocol.ErrRecvTimeout
+			case <-closeQ:
+				return nil, protocol.ErrClosed
+			case <-sizeQ:
+				s.Lock()
+				sizeQ = c.sizeQ
+				recvQ = c.recvQ
+				s.Unlock()
+				continue
+			case m := <-recvQ:
+				m = m.MakeUnique()
+				return m, nil
+			}
 		}
 	}
 }

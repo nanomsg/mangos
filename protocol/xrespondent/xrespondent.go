@@ -97,7 +97,7 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	tq := nilQ
 	if bestEffort {
 		tq = closedQ
-	} else if s.sendExpire > 0 {
+	} else if s.sendExpire != 0 {
 		tq = time.After(s.sendExpire)
 	}
 	s.Unlock()
@@ -105,24 +105,29 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	select {
 	case p.sendQ <- m:
 		return nil
-	case <-p.closeQ:
-		m.Free()
-		return nil // No way to return the message
-	case <-tq:
-		if bestEffort {
-			m.Free()
+	default:
+		select {
+		case p.sendQ <- m:
 			return nil
+		case <-p.closeQ:
+			m.Free()
+			return nil // No way to return the message
+		case <-tq:
+			if bestEffort {
+				m.Free()
+				return nil
+			}
+			// restore the header
+			m.Header = hdr
+			return protocol.ErrSendTimeout
 		}
-		// restore the header
-		m.Header = hdr
-		return protocol.ErrSendTimeout
 	}
 }
 
 func (s *socket) RecvMsg() (*protocol.Message, error) {
 	timeQ := nilQ
 	s.Lock()
-	if s.recvExpire > 0 {
+	if s.recvExpire != 0 {
 		timeQ = time.After(s.recvExpire)
 	}
 	recvQ := s.recvQ
@@ -132,17 +137,22 @@ func (s *socket) RecvMsg() (*protocol.Message, error) {
 
 	for {
 		select {
-		case <-closeQ:
-			return nil, protocol.ErrClosed
-		case <-timeQ:
-			return nil, protocol.ErrRecvTimeout
 		case m := <-recvQ:
 			return m, nil
-		case <-sizeQ:
-			s.Lock()
-			recvQ = s.recvQ
-			sizeQ = s.sizeQ
-			s.Unlock()
+		default:
+			select {
+			case <-closeQ:
+				return nil, protocol.ErrClosed
+			case <-timeQ:
+				return nil, protocol.ErrRecvTimeout
+			case m := <-recvQ:
+				return m, nil
+			case <-sizeQ:
+				s.Lock()
+				recvQ = s.recvQ
+				sizeQ = s.sizeQ
+				s.Unlock()
+			}
 		}
 	}
 }

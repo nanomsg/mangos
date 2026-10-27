@@ -79,6 +79,22 @@ func TestReqRecvDeadline(t *testing.T) {
 	MustSucceed(t, peer.Close())
 }
 
+func TestReqRecvNonBlocking(t *testing.T) {
+	self := GetSocket(t, NewSocket)
+	peer := GetSocket(t, rep.NewSocket)
+	ConnectPair(t, self, peer)
+	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Duration(-1)))
+	MustSucceed(t, self.Send([]byte{}))
+	_ = MustRecv(t, peer)
+	start := time.Now()
+	m, e := self.RecvMsg()
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeTrue(t, time.Since(start) < time.Second)
+	MustBeNil(t, m)
+	MustSucceed(t, self.Close())
+	MustSucceed(t, peer.Close())
+}
+
 func TestReqContextClosed(t *testing.T) {
 	s := GetSocket(t, NewSocket)
 	c, e := s.OpenContext()
@@ -181,6 +197,18 @@ func TestReqBestEffort(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, false))
 	MustBeError(t, s.Send(msg), mangos.ErrSendTimeout)
 	MustBeError(t, s.Send(msg), mangos.ErrSendTimeout)
+	MustClose(t, s)
+}
+
+func TestReqSendNonBlocking(t *testing.T) {
+	timeout := -time.Millisecond
+	msg := []byte{'0', '1', '2', '3'}
+
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, timeout))
+	MustSucceed(t, s.Listen(AddrTestInp()))
+	MustBeError(t, s.Send(msg), mangos.ErrSendTimeout)
+	MustClose(t, s)
 }
 
 // This test demonstrates cancellation before calling receive but after the
@@ -393,7 +421,6 @@ func TestReqMultiContexts(t *testing.T) {
 	ConnectPair(t, self, peer)
 
 	recv := make([]int, count)
-	ctxs := make([]mangos.Context, 0, count)
 	var wg1 sync.WaitGroup
 	var wg2 sync.WaitGroup
 	wg1.Add(count)
@@ -404,7 +431,6 @@ func TestReqMultiContexts(t *testing.T) {
 		MustNotBeNil(t, c)
 		defer c.Close()
 
-		ctxs = append(ctxs, c)
 		topic := make([]byte, 4)
 		binary.BigEndian.PutUint32(topic, uint32(index))
 
@@ -417,6 +443,7 @@ func TestReqMultiContexts(t *testing.T) {
 			MustSucceed(t, e)
 			MustBeTrue(t, len(m.Body) == 4)
 			MustBeTrue(t, bytes.Equal(m.Body, topic))
+			m.Free()
 			recv[index]++
 		}
 	}
@@ -494,7 +521,6 @@ func TestReqSendNoPeerDisconnect(t *testing.T) {
 	MustSucceed(t, s.Close())
 }
 
-
 func TestReqRecvNoPeer(t *testing.T) {
 	VerifyOptionBool(t, NewSocket, mangos.OptionFailNoPeers)
 
@@ -511,7 +537,7 @@ func TestReqRecvNoPeer(t *testing.T) {
 	MustSucceed(t, s.Send([]byte("one"))) // sent by the socket, picked up by rep socket
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, p.Close())
-	time.Sleep(time.Millisecond*20)
+	time.Sleep(time.Millisecond * 20)
 	MustNotRecv(t, s, mangos.ErrNoPeers)
 	MustSucceed(t, s.Close())
 }
@@ -531,7 +557,7 @@ func TestReqRecvNoPeerDisconnect(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, s.Send([]byte("one"))) // sent by the socket, picked up by rep socket
 	go func() {
-		time.Sleep(time.Millisecond*10)
+		time.Sleep(time.Millisecond * 10)
 		MustSucceed(t, p.Close())
 	}()
 	MustNotRecv(t, s, mangos.ErrNoPeers)
