@@ -47,6 +47,13 @@ The [DTLS transport](transport/dtls/README.md) supports NNG-compatible
 `dtls://`, `dtls4://`, and `dtls6://` endpoints using Pion DTLS 1.2 and 1.3.
 It uses `mangos.OptionDTLSConfig` for certificates and authentication policy.
 
+DTLS currently depends on Pion `v4.0.0-rc.7`, a prerelease whose public option
+types are used by the configuration API. DTLS 1.3 requires ECDSA keys or PSK;
+RSA-key endpoints must be restricted to DTLS 1.2. Ed25519-signed certificate
+chains are not currently supported. See the
+[DTLS certificate limitations](transport/dtls/README.md#certificate-limitations)
+before choosing certificates for deployment.
+
 Use `unix://PATH` for AF_UNIX sockets on POSIX systems or Windows systems with
 AF_UNIX support, and `winpipe://NAME` for Windows named pipes. The `ipc://`
 scheme remains a platform alias: it uses UNIX domain sockets on POSIX and named
@@ -74,6 +81,11 @@ the idiomatic Go way.
 (Note that most of the tests are in a test subdirectory.)
 
     $ go test go.nanomsg.org/mangos/v3/...
+
+From a checkout, run the full race suite and static checks with:
+
+    $ go test -race ./...
+    $ go vet ./...
 
 There are also internal benchmarks available:
 

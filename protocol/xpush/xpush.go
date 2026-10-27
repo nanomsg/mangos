@@ -75,7 +75,7 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	tq := nilQ
 	if bestEffort {
 		tq = closedQ
-	} else if s.sendExpire > 0 {
+	} else if s.sendExpire != 0 {
 		tq = time.After(s.sendExpire)
 	}
 	if s.closed {
@@ -93,14 +93,20 @@ func (s *socket) SendMsg(m *protocol.Message) error {
 	case <-pq:
 		return protocol.ErrNoPeers
 	case s.sendQ <- m:
-	case <-s.closeQ:
-		return protocol.ErrClosed
-	case <-tq:
-		if bestEffort {
-			m.Free()
-			return nil
+	default:
+		select {
+		case <-pq:
+			return protocol.ErrNoPeers
+		case s.sendQ <- m:
+		case <-s.closeQ:
+			return protocol.ErrClosed
+		case <-tq:
+			if bestEffort {
+				m.Free()
+				return nil
+			}
+			return protocol.ErrSendTimeout
 		}
-		return protocol.ErrSendTimeout
 	}
 
 	s.Lock()
@@ -261,7 +267,7 @@ func (s *socket) Close() error {
 		return protocol.ErrClosed
 	}
 	s.closed = true
-	s.cv.Broadcast() 
+	s.cv.Broadcast()
 	s.Unlock()
 	close(s.closeQ)
 	return nil
@@ -324,7 +330,7 @@ func (*socket) Info() protocol.Info {
 func NewProtocol() protocol.Protocol {
 	s := &socket{
 		closeQ:   make(chan struct{}),
-		noPeerQ: make(chan struct{}),
+		noPeerQ:  make(chan struct{}),
 		sendQ:    make(chan *protocol.Message, defaultQLen),
 		sendQLen: defaultQLen,
 		pipes:    make(map[uint32]*pipe),

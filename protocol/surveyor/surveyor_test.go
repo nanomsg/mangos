@@ -177,6 +177,18 @@ func TestSurveyExpire(t *testing.T) {
 	MustSucceed(t, s.Close())
 }
 
+// A negative deadline must not wait for the survey to expire.
+func TestSurveyRecvNonBlocking(t *testing.T) {
+	s := GetSocket(t, NewSocket)
+	MustSucceed(t, s.SetOption(mangos.OptionSurveyTime, time.Minute))
+	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Duration(-1)))
+	MustSucceed(t, s.Send([]byte("first")))
+	v, e := s.Recv()
+	MustBeError(t, e, mangos.ErrRecvTimeout)
+	MustBeNil(t, v)
+	MustClose(t, s)
+}
+
 // This test demonstrates that we can keep sending even if the pipes are full.
 func TestSurveyorBestEffortSend(t *testing.T) {
 	s := GetSocket(t, NewSocket)
@@ -374,7 +386,6 @@ func TestSurveyorMultiContexts(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 
 	recv := make([]int, count)
-	ctxs := make([]mangos.Context, 0, count)
 	var wg1 sync.WaitGroup
 	var wg2 sync.WaitGroup
 	wg1.Add(count)
@@ -383,8 +394,8 @@ func TestSurveyorMultiContexts(t *testing.T) {
 		c, e := s.OpenContext()
 		MustSucceed(t, e)
 		MustNotBeNil(t, c)
+		defer c.Close()
 
-		ctxs = append(ctxs, c)
 		topic := make([]byte, 4)
 		binary.BigEndian.PutUint32(topic, uint32(index))
 
@@ -397,6 +408,7 @@ func TestSurveyorMultiContexts(t *testing.T) {
 			MustSucceed(t, e)
 			MustBeTrue(t, len(m.Body) == 4)
 			MustBeTrue(t, bytes.Equal(m.Body, topic))
+			m.Free()
 			recv[index]++
 		}
 	}
