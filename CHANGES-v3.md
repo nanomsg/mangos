@@ -1,6 +1,6 @@
 # Changes in Version 3
 
-## Version 3.6.0 (unreleased)
+## Version 3.6.0
 
 ### New transports
 
@@ -71,6 +71,8 @@ resource limits, and optional interoperability tests against real NNG peers.
 
 Go 1.26 or later is required, as in 3.5.0. Use a current patched Go toolchain.
 See [the support policy](README.md#compatibility) for supported releases.
+
+[Full changes](https://github.com/nanomsg/mangos/compare/v3.5.0...v3.6.0)
 
 ## Version 3.5.0
 
