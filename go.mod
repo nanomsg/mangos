@@ -8,7 +8,7 @@ require (
 
 require (
 	github.com/coder/websocket v1.8.15
-	github.com/pion/dtls/v4 v4.0.0-rc.7
+	github.com/pion/dtls/v4 v4.0.0-rc.8
 	github.com/pion/transport/v5 v5.1.4
 )
 
