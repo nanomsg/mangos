@@ -4,8 +4,8 @@ github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNU
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/gdamore/optopia v0.2.0 h1:2t3+oyTrJ9e0jxmXqeacws1SFKu4eIrg+U87GjtlA8M=
 github.com/gdamore/optopia v0.2.0/go.mod h1:YKYEwo5C1Pa617H7NlPcmQXl+vG6YnSSNB44n8dNL0Q=
-github.com/pion/dtls/v4 v4.0.0-rc.7 h1:LNr0vMBztVQH5qxebRy/UL4fzyFW+pyAlB0XSGBBV6k=
-github.com/pion/dtls/v4 v4.0.0-rc.7/go.mod h1:jzj1RiWPy+T6uaBR7Bc/PJYHvF+VxNLOYYb/d1IINwE=
+github.com/pion/dtls/v4 v4.0.1 h1:Kf5UJ6/BQ4OwofIa5+CYvt0TbVsSv56L6y6IaF8yvHI=
+github.com/pion/dtls/v4 v4.0.1/go.mod h1:d0wnjVER+gonPBUifSj6ZeGXClyHxYfctzvOELtsNb4=
 github.com/pion/logging v0.2.4 h1:tTew+7cmQ+Mc1pTBLKH2puKsOvhm32dROumOZ655zB8=
 github.com/pion/logging v0.2.4/go.mod h1:DffhXTKYdNZU+KtJ5pyQDjvOAh/GsNSyv1lbkFbe3so=
 github.com/pion/transport/v5 v5.1.4 h1:j0E5QIPyv28YnWxa8yE9AyDmrxVnwhZ109c7Dpt48K4=
