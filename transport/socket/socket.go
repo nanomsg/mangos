@@ -105,7 +105,7 @@ func (l *listener) Close() error {
 	return nil
 }
 
-func (l *listener) SetOption(name string, value interface{}) error {
+func (l *listener) SetOption(name string, value any) error {
 	switch name {
 	case mangos.OptionMaxRecvSize:
 		v, ok := value.(int)
@@ -144,7 +144,7 @@ func (l *listener) SetOption(name string, value interface{}) error {
 	return mangos.ErrBadOption
 }
 
-func (l *listener) GetOption(name string) (interface{}, error) {
+func (l *listener) GetOption(name string) (any, error) {
 	if name != mangos.OptionMaxRecvSize {
 		return nil, mangos.ErrBadOption
 	}

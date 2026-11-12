@@ -43,7 +43,7 @@ type Message struct {
 	bbuf   []byte
 	hbuf   []byte
 	bsize  int
-	refcnt int32
+	refcnt atomic.Int32
 }
 
 type msgCacheInfo struct {
@@ -64,42 +64,42 @@ var messageCache = []msgCacheInfo{
 	{
 		maxbody: 64,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(64) },
+			New: func() any { return newMsg(64) },
 		},
 	}, {
 		maxbody: 128,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(128) },
+			New: func() any { return newMsg(128) },
 		},
 	}, {
 		maxbody: 256,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(256) },
+			New: func() any { return newMsg(256) },
 		},
 	}, {
 		maxbody: 512,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(512) },
+			New: func() any { return newMsg(512) },
 		},
 	}, {
 		maxbody: 1024,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(1024) },
+			New: func() any { return newMsg(1024) },
 		},
 	}, {
 		maxbody: 4096,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(4096) },
+			New: func() any { return newMsg(4096) },
 		},
 	}, {
 		maxbody: 8192,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(8192) },
+			New: func() any { return newMsg(8192) },
 		},
 	}, {
 		maxbody: 65536,
 		pool: &sync.Pool{
-			New: func() interface{} { return newMsg(65536) },
+			New: func() any { return newMsg(65536) },
 		},
 	},
 }
@@ -110,7 +110,7 @@ var messageCache = []msgCacheInfo{
 // rather substantial benefits for performance.
 func (m *Message) Free() {
 	if m != nil {
-		if atomic.AddInt32(&m.refcnt, -1) == 0 {
+		if m.refcnt.Add(-1) == 0 {
 			for i := range messageCache {
 				if m.bsize == messageCache[i].maxbody {
 					messageCache[i].pool.Put(m)
@@ -126,7 +126,7 @@ func (m *Message) Free() {
 // If a read-only copy needs to be made "unique", callers can do so by
 // using the Uniq function.
 func (m *Message) Clone() {
-	atomic.AddInt32(&m.refcnt, 1)
+	m.refcnt.Add(1)
 }
 
 // MakeUnique ensures that the message is not shared.  If the reference
@@ -141,7 +141,7 @@ func (m *Message) Clone() {
 // Note that transports always should call this on their transmit path
 // if they are going to modify the message.  (Most do not.)
 func (m *Message) MakeUnique() *Message {
-	if atomic.LoadInt32(&m.refcnt) == 1 {
+	if m.refcnt.Load() == 1 {
 		return m
 	}
 	d := m.Dup()
@@ -177,6 +177,6 @@ func NewMessage(sz int) *Message {
 
 	m.Body = m.bbuf
 	m.Header = m.hbuf
-	atomic.StoreInt32(&m.refcnt, 1)
+	m.refcnt.Store(1)
 	return m
 }

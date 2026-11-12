@@ -51,11 +51,11 @@ type Socket interface {
 	// If the address is invalid, then an error is returned.
 	Dial(addr string) error
 
-	DialOptions(addr string, options map[string]interface{}) error
+	DialOptions(addr string, options map[string]any) error
 
 	// NewDialer returns a Dialer object which can be used to get
 	// access to the underlying configuration for dialing.
-	NewDialer(addr string, options map[string]interface{}) (Dialer, error)
+	NewDialer(addr string, options map[string]any) (Dialer, error)
 
 	// Listen connects a local endpoint to the Socket.  Remote peers
 	// may connect (e.g. with Dial) and will each be "connected" to
@@ -63,15 +63,15 @@ type Socket interface {
 	// The only error possible is if the address is invalid.
 	Listen(addr string) error
 
-	ListenOptions(addr string, options map[string]interface{}) error
+	ListenOptions(addr string, options map[string]any) error
 
-	NewListener(addr string, options map[string]interface{}) (Listener, error)
+	NewListener(addr string, options map[string]any) (Listener, error)
 
 	// GetOption is used to retrieve an option for a socket.
-	GetOption(name string) (interface{}, error)
+	GetOption(name string) (any, error)
 
 	// SetOption is used to set an option for a socket.
-	SetOption(name string, value interface{}) error
+	SetOption(name string, value any) error
 
 	// OpenContext creates a new Context.  If a protocol does not
 	// support separate contexts, this will return an error.
@@ -96,10 +96,10 @@ type Context interface {
 	Close() error
 
 	// GetOption is used to retrieve an option for a socket.
-	GetOption(name string) (interface{}, error)
+	GetOption(name string) (any, error)
 
 	// SetOption is used to set an option for a socket.
-	SetOption(name string, value interface{}) error
+	SetOption(name string, value any) error
 
 	// Send puts the message on the outbound send queue.  It blocks
 	// until the message can be queued, or the send deadline expires.

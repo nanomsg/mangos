@@ -17,20 +17,19 @@
 //
 // The server listens, and offers three paths:
 //
-//  - sub/    - SUB socket, publishes a message "PUB <count> <time>" each second
-//  - req/    - REQ socket, responds with a reply "REPLY <count> <time>"
-//  - static/ - static content, provided as ASCII "STATIC"
+//   - sub/    - SUB socket, publishes a message "PUB <count> <time>" each second
+//   - req/    - REQ socket, responds with a reply "REPLY <count> <time>"
+//   - static/ - static content, provided as ASCII "STATIC"
 //
 // To use:
 //
-//   $ go build .
-//   $ port=40899
-//   $ ./websocket server port & pid=$! && sleep 1
-//   $ ./websocket req $port
-//   $ ./websocket sub $port
-//   $ ./websocket static $port
-//   $ kill $pid
-//
+//	$ go build .
+//	$ port=40899
+//	$ ./websocket server port & pid=$! && sleep 1
+//	$ ./websocket req $port
+//	$ ./websocket sub $port
+//	$ ./websocket static $port
+//	$ kill $pid
 package main
 
 import (
@@ -41,7 +40,7 @@ import (
 	"strconv"
 )
 
-func die(format string, v ...interface{}) {
+func die(format string, v ...any) {
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }

@@ -104,7 +104,7 @@ func TestRepBestEffortSend(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, true))
 
 	ConnectPair(t, s, p)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// We have to make a raw message when using xreq.  We
 		// use xreq because normal req will simply discard
 		// messages for requests it doesn't have outstanding.
@@ -129,7 +129,7 @@ func TestRepSendNonBlocking(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Duration(-1)))
 
 	ConnectPair(t, s, p)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// We have to make a raw message when using xreq.  We
 		// use xreq because normal req will simply discard
 		// messages for requests it doesn't have outstanding.
@@ -173,7 +173,7 @@ func TestRepCloseContextSend(t *testing.T) {
 	time.Sleep(time.Millisecond * 10)
 	cnt := 0
 	data := []byte{0x80, 0, 0, 1}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		// We have to make a raw message when using xreq.
 		m := mangos.NewMessage(0)
 		m.Header = append(m.Header, data...)
@@ -246,14 +246,12 @@ func TestRepDoubleRecv(t *testing.T) {
 	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Second))
 	pass := false
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(time.Millisecond)
 		MustNotRecv(t, self, mangos.ErrProtoState)
 		MustSucceed(t, self.Close())
 		pass = true
-	}()
+	})
 	MustNotRecv(t, self, mangos.ErrClosed)
 	wg.Wait()
 	MustBeTrue(t, pass)
@@ -284,7 +282,7 @@ func TestRepPipeRecvClosePipe(t *testing.T) {
 	MustSendString(t, peer, "")
 	m := MustRecvMsg(t, self)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		e := peer.Send([]byte{})
 		if e != nil {
 			MustBeError(t, e, mangos.ErrSendTimeout)
@@ -304,7 +302,7 @@ func TestRepPipeRecvCloseSocket(t *testing.T) {
 	MustSucceed(t, peer.SetOption(mangos.OptionSendDeadline, time.Millisecond*10))
 	ConnectPair(t, self, peer)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		e := peer.Send([]byte{})
 		if e != nil {
 			MustBeError(t, e, mangos.ErrSendTimeout)
@@ -336,7 +334,7 @@ func TestRepMultiContexts(t *testing.T) {
 		topic := make([]byte, 4)
 		binary.BigEndian.PutUint32(topic, uint32(index))
 
-		for i := 0; i < repeat; i++ {
+		for range repeat {
 			MustSucceed(t, c2.Send(topic))
 			m, e := c1.RecvMsg()
 			MustSucceed(t, e)
@@ -353,7 +351,7 @@ func TestRepMultiContexts(t *testing.T) {
 
 	wg1.Add(count)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		c1, e := s.OpenContext()
 		MustSucceed(t, e)
 		MustNotBeNil(t, c1)
@@ -375,7 +373,7 @@ func TestRepMultiContexts(t *testing.T) {
 	MustSucceed(t, p.Close())
 	MustSucceed(t, s.Close())
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		MustBeTrue(t, recv[i] == repeat)
 		MustBeTrue(t, send[i] == repeat)
 	}

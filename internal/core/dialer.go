@@ -75,7 +75,7 @@ func (d *dialer) Close() error {
 	return nil
 }
 
-func (d *dialer) GetOption(n string) (interface{}, error) {
+func (d *dialer) GetOption(n string) (any, error) {
 	switch n {
 	case mangos.OptionReconnectTime:
 		d.Lock()
@@ -105,7 +105,7 @@ func (d *dialer) GetOption(n string) (interface{}, error) {
 	return d.s.GetOption(n)
 }
 
-func (d *dialer) SetOption(n string, v interface{}) error {
+func (d *dialer) SetOption(n string, v any) error {
 	switch n {
 	case mangos.OptionReconnectTime:
 		if v, ok := v.(time.Duration); ok && v >= 0 {
@@ -223,10 +223,7 @@ func (d *dialer) redial(backoff bool) {
 		maxfact := float64(1.5)
 		actfact := rand.Float64()*(maxfact-minfact) + minfact
 		if d.reconnMaxTime != 0 {
-			d.reconnTime = time.Duration(actfact * float64(d.reconnTime))
-			if d.reconnTime > d.reconnMaxTime {
-				d.reconnTime = d.reconnMaxTime
-			}
+			d.reconnTime = min(time.Duration(actfact*float64(d.reconnTime)), d.reconnMaxTime)
 		}
 	}
 

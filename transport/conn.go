@@ -65,7 +65,7 @@ type conn struct {
 	open             bool
 	closed           bool
 	handshakeTimeout time.Duration
-	options          map[string]interface{}
+	options          map[string]any
 	maxrx            int
 	sync.Mutex
 }
@@ -145,7 +145,7 @@ func (p *conn) Close() error {
 	return p.c.Close()
 }
 
-func (p *conn) GetOption(n string) (interface{}, error) {
+func (p *conn) GetOption(n string) (any, error) {
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		return p.maxrx, nil
@@ -156,7 +156,7 @@ func (p *conn) GetOption(n string) (interface{}, error) {
 	return nil, mangos.ErrBadProperty
 }
 
-func (p *conn) SetOption(n string, v interface{}) {
+func (p *conn) SetOption(n string, v any) {
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		p.maxrx = v.(int)
@@ -169,7 +169,7 @@ func (p *conn) SetOption(n string, v interface{}) {
 type ConnPipe interface {
 
 	// SetOption just records an option that can be retrieved later.
-	SetOption(string, interface{})
+	SetOption(string, any)
 	Pipe
 }
 
@@ -187,7 +187,7 @@ func NewConnPipe(c net.Conn, proto ProtocolInfo) ConnPipe {
 		c:                c,
 		proto:            proto,
 		handshakeTimeout: DefaultHandshakeTimeout,
-		options:          make(map[string]interface{}),
+		options:          make(map[string]any),
 	}
 
 	p.options[mangos.OptionMaxRecvSize] = 0

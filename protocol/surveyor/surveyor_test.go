@@ -201,7 +201,7 @@ func TestSurveyorBestEffortSend(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionSurveyTime, time.Second))
 
 	time.Sleep(time.Millisecond * 10)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		MustSucceed(t, s.Send([]byte{byte(i)}))
 	}
 	MustSucceed(t, s.Close())
@@ -221,7 +221,7 @@ func TestSurveyorRxDiscard(t *testing.T) {
 	var rs []mangos.Socket
 	var wg sync.WaitGroup
 	wg.Add(nresp)
-	for i := 0; i < nresp; i++ {
+	for range nresp {
 		r := GetSocket(t, respondent.NewSocket)
 		MustSucceed(t, r.Dial(a))
 		rs = append(rs, r)
@@ -270,7 +270,7 @@ func TestSurveyorBroadcast(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(nresp)
 
-	for i := 0; i < nresp; i++ {
+	for i := range nresp {
 		x := GetSocket(t, respondent.NewSocket)
 		MustSucceed(t, x.Dial(a))
 		r = append(r, x)
@@ -278,7 +278,7 @@ func TestSurveyorBroadcast(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			for num := 0; num < repeat; num++ {
+			for num := range repeat {
 				v, e := x.Recv()
 				MustSucceed(t, e)
 				MustBeTrue(t, string(v) == "survey")
@@ -298,9 +298,9 @@ func TestSurveyorBroadcast(t *testing.T) {
 
 	recv := make([]int, nresp)
 
-	for num := 0; num < repeat; num++ {
+	for num := range repeat {
 		MustSucceed(t, s.Send([]byte("survey")))
-		for i := 0; i < nresp; i++ {
+		for range nresp {
 			v, e := s.Recv()
 			MustSucceed(t, e)
 			MustBeTrue(t, len(v) == 8)
@@ -316,7 +316,7 @@ func TestSurveyorBroadcast(t *testing.T) {
 	wg.Wait()
 
 	MustSucceed(t, s.Close())
-	for i := 0; i < nresp; i++ {
+	for i := range nresp {
 		MustSucceed(t, r[i].Close())
 	}
 }
@@ -353,12 +353,10 @@ func TestSurveyorContextCloseAbort(t *testing.T) {
 	// To get us an id.
 	MustSucceed(t, c.Send([]byte{}))
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(time.Millisecond * 50)
 		MustSucceed(t, c.Close())
-	}()
+	})
 
 	_, e = c.Recv()
 	MustBeError(t, e, mangos.ErrClosed)
@@ -402,7 +400,7 @@ func TestSurveyorMultiContexts(t *testing.T) {
 		MustSucceed(t, c.SetOption(mangos.OptionRecvDeadline, time.Minute/4))
 		MustSucceed(t, c.SetOption(mangos.OptionSurveyTime, time.Minute))
 
-		for i := 0; i < repeat; i++ {
+		for range repeat {
 			MustSucceed(t, c.Send(topic))
 			m, e := c.RecvMsg()
 			MustSucceed(t, e)
@@ -413,13 +411,11 @@ func TestSurveyorMultiContexts(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		go fn(i)
 	}
 
-	wg2.Add(1)
-	go func() {
-		defer wg2.Done()
+	wg2.Go(func() {
 		var e error
 		var m *mangos.Message
 		for {
@@ -431,7 +427,7 @@ func TestSurveyorMultiContexts(t *testing.T) {
 			}
 		}
 		MustBeError(t, e, mangos.ErrClosed)
-	}()
+	})
 
 	// Give time for everything to be delivered.
 	wg1.Wait()
@@ -439,7 +435,7 @@ func TestSurveyorMultiContexts(t *testing.T) {
 	wg2.Wait()
 	MustSucceed(t, s.Close())
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		MustBeTrue(t, recv[i] == repeat)
 	}
 }

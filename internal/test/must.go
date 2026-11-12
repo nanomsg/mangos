@@ -70,7 +70,7 @@ func MustBeFalse(t *testing.T, b bool) {
 }
 
 // MustNotBeNil verifies that the provided value is not nil
-func MustNotBeNil(t *testing.T, v interface{}) {
+func MustNotBeNil(t *testing.T, v any) {
 	if reflect.ValueOf(v).IsNil() {
 		_, file, line, _ := runtime.Caller(1)
 		t.Fatalf("Failed at %s:%d: Value is nil", file, line)
@@ -78,7 +78,7 @@ func MustNotBeNil(t *testing.T, v interface{}) {
 }
 
 // MustBeNil verifies that the provided value is nil
-func MustBeNil(t *testing.T, v interface{}) {
+func MustBeNil(t *testing.T, v any) {
 	if !reflect.ValueOf(v).IsNil() {
 		_, file, line, _ := runtime.Caller(1)
 		t.Fatalf("Failed at %s:%d: Value is not nil", file, line)

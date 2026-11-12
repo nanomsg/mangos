@@ -27,6 +27,7 @@ package dtls
 
 import (
 	"context"
+	"maps"
 	"net"
 	"strings"
 	"sync"
@@ -155,13 +156,13 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	return p, nil
 }
 
-func (d *dialer) SetOption(name string, value interface{}) error {
+func (d *dialer) SetOption(name string, value any) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return setOption(&d.config, &d.maxRecv, d.started, name, value)
 }
 
-func (d *dialer) GetOption(name string) (interface{}, error) {
+func (d *dialer) GetOption(name string) (any, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return getOption(d.config, d.maxRecv, name)
@@ -313,9 +314,7 @@ func (l *listener) Close() error {
 		}
 	}
 	pending := make(map[*pion.Conn]*packetConn, len(l.pending))
-	for conn, raw := range l.pending {
-		pending[conn] = raw
-	}
+	maps.Copy(pending, l.pending)
 	inner := l.inner
 	l.mu.Unlock()
 	if inner != nil {
@@ -341,7 +340,7 @@ func (l *listener) Address() string {
 	return l.scheme + "://" + l.local.String()
 }
 
-func (l *listener) SetOption(name string, value interface{}) error {
+func (l *listener) SetOption(name string, value any) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.closing {
@@ -350,13 +349,13 @@ func (l *listener) SetOption(name string, value interface{}) error {
 	return setOption(&l.config, &l.maxRecv, l.started, name, value)
 }
 
-func (l *listener) GetOption(name string) (interface{}, error) {
+func (l *listener) GetOption(name string) (any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return getOption(l.config, l.maxRecv, name)
 }
 
-func setOption(config **Config, maxRecv *int, started bool, name string, value interface{}) error {
+func setOption(config **Config, maxRecv *int, started bool, name string, value any) error {
 	if name != mangos.OptionDTLSConfig && name != mangos.OptionMaxRecvSize {
 		return mangos.ErrBadOption
 	}
@@ -385,7 +384,7 @@ func setOption(config **Config, maxRecv *int, started bool, name string, value i
 	return nil
 }
 
-func getOption(config *Config, maxRecv int, name string) (interface{}, error) {
+func getOption(config *Config, maxRecv int, name string) (any, error) {
 	switch name {
 	case mangos.OptionDTLSConfig:
 		return cloneConfig(config), nil

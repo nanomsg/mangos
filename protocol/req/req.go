@@ -368,7 +368,7 @@ func (c *context) RecvMsg() (*protocol.Message, error) {
 	return m, nil
 }
 
-func (c *context) SetOption(name string, value interface{}) error {
+func (c *context) SetOption(name string, value any) error {
 	switch name {
 	case protocol.OptionRetryTime:
 		if v, ok := value.(time.Duration); ok {
@@ -420,7 +420,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	return protocol.ErrBadOption
 }
 
-func (c *context) GetOption(option string) (interface{}, error) {
+func (c *context) GetOption(option string) (any, error) {
 	switch option {
 	case protocol.OptionRetryTime:
 		c.s.Lock()
@@ -465,7 +465,7 @@ func (c *context) Close() error {
 	return nil
 }
 
-func (s *socket) GetOption(option string) (interface{}, error) {
+func (s *socket) GetOption(option string) (any, error) {
 	switch option {
 	case protocol.OptionRaw:
 		return false, nil
@@ -473,7 +473,7 @@ func (s *socket) GetOption(option string) (interface{}, error) {
 		return s.defCtx.GetOption(option)
 	}
 }
-func (s *socket) SetOption(option string, value interface{}) error {
+func (s *socket) SetOption(option string, value any) error {
 	return s.defCtx.SetOption(option, value)
 }
 

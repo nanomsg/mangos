@@ -263,7 +263,7 @@ func (c *context) unsubscribe(topic []byte) error {
 	return protocol.ErrBadValue
 }
 
-func (c *context) SetOption(name string, value interface{}) error {
+func (c *context) SetOption(name string, value any) error {
 	s := c.s
 
 	var fn func([]byte) error
@@ -318,7 +318,7 @@ func (c *context) SetOption(name string, value interface{}) error {
 	return fn(vb)
 }
 
-func (c *context) GetOption(name string) (interface{}, error) {
+func (c *context) GetOption(name string) (any, error) {
 	switch name {
 	case protocol.OptionReadQLen:
 		c.s.Lock()
@@ -357,7 +357,7 @@ func (s *socket) OpenContext() (protocol.Context, error) {
 	return c, nil
 }
 
-func (s *socket) GetOption(name string) (interface{}, error) {
+func (s *socket) GetOption(name string) (any, error) {
 	switch name {
 	case protocol.OptionRaw:
 		return false, nil
@@ -366,7 +366,7 @@ func (s *socket) GetOption(name string) (interface{}, error) {
 	}
 }
 
-func (s *socket) SetOption(name string, val interface{}) error {
+func (s *socket) SetOption(name string, val any) error {
 	return s.master.SetOption(name, val)
 }
 

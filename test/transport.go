@@ -74,9 +74,7 @@ func (tt *TranTest) TestListenAndAccept(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t.Logf("Connecting on %s", tt.addr)
 		d, err := tt.tran.NewDialer(tt.addr, tt.sockReq)
 		if err != nil {
@@ -104,7 +102,7 @@ func (tt *TranTest) TestListenAndAccept(t *testing.T) {
 			addr := v.(net.Addr)
 			t.Logf("Dialed remote peer %s addr %s", addr.Network(), addr.String())
 		}
-	}()
+	})
 
 	server, err := l.Accept()
 	if err != nil {

@@ -215,13 +215,13 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	}
 }
 
-func (d *dialer) SetOption(name string, value interface{}) error {
+func (d *dialer) SetOption(name string, value any) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return setMaxRecv(&d.maxRecv, name, value)
 }
 
-func (d *dialer) GetOption(name string) (interface{}, error) {
+func (d *dialer) GetOption(name string) (any, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if name == mangos.OptionMaxRecvSize {
@@ -340,13 +340,13 @@ drained:
 	return nil
 }
 
-func (l *listener) SetOption(name string, value interface{}) error {
+func (l *listener) SetOption(name string, value any) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return setMaxRecv(&l.maxRecv, name, value)
 }
 
-func (l *listener) GetOption(name string) (interface{}, error) {
+func (l *listener) GetOption(name string) (any, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if name == mangos.OptionMaxRecvSize {
@@ -712,7 +712,7 @@ func (p *pipe) Close() error {
 	return nil
 }
 
-func (p *pipe) GetOption(name string) (interface{}, error) {
+func (p *pipe) GetOption(name string) (any, error) {
 	switch name {
 	case mangos.OptionLocalAddr:
 		return p.local, nil
@@ -725,7 +725,7 @@ func (p *pipe) GetOption(name string) (interface{}, error) {
 	}
 }
 
-func setMaxRecv(dst *int, name string, value interface{}) error {
+func setMaxRecv(dst *int, name string, value any) error {
 	if name != mangos.OptionMaxRecvSize {
 		return mangos.ErrBadOption
 	}

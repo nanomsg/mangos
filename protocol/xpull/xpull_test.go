@@ -79,7 +79,7 @@ func TestXPullRecvClosePipe(t *testing.T) {
 	MustSucceed(t, p.SetOption(mangos.OptionSendDeadline, time.Millisecond))
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		if e := p.Send([]byte{byte(i)}); e != nil {
@@ -105,7 +105,7 @@ func TestXPullRecvCloseSocket(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		if e := p.Send([]byte{byte(i)}); e != nil {
@@ -124,7 +124,7 @@ func TestXPullRecv(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionRecvDeadline, time.Second))
 	ConnectPair(t, s, p)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		MustSucceed(t, p.Send([]byte{byte(i)}))
 		v, e := s.Recv()
 		MustSucceed(t, e)
@@ -144,7 +144,7 @@ func TestXPullResizeRecv(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSucceed(t, p.Send([]byte{byte(i)}))
@@ -155,7 +155,7 @@ func TestXPullResizeRecv(t *testing.T) {
 	// Sleep so the resize filler finishes
 	time.Sleep(time.Millisecond * 20)
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if _, e := s.Recv(); e != nil {
 			MustBeError(t, e, mangos.ErrRecvTimeout)
 			break
@@ -174,7 +174,7 @@ func TestXPullResizeRecv2(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		if e := p.Send([]byte{byte(i)}); e != nil {
@@ -193,7 +193,7 @@ func TestXPullResizeRecv2(t *testing.T) {
 	// Sleep so the resize filler finishes
 	time.Sleep(time.Millisecond * 20)
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if _, e := s.Recv(); e != nil {
 			MustBeError(t, e, mangos.ErrRecvTimeout)
 			break
@@ -235,7 +235,7 @@ func TestXPullResizeRecv4(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if e := p.Send([]byte{byte(i)}); e != nil {
 			MustBeError(t, e, mangos.ErrSendTimeout)
 			break

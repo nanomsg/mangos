@@ -29,7 +29,7 @@ func TestRepRecvNonBlockingReady(t *testing.T) {
 		if err := s.SetOption(mangos.OptionRecvDeadline, -time.Nanosecond); err != nil {
 			t.Fatal(err)
 		}
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			message := mangos.NewMessage(0)
 			message.Header = []byte{0x80, 0, 0, 1}
 			go func() { s.recvQ <- recvQEntry{m: message} }()

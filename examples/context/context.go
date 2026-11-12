@@ -20,18 +20,17 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $
-//   $ ./context server $url & server=$! && sleep 1
-//   $ ./context client $url "John"
-//   $ ./context client $url "Bill"
-//   $ ./context client $url "Mary"
-//   $ ./context client $url "Susan"
-//   $ ./context client $url "Mark"
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$
+//	$ ./context server $url & server=$! && sleep 1
+//	$ ./context client $url "John"
+//	$ ./context client $url "Bill"
+//	$ ./context client $url "Mary"
+//	$ ./context client $url "Susan"
+//	$ ./context client $url "Mark"
 //
-//   $ kill $server
-//
+//	$ kill $server
 package main
 
 import (
@@ -48,12 +47,13 @@ import (
 	_ "go.nanomsg.org/mangos/v3/transport/all"
 )
 
-func die(format string, v ...interface{}) {
+func die(format string, v ...any) {
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }
 
-/**
+/*
+*
 This function will act as the server. It will create a single REP socket and a pool of worker go routines that will
 simultaneously service requests from many clients. This means that two clients can both send a request to the
 server and the server can deal with both of them concurrently. The server does not need to
@@ -109,7 +109,7 @@ func server(url string) {
 	}
 
 	// Create several workers that are ready to handle incoming requests.
-	for ii := 0; ii < numWorkers; ii++ {
+	for ii := range numWorkers {
 		go worker(ii)
 	}
 

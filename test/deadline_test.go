@@ -48,7 +48,7 @@ import (
 )
 
 type deadlineEndpoint interface {
-	SetOption(string, interface{}) error
+	SetOption(string, any) error
 	SendMsg(*mangos.Message) error
 	RecvMsg() (*mangos.Message, error)
 }
@@ -155,9 +155,9 @@ func TestNegativeRecvDeadline(t *testing.T) {
 					// Repeat after a timeout to verify stateful contexts remain usable.
 					// Receiving a second wire message proves that the protocol has finished
 					// processing the first, so its data is ready before the nonblocking call.
-					for i := 0; i < 20; i++ {
+					for range 20 {
 						header := prepare()
-						for j := 0; j < 2; j++ {
+						for range 2 {
 							message := mangos.NewMessage(0)
 							message.Body = append(message.Body, header...)
 							message.Body = append(message.Body, 'o', 'k')
@@ -232,7 +232,7 @@ func TestNegativeSendDeadline(t *testing.T) {
 						}
 						itest.MustSucceed(t, endpoint.SetOption(mangos.OptionSendDeadline, -time.Nanosecond))
 						mock, pipe := itest.MockConnect(t, s)
-						for i := 0; i < 10; i++ {
+						for i := range 10 {
 							m := mangos.NewMessage(0)
 							m.Body = append(m.Body, "ok"...)
 							switch tc.name {

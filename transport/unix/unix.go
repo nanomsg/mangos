@@ -1,5 +1,4 @@
 //go:build !plan9 && !js
-// +build !plan9,!js
 
 // Copyright 2026 The Mangos Authors
 //
@@ -66,7 +65,7 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 }
 
 // SetOption implements Dialer SetOption method.
-func (d *dialer) SetOption(n string, v interface{}) error {
+func (d *dialer) SetOption(n string, v any) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -82,7 +81,7 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 }
 
 // GetOption implements Dialer GetOption method.
-func (d *dialer) GetOption(n string) (interface{}, error) {
+func (d *dialer) GetOption(n string) (any, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -202,7 +201,7 @@ func (l *listener) Close() error {
 }
 
 // SetOption implements a stub PipeListener SetOption method.
-func (l *listener) SetOption(n string, v interface{}) error {
+func (l *listener) SetOption(n string, v any) error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -241,7 +240,7 @@ func (l *listener) SetOption(n string, v interface{}) error {
 }
 
 // GetOption implements a stub PipeListener GetOption method.
-func (l *listener) GetOption(n string) (interface{}, error) {
+func (l *listener) GetOption(n string) (any, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -316,8 +315,7 @@ func (t unixTran) NewListener(addr string, sock mangos.Socket) (transport.Listen
 
 func isSyscallError(err error, code syscall.Errno) bool {
 
-	var errno syscall.Errno
-	if errors.As(err, &errno) {
+	if errno, ok := errors.AsType[syscall.Errno](err); ok {
 		return errno == code
 	}
 	return false

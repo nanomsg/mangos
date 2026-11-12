@@ -70,7 +70,7 @@ func TestXSurveyorNoHeader(t *testing.T) {
 // We can send even with no pipes
 func TestXSurveyorNonBlock1(t *testing.T) {
 	self := GetSocket(t, NewSocket)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		m := makeSurveyMsg(uint32(i), "ping")
 		MustSucceed(t, self.SendMsg(m))
 	}
@@ -84,7 +84,7 @@ func TestXSurveyorNonBlock2(t *testing.T) {
 	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 1))
 	_, _ = MockConnect(t, self)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		m := makeSurveyMsg(uint32(i), "ping")
 		MustSucceed(t, self.SendMsg(m))
 	}
@@ -131,7 +131,7 @@ func TestXSurveyorRecvQLenResizeDiscard(t *testing.T) {
 
 	// Now do some exchanges, but don't collect the answers -- let our
 	// receive queue fill up.
-	for i := uint32(0); i < 100; i++ {
+	for i := range uint32(100) {
 		MustSucceed(t, self.SendMsg(makeSurveyMsg(i, "")))
 		_ = MustRecvMsg(t, peer)
 		MustSendString(t, peer, "reply")
@@ -168,7 +168,7 @@ func TestXSurveyorRecvClosePipeDiscard(t *testing.T) {
 
 	// Now do some exchanges, but don't collect the answers -- let our
 	// receive queue fill up.
-	for i := uint32(0); i < 100; i++ {
+	for i := range uint32(100) {
 		MustSucceed(t, self.SendMsg(makeSurveyMsg(i, "")))
 		_ = MustRecvMsg(t, peer)
 		MustSendString(t, peer, "reply")

@@ -66,9 +66,9 @@ type TestCase interface {
 	SendHook(*mangos.Message) bool
 	RecvHook(*mangos.Message) bool
 	IsServer() bool
-	Logf(string, ...interface{})
-	Errorf(string, ...interface{})
-	Debugf(string, ...interface{})
+	Logf(string, ...any)
+	Errorf(string, ...any)
+	Debugf(string, ...any)
 	WantSend() int32
 	BumpSend()
 	GetSend() int32
@@ -141,7 +141,7 @@ func (c *T) RecvMsg() (*mangos.Message, error) {
 	return c.Sock.RecvMsg()
 }
 
-func (c *T) Debugf(f string, v ...interface{}) {
+func (c *T) Debugf(f string, v ...any) {
 	if !c.debug {
 		return
 	}
@@ -149,12 +149,12 @@ func (c *T) Debugf(f string, v ...interface{}) {
 	c.t.Logf("%s: Id %d: %s", now, c.ID, fmt.Sprintf(f, v...))
 }
 
-func (c *T) Logf(f string, v ...interface{}) {
+func (c *T) Logf(f string, v ...any) {
 	now := time.Now().Format(time.StampMilli)
 	c.t.Logf("%s: Id %d: %s", now, c.ID, fmt.Sprintf(f, v...))
 }
 
-func (c *T) Errorf(f string, v ...interface{}) {
+func (c *T) Errorf(f string, v ...any) {
 	now := time.Now().Format(time.StampMilli)
 	c.t.Errorf("%s: Id %d: %s", now, c.ID, fmt.Sprintf(f, v...))
 }
@@ -224,7 +224,7 @@ func (c *T) WaitRecv() bool {
 }
 
 func (c *T) Dial() bool {
-	options := make(map[string]interface{})
+	options := make(map[string]any)
 	switch {
 	case strings.HasPrefix(c.addr, "tls+tcp://"):
 		fallthrough
@@ -244,7 +244,7 @@ func (c *T) Dial() bool {
 }
 
 func (c *T) Listen() bool {
-	options := make(map[string]interface{})
+	options := make(map[string]any)
 	switch {
 	case strings.HasPrefix(c.addr, "tls+tcp://"):
 		fallthrough

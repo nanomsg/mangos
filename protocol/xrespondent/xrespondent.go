@@ -241,7 +241,7 @@ func (p *pipe) close() {
 	_ = p.p.Close()
 }
 
-func (s *socket) SetOption(name string, value interface{}) error {
+func (s *socket) SetOption(name string, value any) error {
 	switch name {
 
 	case protocol.OptionTTL:
@@ -308,7 +308,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 	return protocol.ErrBadOption
 }
 
-func (s *socket) GetOption(option string) (interface{}, error) {
+func (s *socket) GetOption(option string) (any, error) {
 	switch option {
 	case protocol.OptionRaw:
 		return true, nil

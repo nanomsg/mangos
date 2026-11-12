@@ -84,7 +84,7 @@ func ReqRepLatencyClient(addr string, msgSize int, roundTrips int) {
 	msg := mangos.NewMessage(msgSize)
 
 	total := time.Duration(0)
-	for i := 0; i < roundTrips; i++ {
+	for range roundTrips {
 		msg.Body = msg.Body[0:msgSize]
 		msg.Header = msg.Header[:0]
 		start := time.Now()

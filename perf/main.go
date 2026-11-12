@@ -191,8 +191,7 @@ func doInprocThr(args []string) {
 func main() {
 	args := os.Args
 
-	tries := 0
-	for tries = 0; tries < 2; tries++ {
+	for range 2 {
 		switch args[0] {
 		case "remote_reqlat":
 			doRemoteReqRepLatency(args[1:])

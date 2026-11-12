@@ -63,7 +63,7 @@ func TestXPushSendBestEffort(t *testing.T) {
 	s := GetSocket(t, NewSocket)
 	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, true))
 	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 1))
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		MustSucceed(t, s.Send([]byte{}))
 	}
 	MustSucceed(t, s.Close())
@@ -74,7 +74,7 @@ func TestXPushSendTimeout(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Millisecond))
 	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 1))
 	pass := false
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if e := s.Send([]byte{}); e != nil {
 			MustBeError(t, e, mangos.ErrSendTimeout)
 			pass = true
@@ -91,7 +91,7 @@ func TestXPushSendResize(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Millisecond))
 	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, 20))
 	MustSucceed(t, p.SetOption(mangos.OptionRecvDeadline, time.Millisecond*20))
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		MustSucceed(t, s.Send([]byte{byte(i)}))
 	}
 
@@ -101,7 +101,7 @@ func TestXPushSendResize(t *testing.T) {
 	// that arrive at the peer.
 	ConnectPair(t, s, p)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		m, e := p.Recv()
 		MustSucceed(t, e)
 		MustNotBeNil(t, m)
@@ -120,7 +120,7 @@ func TestXPushCloseAbort(t *testing.T) {
 	time.AfterFunc(time.Millisecond*10, func() {
 		MustSucceed(t, s.Close())
 	})
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if e := s.Send([]byte{}); e != nil {
 			MustBeError(t, e, mangos.ErrClosed)
 			pass = true
@@ -139,7 +139,7 @@ func TestXPushFairShare(t *testing.T) {
 	peers := make([]mangos.Socket, nPeer)
 	s := GetSocket(t, NewSocket)
 
-	for i := 0; i < nPeer; i++ {
+	for i := range nPeer {
 		p := GetSocket(t, pull.NewSocket)
 		MustSucceed(t, p.SetOption(mangos.OptionRecvDeadline, time.Second))
 		MustSucceed(t, p.SetOption(mangos.OptionReadQLen, 0))
@@ -148,14 +148,14 @@ func TestXPushFairShare(t *testing.T) {
 	}
 	MustSucceed(t, s.SetOption(mangos.OptionWriteQLen, count*nPeer))
 
-	for i := 0; i < count; i++ {
-		for j := 0; j < nPeer; j++ {
+	for range count {
+		for j := range nPeer {
 			MustSucceed(t, s.Send([]byte{byte(j)}))
 		}
 	}
 
-	for i := 0; i < count; i++ {
-		for j := 0; j < nPeer; j++ {
+	for range count {
+		for j := range nPeer {
 			p := peers[j]
 			m, e := p.Recv()
 			MustSucceed(t, e)
@@ -165,7 +165,7 @@ func TestXPushFairShare(t *testing.T) {
 			time.Sleep(time.Millisecond)
 		}
 	}
-	for i := 0; i < nPeer; i++ {
+	for i := range nPeer {
 		MustSucceed(t, peers[i].Close())
 	}
 	MustSucceed(t, s.Close())
@@ -180,7 +180,7 @@ func TestXPushRecvDiscard(t *testing.T) {
 
 	pass := true
 outer:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m := mangos.NewMessage(0)
 		m.Body = append(m.Body, 'a', 'b', 'c')
 		select {
@@ -240,10 +240,10 @@ func TestXPushFastFailNoPeerDisconnect(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	go func() {
-		time.Sleep(time.Millisecond*20)
+		time.Sleep(time.Millisecond * 20)
 		MustSucceed(t, p.Close())
 	}()
 
-	MustBeError(t ,s.Send([]byte("three")), mangos.ErrNoPeers)
+	MustBeError(t, s.Send([]byte("three")), mangos.ErrNoPeers)
 	MustSucceed(t, s.Close())
 }

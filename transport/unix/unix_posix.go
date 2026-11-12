@@ -47,7 +47,7 @@ func (l *listener) setPermissions(path string) {
 }
 
 // Called with l.lock held.
-func (l *listener) setOption(n string, v interface{}) error {
+func (l *listener) setOption(n string, v any) error {
 	switch n {
 	case OptionSocketPermissions:
 		if b, ok := v.(uint32); ok && b&uint32(os.ModePerm) == b {

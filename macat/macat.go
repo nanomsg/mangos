@@ -794,7 +794,7 @@ func (a *App) Run(args ...string) error {
 	}
 
 	for _, addr := range a.bindAddr {
-		var opts = make(map[string]interface{})
+		var opts = make(map[string]any)
 
 		// TLS and DTLS listeners require a certificate to be supplied.
 		if strings.HasPrefix(addr, "tls") ||
@@ -815,7 +815,7 @@ func (a *App) Run(args ...string) error {
 	}
 
 	for _, addr := range a.dialAddr {
-		var opts = make(map[string]interface{})
+		var opts = make(map[string]any)
 
 		if strings.HasPrefix(addr, "tls") ||
 			strings.HasPrefix(addr, "wss") || strings.HasPrefix(addr, "dtls") {

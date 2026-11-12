@@ -64,7 +64,7 @@ func TestNNGInterop(t *testing.T) {
 				if listen {
 					nngRole = "dial"
 					identity = ids.client
-					l, err := sock.NewListener("dtls4://127.0.0.1:0", map[string]interface{}{mangos.OptionDTLSConfig: serverConfig})
+					l, err := sock.NewListener("dtls4://127.0.0.1:0", map[string]any{mangos.OptionDTLSConfig: serverConfig})
 					test.MustSucceed(t, err)
 					test.MustSucceed(t, l.Listen())
 					address = l.Address()
@@ -88,7 +88,7 @@ func TestNNGInterop(t *testing.T) {
 						_ = cmd.Wait()
 						t.Fatalf("NNG startup failed: %s", stderr.String())
 					}
-					test.MustSucceed(t, sock.DialOptions(address, map[string]interface{}{mangos.OptionDTLSConfig: clientConfig}))
+					test.MustSucceed(t, sock.DialOptions(address, map[string]any{mangos.OptionDTLSConfig: clientConfig}))
 				}
 				for i, size := range []int{1, 1200, maxPayload} {
 					expected := bytes.Repeat([]byte{byte('A' + i)}, size)

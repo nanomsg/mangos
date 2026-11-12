@@ -322,7 +322,7 @@ func (p *pipe) closeWithReason(reason uint16) error {
 	}
 }
 
-func (p *pipe) GetOption(name string) (interface{}, error) {
+func (p *pipe) GetOption(name string) (any, error) {
 	switch name {
 	case mangos.OptionLocalAddr:
 		return p.conn.LocalAddr(), nil

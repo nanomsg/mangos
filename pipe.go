@@ -34,7 +34,7 @@ type Pipe interface {
 
 	// GetOption returns an arbitrary option.  The details will vary
 	// for different transport types.
-	GetOption(name string) (interface{}, error)
+	GetOption(name string) (any, error)
 
 	// Listener returns the Listener for this Pipe, or nil if none.
 	Listener() Listener

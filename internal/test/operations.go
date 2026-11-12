@@ -68,7 +68,7 @@ func MustGetInfo(t *testing.T, f func() (mangos.Socket, error)) mangos.ProtocolI
 // ConnectPairVia connects two sockets using the given address.  The pipe event
 // hook is used for this operation, and the function does not return until both
 // sockets have seen the connection.
-func ConnectPairVia(t *testing.T, addr string, s1, s2 mangos.Socket, o1, o2 map[string]interface{}) {
+func ConnectPairVia(t *testing.T, addr string, s1, s2 mangos.Socket, o1, o2 map[string]any) {
 	wg1 := sync.WaitGroup{}
 	wg2 := sync.WaitGroup{}
 	wg1.Add(1)
@@ -95,7 +95,7 @@ func ConnectPairVia(t *testing.T, addr string, s1, s2 mangos.Socket, o1, o2 map[
 
 // listen starts a listener and returns its address.  For transports that use
 // port zero, the returned address includes the port selected by the OS.
-func listen(t *testing.T, s mangos.Socket, addr string, options map[string]interface{}) string {
+func listen(t *testing.T, s mangos.Socket, addr string, options map[string]any) string {
 	l, err := s.NewListener(addr, options)
 	MustSucceed(t, err)
 	MustSucceed(t, l.Listen())

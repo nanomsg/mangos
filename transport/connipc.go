@@ -27,7 +27,7 @@ func NewConnPipeIPC(c net.Conn, proto ProtocolInfo) ConnPipe {
 			c:                c,
 			proto:            proto,
 			handshakeTimeout: DefaultHandshakeTimeout,
-			options:          make(map[string]interface{}),
+			options:          make(map[string]any),
 			maxrx:            0,
 		},
 	}

@@ -179,10 +179,8 @@ func TestXReqRecvResizeDiscard(t *testing.T) {
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 1))
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			m := mangos.NewMessage(0)
 			m.Body = append(m.Body, 0x80, 0, 0, 1)
@@ -193,7 +191,7 @@ func TestXReqRecvResizeDiscard(t *testing.T) {
 			}
 
 		}
-	}()
+	})
 	time.Sleep(time.Millisecond * 50)
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, 2))
 	time.Sleep(time.Millisecond * 50)

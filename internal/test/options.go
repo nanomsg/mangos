@@ -39,7 +39,7 @@ func VerifyOptionDuration(t *testing.T, f func() (mangos.Socket, error), option 
 	MustSucceed(t, err)
 	val, err := s.GetOption(option)
 	MustSucceed(t, err)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(time.Duration(0)))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeFor[time.Duration]())
 
 	MustSucceed(t, s.SetOption(option, time.Second))
 	val, err = s.GetOption(option)
@@ -57,7 +57,7 @@ func VerifyOptionInt(t *testing.T, f func() (mangos.Socket, error), option strin
 	MustSucceed(t, err)
 	val, err := s.GetOption(option)
 	MustSucceed(t, err)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(1))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeFor[int]())
 
 	MustSucceed(t, s.SetOption(option, 2))
 	val, err = s.GetOption(option)
@@ -75,7 +75,7 @@ func VerifyOptionQLen(t *testing.T, f func() (mangos.Socket, error), option stri
 	MustSucceed(t, err)
 	val, err := s.GetOption(option)
 	MustSucceed(t, err)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(1))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeFor[int]())
 
 	MustSucceed(t, s.SetOption(option, 2))
 	val, err = s.GetOption(option)

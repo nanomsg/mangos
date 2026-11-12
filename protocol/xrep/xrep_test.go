@@ -129,7 +129,7 @@ func TestXRepSendBestEffort(t *testing.T) {
 	MustSucceed(t, self.SetOption(OptionBestEffort, true))
 
 	_, p := MockConnect(t, self)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendMsg(t, self, newReply(0, p, ""))
 	}
 	MustClose(t, self)

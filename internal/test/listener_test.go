@@ -68,7 +68,7 @@ func TestListenerOptions(t *testing.T) {
 
 	val, e := l.GetOption(mangos.OptionMaxRecvSize)
 	MustSucceed(t, e)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(0))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeFor[int]())
 
 	val, e = l.GetOption("mockError")
 	MustBeError(t, e, mangos.ErrProtoState)
@@ -92,7 +92,7 @@ func TestListenerOptionsMap(t *testing.T) {
 	defer MustClose(t, sock)
 	addr := AddrMock()
 
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = "garbage"
 	l, e := sock.NewListener(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
@@ -102,20 +102,20 @@ func TestListenerOptionsMap(t *testing.T) {
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, l == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts["JUNKOPT"] = "yes"
 	l, e = sock.NewListener(addr, opts)
 	MustBeError(t, e, mangos.ErrBadOption)
 	MustBeTrue(t, l == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts["mockError"] = mangos.ErrCanceled
 	l, e = sock.NewListener(addr, opts)
 	MustBeError(t, e, mangos.ErrCanceled)
 	MustBeTrue(t, l == nil)
 
 	// Now a good option
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = 3172
 	l, e = sock.NewListener(addr, opts)
 	MustSucceed(t, e)

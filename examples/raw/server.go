@@ -70,7 +70,7 @@ func server(url string, nworkers int) {
 	}
 	wg.Add(nworkers)
 	fmt.Printf("Starting %d workers\n", nworkers)
-	for id := 0; id < nworkers; id++ {
+	for id := range nworkers {
 		go func(id int) {
 			defer wg.Done()
 			serverWorker(sock, id)

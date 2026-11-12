@@ -201,7 +201,7 @@ func (c *context) Close() error {
 	return nil
 }
 
-func (c *context) GetOption(name string) (interface{}, error) {
+func (c *context) GetOption(name string) (any, error) {
 	switch name {
 	case protocol.OptionBestEffort:
 		c.s.Lock()
@@ -226,7 +226,7 @@ func (c *context) GetOption(name string) (interface{}, error) {
 	}
 }
 
-func (c *context) SetOption(name string, v interface{}) error {
+func (c *context) SetOption(name string, v any) error {
 	switch name {
 	case protocol.OptionBestEffort:
 		if val, ok := v.(bool); ok {
@@ -377,7 +377,7 @@ func (s *socket) RemovePipe(pp protocol.Pipe) {
 	close(p.closeQ)
 }
 
-func (s *socket) SetOption(name string, v interface{}) error {
+func (s *socket) SetOption(name string, v any) error {
 	switch name {
 	case protocol.OptionWriteQLen:
 		if qlen, ok := v.(int); ok && qlen >= 0 {
@@ -400,7 +400,7 @@ func (s *socket) SetOption(name string, v interface{}) error {
 	return s.master.SetOption(name, v)
 }
 
-func (s *socket) GetOption(name string) (interface{}, error) {
+func (s *socket) GetOption(name string) (any, error) {
 	switch name {
 	case protocol.OptionRaw:
 		return false, nil

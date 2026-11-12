@@ -77,7 +77,7 @@ func TestXPairSendBestEffort(t *testing.T) {
 	MustSucceed(t, self.SetOption(mangos.OptionBestEffort, true))
 	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 0))
 	MustSucceed(t, self.SetOption(mangos.OptionSendDeadline, time.Millisecond*10))
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendString(t, self, "yep")
 	}
 	MustSucceed(t, self.Close())
@@ -123,7 +123,7 @@ func TestXPairCloseAbort(t *testing.T) {
 	time.AfterFunc(time.Millisecond*10, func() {
 		MustSucceed(t, self.Close())
 	})
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if e := self.Send([]byte{}); e != nil {
 			MustBeError(t, e, mangos.ErrClosed)
 			pass = true
@@ -146,7 +146,7 @@ func TestXPairClosePipe(t *testing.T) {
 	MustSucceed(t, p.SetOption(mangos.OptionSendDeadline, time.Millisecond))
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		if e := p.Send([]byte{byte(i)}); e != nil {
@@ -204,7 +204,7 @@ func TestXPairResizeRecv2(t *testing.T) {
 	ConnectPair(t, self, peer)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		MustSucceed(t, peer.Send([]byte{byte(i)}))
 	}
 

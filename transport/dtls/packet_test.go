@@ -55,7 +55,7 @@ func TestClientHelloScreen(t *testing.T) {
 			t.Fatalf("invalid ClientHello admitted: %x", b)
 		}
 	}
-	for n := 0; n < 25; n++ {
+	for n := range 25 {
 		if clientHello(make([]byte, n)) {
 			t.Fatal("short ClientHello admitted")
 		}
@@ -195,7 +195,7 @@ func TestPacketQueuesAndDeadlines(t *testing.T) {
 	conn, _, err := l.Accept()
 	test.MustSucceed(t, err)
 	c := conn.(*packetConn)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		l.dispatch([]byte("packet"), addr)
 	}
 	if len(c.packets) != cap(c.packets) {

@@ -115,7 +115,7 @@ func (mp *mockPipe) Recv() (*mangos.Message, error) {
 	}
 }
 
-func (mp *mockPipe) GetOption(name string) (interface{}, error) {
+func (mp *mockPipe) GetOption(name string) (any, error) {
 	switch name {
 	case mangos.OptionRemoteAddr, mangos.OptionLocalAddr:
 		return "mock://mock", nil
@@ -245,10 +245,10 @@ type MockCreator interface {
 	Accept() (transport.Pipe, error)
 
 	// GetOption simulates getting an option.
-	GetOption(string) (interface{}, error)
+	GetOption(string) (any, error)
 
 	// SetOption simulates setting an option.
-	SetOption(string, interface{}) error
+	SetOption(string, any) error
 
 	// Address returns the address.
 	Address() string
@@ -294,7 +294,7 @@ func (mc *mockCreator) Listen() error {
 	}
 }
 
-func (mc *mockCreator) SetOption(name string, val interface{}) error {
+func (mc *mockCreator) SetOption(name string, val any) error {
 	switch name {
 	case "mockError":
 		return val.(error)
@@ -315,7 +315,7 @@ func (mc *mockCreator) SetOption(name string, val interface{}) error {
 	return mangos.ErrBadOption
 }
 
-func (mc *mockCreator) GetOption(name string) (interface{}, error) {
+func (mc *mockCreator) GetOption(name string) (any, error) {
 	switch name {
 	case "mock":
 		return mc, nil

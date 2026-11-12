@@ -437,7 +437,7 @@ func TestReqMultiContexts(t *testing.T) {
 		MustSucceed(t, c.SetOption(mangos.OptionSendDeadline, time.Second))
 		MustSucceed(t, c.SetOption(mangos.OptionRecvDeadline, time.Second))
 
-		for i := 0; i < repeat; i++ {
+		for range repeat {
 			MustSucceed(t, c.Send(topic))
 			m, e := c.RecvMsg()
 			MustSucceed(t, e)
@@ -448,13 +448,11 @@ func TestReqMultiContexts(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		go fn(i)
 	}
 
-	wg2.Add(1)
-	go func() {
-		defer wg2.Done()
+	wg2.Go(func() {
 		var e error
 		var m *mangos.Message
 		for {
@@ -466,7 +464,7 @@ func TestReqMultiContexts(t *testing.T) {
 			}
 		}
 		MustBeError(t, e, mangos.ErrClosed)
-	}()
+	})
 
 	// Give time for everything to be delivered.
 	wg1.Wait()
@@ -474,7 +472,7 @@ func TestReqMultiContexts(t *testing.T) {
 	wg2.Wait()
 	MustSucceed(t, self.Close())
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		MustBeTrue(t, recv[i] == repeat)
 	}
 }
