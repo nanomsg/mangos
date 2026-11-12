@@ -38,7 +38,7 @@ type socket struct {
 	protocol.Protocol
 }
 
-func (s *socket) GetOption(name string) (interface{}, error) {
+func (s *socket) GetOption(name string) (any, error) {
 	switch name {
 	case protocol.OptionRaw:
 		return false, nil

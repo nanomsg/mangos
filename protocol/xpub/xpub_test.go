@@ -68,7 +68,7 @@ func TestXPubNonBlock2(t *testing.T) {
 
 	_, _ = MockConnect(t, self)
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendString(t, self, "yep")
 	}
 	MustSucceed(t, self.Close())

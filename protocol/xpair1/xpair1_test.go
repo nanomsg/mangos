@@ -133,7 +133,7 @@ func TestXPair1SendBestEffort(t *testing.T) {
 	MustSucceed(t, self.SetOption(mangos.OptionBestEffort, true))
 	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, 0))
 	MustSucceed(t, self.SetOption(mangos.OptionSendDeadline, time.Millisecond*10))
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		m := mangos.NewMessage(0)
 		m.Header = append(m.Header, 0, 0, 0, 1)
 		m.Body = append(m.Body, []byte("yep")...)
@@ -183,7 +183,7 @@ func TestXPair1CloseAbort(t *testing.T) {
 	time.AfterFunc(time.Millisecond*10, func() {
 		MustSucceed(t, self.Close())
 	})
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		m := mangos.NewMessage(0)
 		m.Header = append(m.Header, 0, 0, 0, 1)
 		if e := self.SendMsg(m); e != nil {
@@ -210,7 +210,7 @@ func TestXPair1ClosePipe(t *testing.T) {
 	MustSucceed(t, p.SetOption(mangos.OptionSendDeadline, time.Millisecond))
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		m := mangos.NewMessage(0)
@@ -276,7 +276,7 @@ func TestXPair1ResizeReceive2(t *testing.T) {
 	ConnectPair(t, self, peer)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		m := mangos.NewMessage(0)
 		m.Header = append(m.Header, 0, 0, 0, 1)
 		MustSendMsg(t, peer, m)

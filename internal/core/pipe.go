@@ -108,7 +108,7 @@ type pipe struct {
 	d         *dialer
 	s         *socket
 	closeOnce sync.Once
-	data      interface{} // Protocol private
+	data      any // Protocol private
 	added     bool
 	closing   bool
 	lock      sync.Mutex // held across calls to remPipe and addPipe
@@ -186,7 +186,7 @@ func (p *pipe) Address() string {
 	return ""
 }
 
-func (p *pipe) GetOption(name string) (interface{}, error) {
+func (p *pipe) GetOption(name string) (any, error) {
 	val, err := p.p.GetOption(name)
 	if err == mangos.ErrBadOption {
 		if p.d != nil {
@@ -212,10 +212,10 @@ func (p *pipe) Listener() mangos.Listener {
 	return p.l
 }
 
-func (p *pipe) SetPrivate(i interface{}) {
+func (p *pipe) SetPrivate(i any) {
 	p.data = i
 }
 
-func (p *pipe) GetPrivate() interface{} {
+func (p *pipe) GetPrivate() any {
 	return p.data
 }

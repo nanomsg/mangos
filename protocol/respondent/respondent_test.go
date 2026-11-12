@@ -112,7 +112,7 @@ func TestRespondentCloseSocketRecv(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 1))
 
 	// Fill the pipe
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSucceed(t, p.Send([]byte("")))
@@ -144,7 +144,7 @@ func TestRespondentResizeRecv(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSucceed(t, p.Send([]byte{byte(i)}))
@@ -156,7 +156,7 @@ func TestRespondentResizeRecv(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 
 	cnt := 0
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if _, e := s.Recv(); e != nil {
 			MustBeError(t, e, mangos.ErrRecvTimeout)
 			break
@@ -176,7 +176,7 @@ func TestRespondentResizeRecv2(t *testing.T) {
 	ConnectPair(t, s, p)
 
 	// Fill the pipe
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSucceed(t, p.Send([]byte{byte(i)}))
@@ -186,7 +186,7 @@ func TestRespondentResizeRecv2(t *testing.T) {
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, s.SetOption(mangos.OptionReadQLen, 1))
 	cnt := 0
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		if _, e := s.Recv(); e != nil {
 			MustBeError(t, e, mangos.ErrRecvTimeout)
 			break
@@ -228,7 +228,7 @@ func TestRespondentClosePipeRecv(t *testing.T) {
 	MustSucceed(t, e)
 
 	// Fill the pipe
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSucceed(t, p.Send([]byte("")))
@@ -287,7 +287,7 @@ func TestRespondentBestEffortSend(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionBestEffort, true))
 
 	ConnectPair(t, s, p)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// We have to make a raw message when using xsurveyor.  We
 		// use xsurveyor because normal surveyor will simply discard
 		// messages for surveys it doesn't have outstanding.
@@ -314,7 +314,7 @@ func TestRespondentSendNonBlocking(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Duration(-1)))
 
 	ConnectPair(t, s, p)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// We have to make a raw message when using xsurveyor.  We
 		// use xsurveyor because normal surveyor will simply discard
 		// messages for surveys it doesn't have outstanding.
@@ -354,7 +354,7 @@ func TestRespondentSendBackPressure(t *testing.T) {
 	MustSucceed(t, s.SetOption(mangos.OptionSendDeadline, time.Millisecond*10))
 
 	cnt := 0
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// We have to make a raw message when using xsurveyor.  We
 		// use xsurveyor because normal surveyor will simply discard
 		// messages for surveys it doesn't have outstanding.
@@ -397,7 +397,7 @@ func TestRespondentCloseContextSend(t *testing.T) {
 	time.Sleep(time.Millisecond * 10)
 	cnt := 0
 	data := []byte{0x80, 0, 0, 1}
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		// We have to make a raw message when using xsurveyor.  We
 		// use xsurveyor because normal surveyor will simply discard
 		// messages for surveys it doesn't have outstanding.
@@ -481,7 +481,7 @@ func TestRespondentMultiContexts(t *testing.T) {
 		topic := make([]byte, 4)
 		binary.BigEndian.PutUint32(topic, uint32(index))
 
-		for i := 0; i < repeat; i++ {
+		for range repeat {
 			MustSucceed(t, c2.Send(topic))
 			m, e := c1.RecvMsg()
 			MustSucceed(t, e)
@@ -498,7 +498,7 @@ func TestRespondentMultiContexts(t *testing.T) {
 
 	wg1.Add(count)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		c1, e := s.OpenContext()
 		MustSucceed(t, e)
 		MustNotBeNil(t, c1)
@@ -520,7 +520,7 @@ func TestRespondentMultiContexts(t *testing.T) {
 	MustSucceed(t, p.Close())
 	MustSucceed(t, s.Close())
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		MustBeTrue(t, recv[i] == repeat)
 		MustBeTrue(t, send[i] == repeat)
 	}

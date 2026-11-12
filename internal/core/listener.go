@@ -31,12 +31,12 @@ type listener struct {
 	active bool
 }
 
-func (l *listener) GetOption(n string) (interface{}, error) {
+func (l *listener) GetOption(n string) (any, error) {
 	// Listeners do not keep local options; we just pass this down.
 	return l.l.GetOption(n)
 }
 
-func (l *listener) SetOption(n string, v interface{}) error {
+func (l *listener) SetOption(n string, v any) error {
 	// Listeners do not keep local options; we just pass this down.
 	return l.l.SetOption(n, v)
 }

@@ -78,7 +78,7 @@ func TestAppDTLS(t *testing.T) {
 			var address string
 			if !listen {
 				config := &dtls.Config{ServerOptions: []pion.ServerOption{pion.WithCertificates(identity)}}
-				l, err := sock.NewListener("dtls4://127.0.0.1:0", map[string]interface{}{mangos.OptionDTLSConfig: config})
+				l, err := sock.NewListener("dtls4://127.0.0.1:0", map[string]any{mangos.OptionDTLSConfig: config})
 				test.MustSucceed(t, err)
 				test.MustSucceed(t, l.Listen())
 				address = l.Address()
@@ -106,7 +106,7 @@ func TestAppDTLS(t *testing.T) {
 			go func() { result <- app.Run(args...) }()
 			if listen {
 				config := &dtls.Config{ConnectTimeout: 200 * time.Millisecond, ClientOptions: []pion.ClientOption{pion.WithRootCAs(roots)}}
-				test.MustSucceed(t, sock.DialOptions(address, map[string]interface{}{mangos.OptionDTLSConfig: config, mangos.OptionDialAsynch: true}))
+				test.MustSucceed(t, sock.DialOptions(address, map[string]any{mangos.OptionDTLSConfig: config, mangos.OptionDialAsynch: true}))
 			}
 			type received struct {
 				data []byte

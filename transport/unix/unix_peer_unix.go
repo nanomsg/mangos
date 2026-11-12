@@ -1,5 +1,4 @@
 //go:build (!linux && !plan9 && !js && !solaris) || (solaris && !cgo)
-// +build !linux,!plan9,!js,!solaris solaris,!cgo
 
 // Copyright 2026 The Mangos Authors
 //

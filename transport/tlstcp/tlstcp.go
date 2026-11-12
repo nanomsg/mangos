@@ -84,7 +84,7 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	return d.hs.Wait()
 }
 
-func (d *dialer) SetOption(n string, v interface{}) error {
+func (d *dialer) SetOption(n string, v any) error {
 	switch n {
 	case mangos.OptionMaxRecvSize:
 		if b, ok := v.(int); ok {
@@ -128,7 +128,7 @@ func (d *dialer) SetOption(n string, v interface{}) error {
 	return mangos.ErrBadOption
 }
 
-func (d *dialer) GetOption(n string) (interface{}, error) {
+func (d *dialer) GetOption(n string) (any, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 	switch n {
@@ -290,7 +290,7 @@ func (l *listener) Close() error {
 	return nil
 }
 
-func (l *listener) SetOption(n string, v interface{}) error {
+func (l *listener) SetOption(n string, v any) error {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	switch n {
@@ -357,7 +357,7 @@ func (l *listener) SetOption(n string, v interface{}) error {
 	return mangos.ErrBadOption
 }
 
-func (l *listener) GetOption(n string) (interface{}, error) {
+func (l *listener) GetOption(n string) (any, error) {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 	switch n {

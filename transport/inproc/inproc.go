@@ -114,7 +114,7 @@ func (p *inproc) Close() error {
 	return nil
 }
 
-func (p *inproc) GetOption(name string) (interface{}, error) {
+func (p *inproc) GetOption(name string) (any, error) {
 	switch name {
 	case mangos.OptionRemoteAddr:
 		return p.addr, nil
@@ -183,11 +183,11 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	return client, nil
 }
 
-func (*dialer) SetOption(string, interface{}) error {
+func (*dialer) SetOption(string, any) error {
 	return mangos.ErrBadOption
 }
 
-func (*dialer) GetOption(string) (interface{}, error) {
+func (*dialer) GetOption(string) (any, error) {
 	return nil, mangos.ErrBadOption
 }
 
@@ -239,11 +239,11 @@ func (l *listener) Accept() (mangos.TranPipe, error) {
 	}
 }
 
-func (*listener) SetOption(string, interface{}) error {
+func (*listener) SetOption(string, any) error {
 	return mangos.ErrBadOption
 }
 
-func (*listener) GetOption(string) (interface{}, error) {
+func (*listener) GetOption(string) (any, error) {
 	return nil, mangos.ErrBadOption
 }
 

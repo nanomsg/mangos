@@ -34,10 +34,10 @@ type ProtocolPipe interface {
 	RecvMsg() *Message
 
 	// SetPrivate is used to set protocol private data.
-	SetPrivate(interface{})
+	SetPrivate(any)
 
 	// GetPrivate returns the previously stored protocol private data.
-	GetPrivate() interface{}
+	GetPrivate() any
 }
 
 // ProtocolInfo is a description of the protocol.
@@ -70,12 +70,12 @@ type ProtocolContext interface {
 	// GetOption is used to retrieve the current value of an option.
 	// If the protocol doesn't recognize the option, EBadOption should
 	// be returned.
-	GetOption(string) (interface{}, error)
+	GetOption(string) (any, error)
 
 	// SetOption is used to set an option.  EBadOption is returned if
 	// the option name is not recognized, EBadValue if the value is
 	// invalid.
-	SetOption(string, interface{}) error
+	SetOption(string, any) error
 }
 
 // ProtocolBase provides the protocol-specific handling for sockets.

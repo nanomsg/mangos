@@ -51,7 +51,7 @@ type TranPipe interface {
 	// pipe.  Options for pipes are read-only and specific to that
 	// particular connection. If the property doesn't exist, then
 	// ErrBadOption should be returned.
-	GetOption(string) (interface{}, error)
+	GetOption(string) (any, error)
 }
 
 // TranDialer represents the client side of a connection.  Clients initiate
@@ -66,11 +66,11 @@ type TranDialer interface {
 	// SetOption sets a local option on the dialer.
 	// ErrBadOption can be returned for unrecognized options.
 	// ErrBadValue can be returned for incorrect value types.
-	SetOption(name string, value interface{}) error
+	SetOption(name string, value any) error
 
 	// GetOption gets a local option from the dialer.
 	// ErrBadOption can be returned for unrecognized options.
-	GetOption(name string) (value interface{}, err error)
+	GetOption(name string) (value any, err error)
 }
 
 // TranListener represents the server side of a connection.  Servers respond
@@ -100,11 +100,11 @@ type TranListener interface {
 	// SetOption sets a local option on the listener.
 	// ErrBadOption can be returned for unrecognized options.
 	// ErrBadValue can be returned for incorrect value types.
-	SetOption(name string, value interface{}) error
+	SetOption(name string, value any) error
 
 	// GetOption gets a local option from the listener.
 	// ErrBadOption can be returned for unrecognized options.
-	GetOption(name string) (value interface{}, err error)
+	GetOption(name string) (value any, err error)
 
 	// Address gets the local address.  The value may not be meaningful
 	// until Listen() has been called.

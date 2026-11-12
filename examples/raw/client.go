@@ -69,7 +69,7 @@ func clientWorker(url string, id int) {
 func client(url string, nworkers int) {
 
 	var wg sync.WaitGroup
-	for i := 0; i < nworkers; i++ {
+	for i := range nworkers {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

@@ -1,4 +1,5 @@
-// +build !race
+//go:build !race
+
 // Copyright 2018 The Mangos Authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +50,7 @@ func scalabilityClient(errp *error, loops int, wg *sync.WaitGroup) {
 		return
 	}
 
-	for i := 0; i < loops; i++ {
+	for range loops {
 		// Inject a random sleep to avoid pounding the CPU too hard.
 		time.Sleep(time.Duration(rand.Int31n(1000)) * time.Microsecond)
 
@@ -110,12 +111,12 @@ func TestScalability(t *testing.T) {
 	go scalabilityServer(ssock)
 	wg := &sync.WaitGroup{}
 	wg.Add(threads)
-	for i := 0; i < threads; i++ {
+	for i := range threads {
 		go scalabilityClient(&errs[i], loops, wg)
 	}
 
 	wg.Wait()
-	for i := 0; i < threads; i++ {
+	for i := range threads {
 		if errs[i] != nil {
 			t.Fatalf("Test failed: %v", errs[i])
 		}

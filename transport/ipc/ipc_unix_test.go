@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //go:build !plan9 && !windows && !js
-// +build !plan9,!windows,!js
 
 package ipc
 

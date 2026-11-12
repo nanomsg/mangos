@@ -147,9 +147,7 @@ func TestDeviceCloseSend(t *testing.T) {
 	MustSucceed(t, mangos.Device(s1, s2))
 
 	pass := false
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			e := tx.Send([]byte{})
 			if e != nil {
@@ -158,7 +156,7 @@ func TestDeviceCloseSend(t *testing.T) {
 				break
 			}
 		}
-	}()
+	})
 
 	time.Sleep(time.Millisecond * 100)
 	MustClose(t, rx)

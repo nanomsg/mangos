@@ -191,7 +191,7 @@ func TestXSubPoundPipes(t *testing.T) {
 	wg.Add(nPeers)
 
 	startQ := make(chan struct{})
-	for i := 0; i < nPeers; i++ {
+	for range nPeers {
 		peer := GetSocket(t, pub.NewSocket)
 		peers = append(peers, peer)
 		ConnectPair(t, self, peer)
@@ -199,7 +199,7 @@ func TestXSubPoundPipes(t *testing.T) {
 		go func(s mangos.Socket) {
 			defer wg.Done()
 			<-startQ
-			for j := 0; j < repeat; j++ {
+			for range repeat {
 				MustSendString(t, s, "yes")
 			}
 			time.Sleep(time.Millisecond * 10)
@@ -221,7 +221,7 @@ func TestXSubPoundClose(t *testing.T) {
 	wg.Add(nPeers)
 
 	startQ := make(chan struct{})
-	for i := 0; i < nPeers; i++ {
+	for range nPeers {
 		peer := GetSocket(t, pub.NewSocket)
 		peers = append(peers, peer)
 		ConnectPair(t, self, peer)
@@ -261,7 +261,7 @@ func TestXSubPoundRecv(t *testing.T) {
 	wg1.Add(nPeers)
 	wg2.Add(nReaders)
 
-	for i := 0; i < nReaders; i++ {
+	for range nReaders {
 		go func() {
 			defer wg2.Done()
 			for {
@@ -273,7 +273,7 @@ func TestXSubPoundRecv(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < nPeers; i++ {
+	for range nPeers {
 		peer := GetSocket(t, pub.NewSocket)
 		peers = append(peers, peer)
 		ConnectPair(t, self, peer)
@@ -310,7 +310,7 @@ func TestXSubRecvNoQ(t *testing.T) {
 	var wg1 sync.WaitGroup
 	wg1.Add(nPeers)
 
-	for i := 0; i < nPeers; i++ {
+	for range nPeers {
 		peer := GetSocket(t, pub.NewSocket)
 		peers = append(peers, peer)
 		ConnectPair(t, self, peer)

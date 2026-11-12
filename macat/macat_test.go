@@ -134,14 +134,12 @@ func TestApp_Run5(t *testing.T) {
 
 	b := &strings.Builder{}
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		a.stdOut = b
 		e := a.Run("--pull", "-L", port, "--raw", "--recv-timeout", "2")
 		MustFailLike(t, e, mangos.ErrClosed.Error())
-	}()
+	})
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, rx.Dial(addr))
 	MustSendString(t, rx, "abc")
@@ -163,13 +161,11 @@ func TestApp_Run6(t *testing.T) {
 
 	b := &strings.Builder{}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		a.stdOut = b
 		e := a.Run("--bus", "-l", port, "-A", "--recv-timeout", "2")
 		MustFailLike(t, e, mangos.ErrClosed.Error())
-	}()
+	})
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, rx.Dial(addr))
 	MustSendString(t, rx, "abc")
@@ -190,13 +186,11 @@ func TestApp_Run7(t *testing.T) {
 
 	b := &strings.Builder{}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		a.stdOut = b
 		e := a.Run("--star", "--connect", addr, "-Q", "--recv-timeout", "2")
 		MustFailLike(t, e, mangos.ErrClosed.Error())
-	}()
+	})
 	time.Sleep(time.Millisecond * 20)
 	MustSendString(t, rx, "a\nbc")
 	MustSendString(t, rx, "d\ref")
@@ -220,13 +214,11 @@ func TestApp_Run8(t *testing.T) {
 
 	b := &strings.Builder{}
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		a.stdOut = b
 		e := a.Run("--rep", "-X", ipcPath, "-A", "--data", "pong", "--send-timeout", "2", "--recv-timeout", "2")
 		MustFailLike(t, e, mangos.ErrClosed.Error())
-	}()
+	})
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, rx.Dial(addr))
 	MustSendString(t, rx, "abc")
@@ -875,11 +867,11 @@ func TestApp_Format_MsgPack(t *testing.T) {
 
 	smallMsg := "abc"
 	medMsg := make([]byte, 300)
-	for i := 0; i < len(medMsg); i++ {
+	for i := range medMsg {
 		medMsg[i] = 'M'
 	}
 	bigMsg := make([]byte, 1024*1024)
-	for i := 0; i < len(bigMsg); i++ {
+	for i := range bigMsg {
 		bigMsg[i] = 'B'
 	}
 
@@ -1090,7 +1082,7 @@ func TestApp_Dial_TLS(t *testing.T) {
 	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM(), 0644))
 	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM(), 0644))
 	addr := AddrTestTLS()
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionTLSConfig] = cfg
 
 	sock := GetSocket(t, pull.NewSocket)
@@ -1101,15 +1093,13 @@ func TestApp_Dial_TLS(t *testing.T) {
 	a := &App{}
 	a.Initialize()
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err = a.Run("--push", "--connect", addr, "--cacert", cafile,
 			"--key", keyfile, "--cert", crtfile,
 			"-d=20ms", "--data=ping", "--count=1")
 		MustSucceed(t, err)
-	}()
+	})
 	MustRecvString(t, sock, "ping")
 	wg.Wait()
 }
@@ -1128,7 +1118,7 @@ func TestApp_Dial_TLS_Insecure(t *testing.T) {
 	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Client.KeyPEM(), 0644))
 	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Client.CertPEM(), 0644))
 	addr := AddrTestTLS()
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionTLSConfig] = cfg
 
 	sock := GetSocket(t, pull.NewSocket)
@@ -1139,15 +1129,13 @@ func TestApp_Dial_TLS_Insecure(t *testing.T) {
 	a := &App{}
 	a.Initialize()
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err = a.Run("--push", "--connect", addr, "-k",
 			"--key", keyfile, "--cert", crtfile,
 			"-d=20ms", "--data=ping", "--count=1")
 		MustSucceed(t, err)
-	}()
+	})
 	MustRecvString(t, sock, "ping")
 	wg.Wait()
 }
@@ -1189,7 +1177,7 @@ func TestApp_Bind_TLS(t *testing.T) {
 	MustSucceed(t, ioutil.WriteFile(keyfile, keys.Server.KeyPEM(), 0644))
 	MustSucceed(t, ioutil.WriteFile(crtfile, keys.Server.CertPEM(), 0644))
 	addr := AddrTestTLS()
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionTLSConfig] = cfg
 
 	sock := GetSocket(t, pull.NewSocket)
@@ -1199,15 +1187,13 @@ func TestApp_Bind_TLS(t *testing.T) {
 	a := &App{}
 	a.Initialize()
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err = a.Run("--push", "--bind", addr,
 			"--key", keyfile, "--cert", crtfile,
 			"-d=20ms", "--data=ping", "--count=1")
 		MustSucceed(t, err)
-	}()
+	})
 	time.Sleep(time.Millisecond * 20)
 	MustSucceed(t, sock.DialOptions(addr, opts))
 

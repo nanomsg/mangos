@@ -73,11 +73,11 @@ func TestDialerOptions(t *testing.T) {
 
 	val, e := d.GetOption(mangos.OptionReconnectTime)
 	MustSucceed(t, e)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(time.Duration(0)))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeFor[time.Duration]())
 
 	val, e = d.GetOption(mangos.OptionMaxReconnectTime)
 	MustSucceed(t, e)
-	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeOf(time.Duration(0)))
+	MustBeTrue(t, reflect.TypeOf(val) == reflect.TypeFor[time.Duration]())
 
 	val, e = d.GetOption(mangos.OptionDialAsynch)
 	MustSucceed(t, e)
@@ -117,50 +117,50 @@ func TestDialerOptionsMap(t *testing.T) {
 	defer MustClose(t, sock)
 	addr := AddrMock()
 
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = "garbage"
 	d, e := sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, d == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = -1
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, d == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = 1001
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, d == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = 1002
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadOption)
 	MustBeTrue(t, d == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionDialAsynch] = -1
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadValue)
 	MustBeTrue(t, d == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts["JUNKOPT"] = "yes"
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrBadOption)
 	MustBeTrue(t, d == nil)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts["mockError"] = mangos.ErrCanceled
 	d, e = sock.NewDialer(addr, opts)
 	MustBeError(t, e, mangos.ErrCanceled)
 	MustBeTrue(t, d == nil)
 
 	// Now good options
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionMaxRecvSize] = 3172
 	opts[mangos.OptionReconnectTime] = time.Second
 	opts[mangos.OptionMaxReconnectTime] = time.Second * 2
@@ -362,13 +362,11 @@ func TestDialerConnectLate(t *testing.T) {
 	_ = sock.SetPipeEventHook(hook)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(time.Millisecond * 50)
 		MustSucceed(t, peer.Listen(addr))
-	}()
+	})
 
 	MustSucceed(t, d.Dial())
 

@@ -30,8 +30,8 @@ type Dialer interface {
 
 	// SetOption sets an option on the Dialer. Setting options
 	// can only be done before Dial() has been called.
-	SetOption(name string, value interface{}) error
+	SetOption(name string, value any) error
 
 	// GetOption gets an option value from the Listener.
-	GetOption(name string) (interface{}, error)
+	GetOption(name string) (any, error)
 }

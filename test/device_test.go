@@ -72,7 +72,7 @@ func testDevLoop(t *testing.T, addr string) {
 	}
 	defer s1.Close()
 
-	options := make(map[string]interface{})
+	options := make(map[string]any)
 	if strings.HasPrefix(addr, "wss://") || strings.HasPrefix(addr, "tls+tcp://") {
 		options[mangos.OptionTLSConfig] = srvCfg
 	}
@@ -95,7 +95,7 @@ func testDevChain(t *testing.T, addr1 string, addr2 string, addr3 string) {
 	// It looks like this:  addr1->addr2->addr3 <==> addr3->addr2->addr1
 	var err error
 	s := make([]mangos.Socket, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if s[i], err = xpair.NewSocket(); err != nil {
 			t.Errorf("Failed to open S1_1: %v", err)
 			return

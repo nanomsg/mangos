@@ -146,7 +146,7 @@ func TestXRespondentSendTimeout(t *testing.T) {
 	// Because of vagaries in the queuing, we slam messages until we
 	// hit a timeout.  We expect to do so after only a modest number
 	// of messages, as we have no reader on the other side.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		e = s.SendMsg(m.Dup())
 		if e != nil {
 			break
@@ -190,7 +190,7 @@ func TestXRespondentBestEffort(t *testing.T) {
 	// Because of vagaries in the queuing, we slam messages until we
 	// hit a timeout.  We expect to do so after only a modest number
 	// of messages, as we have no reader on the other side.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		e = s.SendMsg(m.Dup())
 		if e != nil {
 			break

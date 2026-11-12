@@ -82,7 +82,7 @@ func LatencyClient(addr string, msgSize int, roundTrips int) {
 	msg.Body = msg.Body[0:msgSize]
 
 	start := time.Now()
-	for i := 0; i < roundTrips; i++ {
+	for range roundTrips {
 		if err = s.SendMsg(msg); err != nil {
 			log.Fatalf("Failed SendMsg: %v", err)
 		}

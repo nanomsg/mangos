@@ -38,7 +38,7 @@ func TestTcpSocketActivation(t *testing.T) {
 	MustSucceed(t, err)
 	MustSucceed(t, file.Close())
 	// SetOption consumes fd.
-	l, err := sock.NewListener("tcp://ignored:0", map[string]interface{}{mangos.OptionListenFD: fd})
+	l, err := sock.NewListener("tcp://ignored:0", map[string]any{mangos.OptionListenFD: fd})
 	MustSucceed(t, err)
 	MustSucceed(t, base.Close())
 	MustSucceed(t, l.Listen())

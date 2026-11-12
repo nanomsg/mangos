@@ -123,7 +123,7 @@ func TestXBusNonBlock(t *testing.T) {
 
 	self := GetSocket(t, NewSocket)
 	MustSucceed(t, self.SetOption(OptionWriteQLen, 1))
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendString(t, self, "abc")
 	}
 	MustSucceed(t, self.Close())
@@ -137,7 +137,7 @@ func TestXBusSendDrop(t *testing.T) {
 	mp := ml.NewPipe(self.Info().Peer)
 	MustSucceed(t, ml.AddPipe(mp))
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		MustSucceed(t, self.Send([]byte{byte(i)}))
 	}
 	time.Sleep(time.Millisecond * 10)
@@ -170,7 +170,7 @@ func TestXBusResize(t *testing.T) {
 	ConnectPair(t, self, peer)
 
 	// Over-fill the pipe -- this gets the reader stuck in the right place.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// These all will work, but the back-pressure will go all the
 		// way to the sender.
 		MustSendString(t, peer, "fill me up")
@@ -191,7 +191,7 @@ func TestXBusBackPressure(t *testing.T) {
 	MockConnect(t, self)
 	MockConnect(t, self)
 	// We don't read at all from it.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendString(t, self, "")
 	}
 	time.Sleep(time.Millisecond * 100)

@@ -28,7 +28,7 @@ func newTestConn(c net.Conn, timeout time.Duration) *conn {
 	return &conn{
 		c:                c,
 		handshakeTimeout: timeout,
-		options:          make(map[string]interface{}),
+		options:          make(map[string]any),
 	}
 }
 

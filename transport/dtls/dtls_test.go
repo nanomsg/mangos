@@ -331,10 +331,10 @@ func TestDTLSPipeEventAndRequestReply(t *testing.T) {
 			states <- value.(ConnectionState)
 		}
 	})
-	l, err := server.NewListener("dtls4://127.0.0.1:0", map[string]interface{}{mangos.OptionDTLSConfig: serverConfig})
+	l, err := server.NewListener("dtls4://127.0.0.1:0", map[string]any{mangos.OptionDTLSConfig: serverConfig})
 	test.MustSucceed(t, err)
 	test.MustSucceed(t, l.Listen())
-	test.MustSucceed(t, client.DialOptions(l.Address(), map[string]interface{}{mangos.OptionDTLSConfig: clientConfig}))
+	test.MustSucceed(t, client.DialOptions(l.Address(), map[string]any{mangos.OptionDTLSConfig: clientConfig}))
 	select {
 	case state := <-states:
 		if state.NegotiatedVersion() != protocol.Version1_3 || len(state.PeerCertificates) == 0 {

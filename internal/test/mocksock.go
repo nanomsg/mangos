@@ -36,7 +36,7 @@ type mockSock struct {
 	recvExpire time.Duration
 	once       sync.Once
 	lock       sync.Mutex
-	raw        interface{}
+	raw        any
 	rawError   error
 }
 
@@ -86,7 +86,7 @@ func (s *mockSock) RecvMsg() (*protocol.Message, error) {
 	}
 }
 
-func (s *mockSock) GetOption(name string) (interface{}, error) {
+func (s *mockSock) GetOption(name string) (any, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	switch name {
@@ -100,7 +100,7 @@ func (s *mockSock) GetOption(name string) (interface{}, error) {
 	return nil, protocol.ErrBadOption
 }
 
-func (s *mockSock) SetOption(name string, val interface{}) error {
+func (s *mockSock) SetOption(name string, val any) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	switch name {
@@ -206,7 +206,7 @@ func GetMockSocket() protocol.Socket {
 
 // GetMockSocketRaw is an extended form to get a mocked socket, with particular
 // properties set (including the response to GetOption() for Raw.)
-func GetMockSocketRaw(proto, peer uint16, name, peerName string, raw interface{}, err error) protocol.Socket {
+func GetMockSocketRaw(proto, peer uint16, name, peerName string, raw any, err error) protocol.Socket {
 	return protocol.MakeSocket(&mockSock{
 		recvQ:    make(chan *protocol.Message, 1),
 		sendQ:    make(chan *protocol.Message, 1),

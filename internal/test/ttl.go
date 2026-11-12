@@ -133,11 +133,11 @@ func TTLDropTest(t *testing.T,
 	clis := make([]mangos.Socket, 0, nhop)
 	srvs := make([]mangos.Socket, 0, nhop)
 	var addrs []string
-	for i := 0; i < nhop; i++ {
+	for range nhop {
 		addrs = append(addrs, AddrTestInp())
 	}
 
-	for i := 0; i < nhop; i++ {
+	for i := range nhop {
 		var fn func() (mangos.Socket, error)
 		if i == nhop-1 {
 			fn = srv
@@ -153,7 +153,7 @@ func TTLDropTest(t *testing.T,
 		srvs = append(srvs, s)
 	}
 
-	for i := 0; i < nhop; i++ {
+	for i := range nhop {
 		var fn func() (mangos.Socket, error)
 		if i == 0 {
 			fn = cli

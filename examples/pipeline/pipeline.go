@@ -17,13 +17,12 @@
 //
 // To use:
 //
-//   $ go build .
-//   $ url=tcp://127.0.0.1:40899
-//   $ ./pipeline node0 $url & node0=$! && sleep 1
-//   $ ./pipeline node1 $url "Hello, World."
-//   $ ./pipeline node1 $url "Goodbye."
-//   $ kill $node0
-//
+//	$ go build .
+//	$ url=tcp://127.0.0.1:40899
+//	$ ./pipeline node0 $url & node0=$! && sleep 1
+//	$ ./pipeline node1 $url "Hello, World."
+//	$ ./pipeline node1 $url "Goodbye."
+//	$ kill $node0
 package main
 
 import (
@@ -39,7 +38,7 @@ import (
 	_ "go.nanomsg.org/mangos/v3/transport/all"
 )
 
-func die(format string, v ...interface{}) {
+func die(format string, v ...any) {
 	fmt.Fprintln(os.Stderr, fmt.Sprintf(format, v...))
 	os.Exit(1)
 }

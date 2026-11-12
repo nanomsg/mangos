@@ -24,12 +24,12 @@ import (
 
 var tran = Transport
 
-var lOpts map[string]interface{}
-var dOpts map[string]interface{}
+var lOpts map[string]any
+var dOpts map[string]any
 
 func init() {
-	dOpts = make(map[string]interface{})
-	lOpts = make(map[string]interface{})
+	dOpts = make(map[string]any)
+	lOpts = make(map[string]any)
 	var t *testing.T
 	dOpts[mangos.OptionTLSConfig] = GetTLSConfig(t, false)
 	lOpts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
@@ -71,7 +71,7 @@ func TestWssListenNoCert(t *testing.T) {
 	MustBeError(t, sock.ListenOptions(addr, nil), mangos.ErrTLSNoConfig)
 
 	cfg := &tls.Config{}
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionTLSConfig] = cfg
 	MustBeError(t, sock.ListenOptions(addr, opts), mangos.ErrTLSNoCert)
 }

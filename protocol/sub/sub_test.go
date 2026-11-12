@@ -97,14 +97,14 @@ func TestSubUnsubscribeDrops(t *testing.T) {
 	MustSucceed(t, s.SetOption(OptionSubscribe, "1"))
 	MustSucceed(t, s.SetOption(OptionSubscribe, "2"))
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		MustSucceed(t, p.Send([]byte("1")))
 		MustSucceed(t, p.Send([]byte("2")))
 	}
 
 	time.Sleep(time.Millisecond * 10)
 	MustSucceed(t, s.SetOption(OptionUnsubscribe, "1"))
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		v, e := s.Recv()
 		MustSucceed(t, e)
 		MustBeTrue(t, string(v) == "2")
@@ -126,14 +126,14 @@ func TestSubUnsubscribeLoad(t *testing.T) {
 	MustSucceed(t, s.SetOption(OptionSubscribe, "1"))
 	MustSucceed(t, s.SetOption(OptionSubscribe, "2"))
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		MustSucceed(t, p.Send([]byte("1")))
 		MustSucceed(t, p.Send([]byte("2")))
 	}
 	var wg sync.WaitGroup
 	nPub := 3
 	wg.Add(nPub)
-	for i := 0; i < nPub; i++ {
+	for range nPub {
 		go func() {
 			defer wg.Done()
 			for {
@@ -149,7 +149,7 @@ func TestSubUnsubscribeLoad(t *testing.T) {
 	time.Sleep(time.Millisecond * 10)
 	MustSucceed(t, s.SetOption(OptionUnsubscribe, "1"))
 	time.Sleep(time.Millisecond * 50)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		MustRecvString(t, s, "2")
 	}
 
@@ -343,7 +343,7 @@ func TestSubMultiContexts(t *testing.T) {
 	// Choose an odd number so that it does not divide evenly, ensuring
 	// that there will be a non-equal distribution.  Note that with our
 	// fixed seed above, it works out to 41 & 60.
-	for i := 0; i < 101; i++ {
+	for range 101 {
 		index := int(rng.Int63() & 1)
 		if rng.Int63()&128 < 8 {
 			MustSucceed(t, p.Send([]byte{'*'}))

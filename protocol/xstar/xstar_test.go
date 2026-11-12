@@ -89,7 +89,7 @@ func TestXStarNonBlock(t *testing.T) {
 	MustSucceed(t, self.Listen(AddrTestInp()))
 
 	start := time.Now()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendString(t, self, "abc")
 	}
 	end := time.Now()
@@ -104,7 +104,7 @@ func TestXStarSendDrop(t *testing.T) {
 	mp := ml.NewPipe(self.Info().Peer)
 	MustSucceed(t, ml.AddPipe(mp))
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		MustSucceed(t, self.Send([]byte{byte(i)}))
 	}
 	time.Sleep(time.Millisecond * 10)
@@ -221,7 +221,7 @@ func TestXStarRedistributeBackPressure(t *testing.T) {
 	ConnectPair(t, s1, s2)
 	ConnectPair(t, s3, s2)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		m := mangos.NewMessage(0)
 
 		// Write an empty hop count to the header
@@ -325,7 +325,7 @@ func TestXStarBackPressure(t *testing.T) {
 	m.Header = append(m.Header, 0, 0, 0, 0)
 	m.Body = append(m.Body, 42)
 	// We don't read at all from it.
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		MustSendMsg(t, self, m.Dup())
 	}
 	time.Sleep(time.Millisecond * 100)

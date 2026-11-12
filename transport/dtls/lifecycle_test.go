@@ -131,8 +131,7 @@ func TestDTLSConcurrentClose(t *testing.T) {
 	<-started
 	// Exercise concurrent Close callers and shared listener teardown.
 	for _, p := range []*pipe{sp, cp, sp, cp} {
-		wg.Add(1)
-		go func() { defer wg.Done(); _ = p.Close() }()
+		wg.Go(func() { ; _ = p.Close() })
 	}
 	_ = l.Close()
 	done := make(chan struct{})

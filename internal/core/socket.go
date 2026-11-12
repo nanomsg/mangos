@@ -214,7 +214,7 @@ func (s *socket) getTransport(addr string) transport.Transport {
 	return transport.GetTransport(scheme)
 }
 
-func (s *socket) DialOptions(addr string, opts map[string]interface{}) error {
+func (s *socket) DialOptions(addr string, opts map[string]any) error {
 
 	d, err := s.NewDialer(addr, opts)
 	if err != nil {
@@ -227,7 +227,7 @@ func (s *socket) Dial(addr string) error {
 	return s.DialOptions(addr, nil)
 }
 
-func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.Dialer, error) {
+func (s *socket) NewDialer(addr string, options map[string]any) (mangos.Dialer, error) {
 	t := s.getTransport(addr)
 	if t == nil {
 		return nil, mangos.ErrBadTran
@@ -281,7 +281,7 @@ func (s *socket) NewDialer(addr string, options map[string]interface{}) (mangos.
 	return d, nil
 }
 
-func (s *socket) ListenOptions(addr string, options map[string]interface{}) error {
+func (s *socket) ListenOptions(addr string, options map[string]any) error {
 	l, err := s.NewListener(addr, options)
 	if err != nil {
 		return err
@@ -293,7 +293,7 @@ func (s *socket) Listen(addr string) error {
 	return s.ListenOptions(addr, nil)
 }
 
-func (s *socket) NewListener(addr string, options map[string]interface{}) (mangos.Listener, error) {
+func (s *socket) NewListener(addr string, options map[string]any) (mangos.Listener, error) {
 	// This function sets up a goroutine to accept inbound connections.
 	// The accepted connection will be added to a list of accepted
 	// connections.  The Listener just needs to listen continuously,
@@ -336,7 +336,7 @@ func (s *socket) NewListener(addr string, options map[string]interface{}) (mango
 	return l, nil
 }
 
-func (s *socket) SetOption(name string, value interface{}) error {
+func (s *socket) SetOption(name string, value any) error {
 	if err := s.proto.SetOption(name, value); err != mangos.ErrBadOption {
 		return err
 	}
@@ -387,7 +387,7 @@ func (s *socket) SetOption(name string, value interface{}) error {
 	return nil
 }
 
-func (s *socket) GetOption(name string) (interface{}, error) {
+func (s *socket) GetOption(name string) (any, error) {
 	if val, err := s.proto.GetOption(name); err != mangos.ErrBadOption {
 		return val, err
 	}

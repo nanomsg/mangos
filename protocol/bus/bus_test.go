@@ -67,7 +67,7 @@ func TestBusDevice(t *testing.T) {
 	MustSucceed(t, tail.SetOption(mangos.OptionRecvDeadline, time.Second))
 
 	socks = append(socks, head)
-	for i := 0; i < hops; i++ {
+	for range hops {
 		s1 := GetSocket(t, xbus.NewSocket)
 		s2 := GetSocket(t, xbus.NewSocket)
 		ConnectPair(t, socks[len(socks)-1], s1)
@@ -78,7 +78,7 @@ func TestBusDevice(t *testing.T) {
 	socks = append(socks, tail)
 
 	rng := rand.NewSource(32)
-	for i := 0; i < count; i++ {
+	for range count {
 		var src, dst mangos.Socket
 		if rng.Int63()&1 != 0 {
 			src = head
@@ -108,7 +108,7 @@ func TestBusFanOut(t *testing.T) {
 	self := GetSocket(t, NewSocket)
 	MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, count))
 
-	for i := 0; i < nPeers; i++ {
+	for i := range nPeers {
 		peers[i] = GetSocket(t, NewSocket)
 		MustSucceed(t, peers[i].SetOption(mangos.OptionRecvDeadline, time.Second))
 		ConnectPair(t, self, peers[i])
@@ -118,12 +118,12 @@ func TestBusFanOut(t *testing.T) {
 	wg.Add(nPeers)
 
 	pass := make([]bool, nPeers)
-	for i := 0; i < nPeers; i++ {
+	for i := range nPeers {
 		go func(index int) {
 			defer wg.Done()
 			s := peers[index]
 			num := uint32(0)
-			for j := 0; j < count; j++ {
+			for range count {
 				m := MustRecv(t, s)
 				MustBeTrue(t, len(m) == 4)
 				MustBeTrue(t, binary.BigEndian.Uint32(m) == num)
@@ -137,14 +137,14 @@ func TestBusFanOut(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		msg := make([]byte, 4)
 		binary.BigEndian.PutUint32(msg, uint32(i))
 		MustSucceed(t, self.Send(msg))
 	}
 
 	wg.Wait()
-	for i := 0; i < count; i++ {
+	for i := range count {
 		MustBeTrue(t, pass[i])
 		MustSucceed(t, peers[i].Close())
 	}
@@ -160,7 +160,7 @@ func TestBusFanIn(t *testing.T) {
 	MustSucceed(t, self.SetOption(mangos.OptionReadQLen, count*nPeers))
 	MustSucceed(t, self.SetOption(mangos.OptionRecvDeadline, time.Second))
 
-	for i := 0; i < nPeers; i++ {
+	for i := range nPeers {
 		peers[i] = GetSocket(t, NewSocket)
 		MustSucceed(t, self.SetOption(mangos.OptionWriteQLen, count))
 		ConnectPair(t, self, peers[i])
@@ -169,14 +169,14 @@ func TestBusFanIn(t *testing.T) {
 	wg := sync.WaitGroup{}
 	wg.Add(nPeers)
 
-	for i := 0; i < nPeers; i++ {
+	for i := range nPeers {
 		go func(index int) {
 			defer wg.Done()
 			s := peers[index]
 			msg := make([]byte, 8)
 			binary.BigEndian.PutUint32(msg, uint32(index))
 			num := uint32(0)
-			for j := 0; j < count; j++ {
+			for range count {
 				binary.BigEndian.PutUint32(msg[4:], num)
 				MustSucceed(t, s.Send(msg))
 				num++
@@ -201,7 +201,7 @@ func TestBusFanIn(t *testing.T) {
 	MustBeError(t, e, mangos.ErrRecvTimeout)
 
 	wg.Wait()
-	for i := 0; i < nPeers; i++ {
+	for i := range nPeers {
 		MustBeTrue(t, counts[i] == uint32(count))
 		MustSucceed(t, peers[i].Close())
 	}

@@ -40,10 +40,10 @@ func TestDTLSOptions(t *testing.T) {
 		d, err := tran.NewDialer(string(tran)+"://localhost:12345", sock)
 		test.MustSucceed(t, err)
 		for _, ep := range []interface {
-			SetOption(string, interface{}) error
-			GetOption(string) (interface{}, error)
+			SetOption(string, any) error
+			GetOption(string) (any, error)
 		}{l, d} {
-			for _, value := range []interface{}{-1, "bad", nil} {
+			for _, value := range []any{-1, "bad", nil} {
 				if err := ep.SetOption(mangos.OptionMaxRecvSize, value); err != mangos.ErrBadValue {
 					t.Fatalf("max receive %v: %v", value, err)
 				}
@@ -60,7 +60,7 @@ func TestDTLSOptions(t *testing.T) {
 					t.Fatalf("max receive %v, want %d", got, want)
 				}
 			}
-			for _, value := range []interface{}{nil, (*Config)(nil), &tls.Config{}, &Config{ConnectTimeout: -1}, &Config{MaxPending: -1}, &Config{HandshakeRate: -1}, &Config{ClientOptions: []pion.ClientOption{nil}}} {
+			for _, value := range []any{nil, (*Config)(nil), &tls.Config{}, &Config{ConnectTimeout: -1}, &Config{MaxPending: -1}, &Config{HandshakeRate: -1}, &Config{ClientOptions: []pion.ClientOption{nil}}} {
 				if err := ep.SetOption(mangos.OptionDTLSConfig, value); err != mangos.ErrBadValue {
 					t.Fatalf("DTLS config %v: %v", value, err)
 				}

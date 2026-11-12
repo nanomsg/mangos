@@ -29,8 +29,8 @@ import (
 )
 
 type tranOption interface {
-	SetOption(string, interface{}) error
-	GetOption(string) (interface{}, error)
+	SetOption(string, any) error
+	GetOption(string) (any, error)
 }
 
 func getTranPair(t *testing.T, tran transport.Transport) (mangos.Dialer, mangos.Listener, mangos.Socket, mangos.Socket) {
@@ -262,7 +262,7 @@ func TranVerifyScheme(t *testing.T, tran transport.Transport) {
 }
 
 // TranVerifyConnectionRefused verifies that connection is refused if no listener.
-func TranVerifyConnectionRefused(t *testing.T, tran transport.Transport, opts map[string]interface{}) {
+func TranVerifyConnectionRefused(t *testing.T, tran transport.Transport, opts map[string]any) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 	d, _ := sock.NewDialer(GetScratchAddr(tran), opts)
@@ -270,7 +270,7 @@ func TranVerifyConnectionRefused(t *testing.T, tran transport.Transport, opts ma
 }
 
 // TranVerifyDuplicateListen verifies that we can't bind to the same address twice.
-func TranVerifyDuplicateListen(t *testing.T, tran transport.Transport, opts map[string]interface{}) {
+func TranVerifyDuplicateListen(t *testing.T, tran transport.Transport, opts map[string]any) {
 	sock1 := GetMockSocket()
 	defer MustClose(t, sock1)
 	sock2 := GetMockSocket()
@@ -283,7 +283,7 @@ func TranVerifyDuplicateListen(t *testing.T, tran transport.Transport, opts map[
 }
 
 // TranVerifyListenAndAccept verifies that we can establish the connection.
-func TranVerifyListenAndAccept(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyListenAndAccept(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	s1 := GetMockSocket()
 	s2 := GetMockSocket()
 	defer MustClose(t, s1)
@@ -320,7 +320,7 @@ func TranVerifyAcceptWithoutListen(t *testing.T, tran transport.Transport) {
 }
 
 // TranVerifyMaxRecvSize verifies the transport handles maximum receive size properly.
-func TranVerifyMaxRecvSize(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyMaxRecvSize(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	VerifyOptionMaxRecvSize(t, NewMockSocket)
 
 	addr := GetScratchAddr(tran)
@@ -352,7 +352,7 @@ func TranVerifyMaxRecvSize(t *testing.T, tran transport.Transport, dOpts, lOpts 
 }
 
 // TranVerifyHandshakeFail verifies that we fail if the protocols mismatch.
-func TranVerifyHandshakeFail(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyHandshakeFail(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	s1 := GetMockSocketEx(1, "mock1")
 	s2 := GetMockSocketEx(2, "mock2")
 	defer MustClose(t, s1)
@@ -379,7 +379,7 @@ func TranVerifyHandshakeFail(t *testing.T, tran transport.Transport, dOpts, lOpt
 }
 
 // TranVerifySendRecv just verifies basic send and receive.
-func TranVerifySendRecv(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifySendRecv(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	tx := GetMockSocket()
 	rx := GetMockSocket()
 	defer MustClose(t, tx)
@@ -398,7 +398,7 @@ func TranVerifySendRecv(t *testing.T, tran transport.Transport, dOpts, lOpts map
 	MustSucceed(t, e)
 	MustSucceed(t, d.Dial())
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		send := fmt.Sprintf("SEND%d", i)
 		repl := fmt.Sprintf("REPL%d", i)
 		MustSendString(t, tx, send)
@@ -411,7 +411,7 @@ func TranVerifySendRecv(t *testing.T, tran transport.Transport, dOpts, lOpts map
 // TranVerifyAnonymousPort is used by TCP based transports to verify that using
 // a wild card port address works. The addr is an address using a wild card
 // port (usually port 0).
-func TranVerifyAnonymousPort(t *testing.T, addr string, dOpts, lOpts map[string]interface{}) {
+func TranVerifyAnonymousPort(t *testing.T, addr string, dOpts, lOpts map[string]any) {
 	tx := GetMockSocket()
 	rx := GetMockSocket()
 	defer MustClose(t, tx)
@@ -445,7 +445,7 @@ func TranVerifyAnonymousPort(t *testing.T, addr string, dOpts, lOpts map[string]
 
 // TranVerifyPipeOptions verifies that the LocalAddr, RemoteAddr and invalid
 // options all behave as we expect.
-func TranVerifyPipeOptions(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyPipeOptions(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	tx := GetMockSocket()
 	rx := GetMockSocket()
 	defer MustClose(t, tx)
@@ -501,7 +501,7 @@ func TranVerifyPipeOptions(t *testing.T, tran transport.Transport, dOpts, lOpts 
 // listened to.  This could be for an address that we cannot resolve a name
 // for, or an address that we do not have an IP address for.  The failure can
 // occur at either listener allocation time, or when trying to bind.
-func TranVerifyBadLocalAddress(t *testing.T, addr string, opts map[string]interface{}) {
+func TranVerifyBadLocalAddress(t *testing.T, addr string, opts map[string]any) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
@@ -513,7 +513,7 @@ func TranVerifyBadLocalAddress(t *testing.T, addr string, opts map[string]interf
 // TranVerifyBadRemoteAddress is used to verify that a given address cannot be
 // dialed to.  This could be for an address that we cannot resolve a name
 // for, or an address is known to be otherwise impossible or invalid.
-func TranVerifyBadRemoteAddress(t *testing.T, addr string, opts map[string]interface{}) {
+func TranVerifyBadRemoteAddress(t *testing.T, addr string, opts map[string]any) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
@@ -525,13 +525,13 @@ func TranVerifyBadRemoteAddress(t *testing.T, addr string, opts map[string]inter
 // TranVerifyBadAddress is used to verify that certain addresses are invalid
 // and cannot be used for dialing or listening.  This is useful, for example,
 // when checking that DNS failures are handled properly.
-func TranVerifyBadAddress(t *testing.T, addr string, dOpts, lOpts map[string]interface{}) {
+func TranVerifyBadAddress(t *testing.T, addr string, dOpts, lOpts map[string]any) {
 	TranVerifyBadLocalAddress(t, addr, lOpts)
 	TranVerifyBadRemoteAddress(t, addr, dOpts)
 }
 
 // TranVerifyListenerClosed verifies that the listener behaves after closed.
-func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[string]interface{}) {
+func TranVerifyListenerClosed(t *testing.T, tran transport.Transport, opts map[string]any) {
 	sock := GetMockSocket()
 	defer MustClose(t, sock)
 
@@ -576,7 +576,7 @@ func TranVerifyDialNoCert(t *testing.T, tran transport.Transport) {
 	defer MustClose(t, sock)
 
 	addr := GetScratchAddr(tran)
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
 	addr = listen(t, sock, addr, opts)
 
@@ -591,11 +591,11 @@ func TranVerifyDialInsecure(t *testing.T, tran transport.Transport) {
 	defer MustClose(t, sock)
 
 	addr := GetScratchAddr(tran)
-	opts := make(map[string]interface{})
+	opts := make(map[string]any)
 	opts[mangos.OptionTLSConfig] = GetTLSConfig(t, true)
 	addr = listen(t, sock, addr, opts)
 
-	opts = make(map[string]interface{})
+	opts = make(map[string]any)
 	opts[mangos.OptionTLSConfig] = &tls.Config{}
 	MustFail(t, sock.DialOptions(addr, opts))
 
@@ -606,7 +606,7 @@ func TranVerifyDialInsecure(t *testing.T, tran transport.Transport) {
 }
 
 // TranVerifyMessageSizes verifies we can transport a variety of message sizes
-func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
 	addr := GetScratchAddr(tran)
@@ -620,16 +620,16 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 	addr = listen(t, sock1, addr, lOpts)
 	MustSucceed(t, sock2.DialOptions(addr, dOpts))
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		sz := 1 << i
 		m := mangos.NewMessage(sz)
-		for j := 0; j < sz; j++ {
+		for range sz {
 			m.Body = append(m.Body, byte(i))
 		}
 		MustSendMsg(t, sock1, m)
 		m = MustRecvMsg(t, sock2)
 		MustBeTrue(t, len(m.Body) == sz)
-		for j := 0; j < sz; j++ {
+		for j := range sz {
 			MustBeTrue(t, m.Body[j] == byte(i))
 		}
 		m.Free()
@@ -638,13 +638,13 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 	for i := 20; i >= 0; i-- {
 		sz := 1 << i
 		m := mangos.NewMessage(sz)
-		for j := 0; j < sz; j++ {
+		for range sz {
 			m.Body = append(m.Body, byte(i))
 		}
 		MustSendMsg(t, sock1, m)
 		m = MustRecvMsg(t, sock2)
 		MustBeTrue(t, len(m.Body) == sz)
-		for j := 0; j < sz; j++ {
+		for j := range sz {
 			MustBeTrue(t, m.Body[j] == byte(i))
 		}
 		m.Free()
@@ -652,7 +652,7 @@ func TranVerifyMessageSizes(t *testing.T, tran transport.Transport, dOpts, lOpts
 }
 
 // TranVerifyMessageHeader verifies that message headers are transmitted.
-func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
 	addr := GetScratchAddr(tran)
@@ -674,7 +674,7 @@ func TranVerifyMessageHeader(t *testing.T, tran transport.Transport, dOpts, lOpt
 }
 
 // TranVerifyPipeAddresses performs basic validation of pipe address options.
-func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
 	addr := GetScratchAddr(tran)
@@ -730,7 +730,7 @@ func TranVerifyPipeAddresses(t *testing.T, tran transport.Transport, dOpts, lOpt
 }
 
 // TranVerifyPipeOptions2 verifies standard pipe Options.
-func TranVerifyPipeOptions2(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]interface{}) {
+func TranVerifyPipeOptions2(t *testing.T, tran transport.Transport, dOpts, lOpts map[string]any) {
 	sock1 := GetMockSocket()
 	sock2 := GetMockSocket()
 	addr := GetScratchAddr(tran)

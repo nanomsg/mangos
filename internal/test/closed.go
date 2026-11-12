@@ -66,7 +66,7 @@ func VerifyClosedDial(t *testing.T, f func() (mangos.Socket, error)) {
 	s := GetSocket(t, f)
 	AddMockTransport()
 	MustClose(t, s)
-	err := s.DialOptions(AddrMock(), map[string]interface{}{
+	err := s.DialOptions(AddrMock(), map[string]any{
 		mangos.OptionDialAsynch: true,
 	})
 	MustBeError(t, err, protocol.ErrClosed)

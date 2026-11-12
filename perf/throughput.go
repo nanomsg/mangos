@@ -103,14 +103,14 @@ func ThroughputClient(addr string, msgSize int, count int) {
 	time.Sleep(time.Millisecond * 100)
 
 	body := make([]byte, msgSize)
-	for i := 0; i < msgSize; i++ {
+	for i := range msgSize {
 		body[i] = 111
 	}
 
 	// send the start message
 	_ = s.Send([]byte{})
 
-	for i := 0; i < count; i++ {
+	for range count {
 		if err = s.Send(body); err != nil {
 			log.Fatalf("Failed SendMsg: %v", err)
 		}

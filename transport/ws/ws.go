@@ -70,14 +70,14 @@ const (
 	Transport = wsTran(0)
 )
 
-type options map[string]interface{}
+type options map[string]any
 
 func init() {
 	transport.RegisterTransport(Transport)
 }
 
 // GetOption retrieves an option value.
-func (o options) get(name string) (interface{}, error) {
+func (o options) get(name string) (any, error) {
 	if name == mangos.OptionNoDelay {
 		return true, nil
 	}
@@ -89,7 +89,7 @@ func (o options) get(name string) (interface{}, error) {
 }
 
 // SetOption sets an option.  We have none, so just ErrBadOption.
-func (o options) set(name string, val interface{}) error {
+func (o options) set(name string, val any) error {
 	switch name {
 	case mangos.OptionNoDelay:
 		if _, ok := val.(bool); ok {
@@ -128,7 +128,7 @@ type wsPipe struct {
 	addr    string
 	open    bool
 	wg      sync.WaitGroup
-	options map[string]interface{}
+	options map[string]any
 	iswss   bool
 	dtype   websocket.MessageType
 	sync.Mutex
@@ -178,7 +178,7 @@ func (w *wsPipe) Close() error {
 	return nil
 }
 
-func (w *wsPipe) GetOption(name string) (interface{}, error) {
+func (w *wsPipe) GetOption(name string) (any, error) {
 	if v, ok := w.options[name]; ok {
 		return v, nil
 	}
@@ -227,7 +227,7 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 		proto:   d.proto,
 		open:    true,
 		dtype:   websocket.MessageBinary,
-		options: make(map[string]interface{}),
+		options: make(map[string]any),
 	}
 
 	maxrx := 0
@@ -257,11 +257,11 @@ func (d *dialer) Dial() (transport.Pipe, error) {
 	return w, nil
 }
 
-func (d *dialer) SetOption(n string, v interface{}) error {
+func (d *dialer) SetOption(n string, v any) error {
 	return d.opts.set(n, v)
 }
 
-func (d *dialer) GetOption(n string) (interface{}, error) {
+func (d *dialer) GetOption(n string) (any, error) {
 	return d.opts.get(n)
 }
 
@@ -285,7 +285,7 @@ type listener struct {
 	iswss      bool
 }
 
-func (l *listener) SetOption(n string, v interface{}) error {
+func (l *listener) SetOption(n string, v any) error {
 	switch n {
 	case OptionWebSocketCheckOrigin:
 		if v, ok := v.(bool); ok {
@@ -295,7 +295,7 @@ func (l *listener) SetOption(n string, v interface{}) error {
 	return l.opts.set(n, v)
 }
 
-func (l *listener) GetOption(n string) (interface{}, error) {
+func (l *listener) GetOption(n string) (any, error) {
 	switch n {
 	case OptionWebSocketMux:
 		return l.mux, nil
@@ -409,7 +409,7 @@ func (l *listener) handler(ws *websocket.Conn, localAddr, remoteAddr net.Addr, t
 		open:    true,
 		dtype:   websocket.MessageBinary,
 		iswss:   l.iswss,
-		options: make(map[string]interface{}),
+		options: make(map[string]any),
 	}
 	maxRx := 0
 	v, err := l.opts.get(mangos.OptionMaxRecvSize)
@@ -462,7 +462,7 @@ func (l *listener) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	matched := false
 	for _, value := range r.Header.Values("Sec-WebSocket-Protocol") {
-		for _, subProto := range strings.Split(value, ",") {
+		for subProto := range strings.SplitSeq(value, ",") {
 			if strings.TrimSpace(subProto) == l.proto.SelfName+".sp.nanomsg.org" {
 				matched = true
 			}
@@ -513,7 +513,7 @@ func (wsTran) NewDialer(addr string, sock mangos.Socket) (transport.Dialer, erro
 		addr:  addr,
 		proto: sock.Info(),
 		iswss: false,
-		opts:  make(map[string]interface{}),
+		opts:  make(map[string]any),
 	}
 
 	if strings.HasPrefix(addr, "wss://") {
@@ -543,7 +543,7 @@ func (wsTran) listener(addr string, sock mangos.Socket) (*listener, error) {
 	l := &listener{
 		addr:  addr,
 		proto: sock.Info(),
-		opts:  make(map[string]interface{}),
+		opts:  make(map[string]any),
 	}
 	l.opts[mangos.OptionMaxRecvSize] = 0
 	l.opts[OptionWebSocketFollowRedirects] = false
